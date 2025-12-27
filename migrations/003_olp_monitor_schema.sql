@@ -196,11 +196,8 @@ CREATE TABLE IF NOT EXISTS book_issuances (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Financial Transactions (Enhanced)
-ALTER TABLE financial_transactions 
-RENAME TO fee_transactions;
-
--- Create new financial transactions if doesn't exist
+-- Financial Transactions
+-- Note: If financial_transactions exists, it will be kept, otherwise create new one
 CREATE TABLE IF NOT EXISTS financial_transactions (
     id SERIAL PRIMARY KEY,
     learner_id INTEGER REFERENCES learner_profiles(id) ON DELETE CASCADE,

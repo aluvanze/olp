@@ -63,9 +63,8 @@ router.get('/course/:courseId', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const moduleResult = await pool.query(
-      `SELECT lm.*, c.course_id
+      `SELECT lm.*, lm.course_id
        FROM learning_modules lm
-       INNER JOIN courses c ON lm.course_id = c.id
        WHERE lm.id = $1`,
       [req.params.id]
     );
@@ -98,11 +97,12 @@ router.get('/:id', async (req, res) => {
       [req.params.id]
     );
     
-    module.content = contentResult.rows;
+    module.content = contentResult.rows || [];
     res.json(module);
   } catch (error) {
     console.error('Get module error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error details:', error.stack);
+    res.status(500).json({ message: 'Server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 });
 

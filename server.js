@@ -12,6 +12,7 @@ const attendanceRoutes = require('./routes/attendance');
 const gradeRoutes = require('./routes/grades');
 const emailRoutes = require('./routes/email');
 const adminRoutes = require('./routes/admin');
+const assessmentRoutes = require('./routes/assessments');
 const { pool } = require('./config/database');
 
 const app = express();
@@ -70,6 +71,7 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/grades', gradeRoutes);
 app.use('/api/email', emailRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/assessments', assessmentRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
