@@ -107,19 +107,12 @@
             
             if (role === 'student') {
                 navButtons = `
-                    <button onclick="loadView('courses')" class="nav-btn">My Courses</button>
-                    <button onclick="loadView('assignments')" class="nav-btn">Assignments</button>
-                    <button onclick="loadView('grades')" class="nav-btn">My Grades</button>
-                    <button onclick="loadView('attendance')" class="nav-btn">Attendance</button>
+                    <button onclick="loadView('dashboard')" class="nav-btn">Dashboard</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
             } else if (role === 'teacher') {
                 navButtons = `
-                    <button onclick="loadView('my-courses')" class="nav-btn">My Classes</button>
-                    <button onclick="loadView('create-course')" class="nav-btn">Create Course</button>
-                    <button onclick="loadView('pending-enrollments')" class="nav-btn">Pending Enrollments</button>
-                    <button onclick="loadView('attendance')" class="nav-btn">Mark Attendance</button>
-                    <button onclick="loadView('grading-center')" class="nav-btn">Grading Center</button>
+                    <button onclick="loadView('dashboard')" class="nav-btn">Dashboard</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
             } else if (role === 'headteacher' || role === 'deputy_headteacher') {
@@ -187,6 +180,16 @@
             try {
                 switch(viewName) {
                     // Student views
+                    case 'dashboard':
+                        if (currentUser.role === 'student') {
+                            await loadStudentDashboard();
+                        } else if (currentUser.role === 'teacher') {
+                            await loadTeacherDashboard();
+                        }
+                        break;
+                    case 'term-courses':
+                        await loadTermCourses();
+                        break;
                     case 'courses':
                         await loadCourses();
                         break;
@@ -555,27 +558,360 @@
             `;
         }
 
-        // Teacher: Load my courses
-        async function loadTeacherCourses() {
-            const courses = await apiCall('/courses');
+        // Teacher: Load dashboard with term selection
+        async function loadTeacherDashboard() {
             const content = document.getElementById('dashboardContent');
+            const currentYear = new Date().getFullYear();
+            
+            // Get terms
+            const terms = await apiCall(`/courses/terms?academic_year=${currentYear}`);
+            
             content.innerHTML = `
                 <div class="view-header">
-                    <h2>My Classes</h2>
-                    <button onclick="loadView('create-course')" class="btn-primary">Create New Course</button>
+                    <h2>Teacher Dashboard - ${currentYear}</h2>
                 </div>
-                <div class="courses-grid">
-                    ${courses.map(course => `
-                        <div class="course-card">
-                            <h3>${course.course_name}</h3>
-                            <p><strong>Code:</strong> ${course.course_code}</p>
-                            <p>${course.description || ''}</p>
-                            <p><strong>Students:</strong> ${course.enrolled_students || 0}</p>
-                            <button onclick="viewCourse(${course.id})" class="btn-view">Manage Course</button>
+                <div class="terms-grid">
+                    ${terms.map(term => `
+                        <div class="term-card">
+                            <h3>${term.name}</h3>
+                            <p class="term-date-range">${term.dateRange}</p>
+                            <p><strong>Courses:</strong> ${term.course_count || 0}</p>
+                            <button onclick="selectTerm(${term.term}, '${term.academic_year}')" class="btn-primary">Select Term</button>
                         </div>
                     `).join('')}
                 </div>
             `;
+        }
+
+        // Student: Load dashboard with term selection (same as teacher)
+        async function loadStudentDashboard() {
+            const content = document.getElementById('dashboardContent');
+            const currentYear = new Date().getFullYear();
+            
+            // Get terms
+            const terms = await apiCall(`/courses/terms?academic_year=${currentYear}`);
+            
+            content.innerHTML = `
+                <div class="view-header">
+                    <h2>Student Dashboard - ${currentYear}</h2>
+                </div>
+                <div class="terms-grid">
+                    ${terms.map(term => `
+                        <div class="term-card">
+                            <h3>${term.name}</h3>
+                            <p class="term-date-range">${term.dateRange}</p>
+                            <p><strong>Courses:</strong> ${term.course_count || 0}</p>
+                            <button onclick="selectTerm(${term.term}, '${term.academic_year}')" class="btn-primary">Select Term</button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Store current term and academic year
+        let currentTerm = null;
+        let currentAcademicYear = null;
+
+        // Teacher: Select term and show courses
+        async function selectTerm(term, academicYear) {
+            currentTerm = term;
+            currentAcademicYear = academicYear;
+            await loadTermCourses();
+        }
+
+        // Load courses for selected term (works for both teachers and students)
+        async function loadTermCourses() {
+            if (!currentTerm || !currentAcademicYear) {
+                if (currentUser.role === 'teacher') {
+                    loadTeacherDashboard();
+                } else if (currentUser.role === 'student') {
+                    loadStudentDashboard();
+                }
+                return;
+            }
+            
+            let courses;
+            if (currentUser.role === 'teacher') {
+                courses = await apiCall(`/courses/term/${currentTerm}/${currentAcademicYear}`);
+            } else {
+                // Students see all enrolled courses for the academic year
+                courses = await apiCall(`/courses?academic_year=${currentAcademicYear}`);
+            }
+            
+            const content = document.getElementById('dashboardContent');
+            const currentYear = new Date().getFullYear();
+            const termNames = {
+                1: `Term 1 ${currentYear} (January - April)`,
+                2: `Term 2 ${currentYear} (April - July)`,
+                3: `Term 3 ${currentYear} (August - October)`
+            };
+            const termName = termNames[currentTerm] || `Term ${currentTerm} ${currentYear}`;
+            const canCreateCourse = currentUser.role === 'teacher' || currentUser.role === 'headteacher';
+            
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('dashboard')" class="btn-back">← Back to Terms</button>
+                    <h2>${termName} - My Courses</h2>
+                    ${canCreateCourse ? `<button onclick="loadView('create-course')" class="btn-primary">Create New Course</button>` : ''}
+                </div>
+                <div class="courses-grid">
+                    ${courses.length === 0 ? `
+                        <div class="welcome-message">
+                            <p>No courses for this term. ${canCreateCourse ? 'Create a new course to get started.' : ''}</p>
+                        </div>
+                    ` : courses.map(course => `
+                        <div class="course-card">
+                            <h3>${course.course_name}</h3>
+                            <p><strong>Code:</strong> ${course.course_code}</p>
+                            <p>${course.description || ''}</p>
+                            ${currentUser.role === 'teacher' ? `<p><strong>Students:</strong> ${course.enrolled_students || 0}</p>` : ''}
+                            ${currentUser.role === 'teacher' ? `
+                                <button onclick="viewCourseDetails(${course.id})" class="btn-view">Open Course</button>
+                            ` : `
+                                <button onclick="viewCourse(${course.id})" class="btn-view">View Course</button>
+                            `}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // View course details with modules, attendance, assignments (teachers)
+        async function viewCourseDetails(courseId) {
+            const [course, modules, assignments] = await Promise.all([
+                apiCall(`/courses/${courseId}`),
+                apiCall(`/modules/course/${courseId}`),
+                apiCall(`/assignments/course/${courseId}`)
+            ]);
+            
+            const content = document.getElementById('dashboardContent');
+            const currentYear = new Date().getFullYear();
+            const termNames = {
+                1: `Term 1 ${currentYear} (January - April)`,
+                2: `Term 2 ${currentYear} (April - July)`,
+                3: `Term 3 ${currentYear} (August - October)`
+            };
+            const termName = termNames[currentTerm] || `Term ${currentTerm} ${currentYear}`;
+            
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadTermCourses()" class="btn-back">← Back to Courses</button>
+                    <h2>${course.course_name} - ${termName}</h2>
+                </div>
+                
+                <div class="course-tabs">
+                    <button onclick="showCourseTab('modules')" class="tab-btn active" id="tab-modules">Learning Modules</button>
+                    <button onclick="showCourseTab('attendance')" class="tab-btn" id="tab-attendance">Attendance</button>
+                    <button onclick="showCourseTab('assignments')" class="tab-btn" id="tab-assignments">Assignments</button>
+                    <button onclick="showCourseTab('grades')" class="tab-btn" id="tab-grades">Grading</button>
+                    <button onclick="showCourseTab('students')" class="tab-btn" id="tab-students">Students</button>
+                </div>
+                
+                <div id="course-tab-content">
+                    ${renderCourseModules(modules)}
+                </div>
+            `;
+            
+            // Store course data globally for tab switching
+            window.currentCourseData = { course, modules, assignments, courseId };
+        }
+
+        function renderCourseModules(modules) {
+            return `
+                <div class="course-section">
+                    <div class="section-header">
+                        <h3>Learning Modules</h3>
+                        <button onclick="createModule(${window.currentCourseData.courseId})" class="btn-primary">Add Module</button>
+                    </div>
+                    <div class="modules-list">
+                        ${modules.length === 0 ? '<p>No modules yet. Add a module to get started.</p>' : modules.map(module => `
+                            <div class="module-card">
+                                <h4>${module.module_name}</h4>
+                                <p>${module.module_description || ''}</p>
+                                <p>Status: ${module.is_published ? 'Published' : 'Draft'}</p>
+                                <button onclick="viewModule(${module.id})" class="btn-view">View Module</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        async function createModule(courseId) {
+            const moduleName = prompt('Enter module name:');
+            if (!moduleName) return;
+            
+            const moduleDesc = prompt('Enter module description (optional):') || '';
+            
+            try {
+                await apiCall('/modules', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        course_id: courseId,
+                        module_name: moduleName,
+                        module_description: moduleDesc,
+                        is_published: false
+                    })
+                });
+                alert('Module created!');
+                viewCourseDetails(courseId);
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function markAttendance(courseId) {
+            alert('Attendance marking feature - coming soon!');
+            // TODO: Implement attendance marking interface
+        }
+
+        async function createAssignment(courseId) {
+            alert('Assignment creation - use the assignments tab!');
+            showCourseTab('assignments');
+        }
+
+        async function createModule(courseId) {
+            const moduleName = prompt('Enter module name:');
+            if (!moduleName) return;
+            
+            const moduleDesc = prompt('Enter module description (optional):') || '';
+            
+            try {
+                await apiCall('/modules', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        course_id: courseId,
+                        module_name: moduleName,
+                        module_description: moduleDesc,
+                        is_published: false
+                    })
+                });
+                alert('Module created!');
+                viewCourseDetails(courseId);
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function markAttendance(courseId) {
+            alert('Attendance marking feature - coming soon!');
+        }
+
+        async function createAssignment(courseId) {
+            alert('Assignment creation - use the assignments tab!');
+            showCourseTab('assignments');
+        }
+
+        function showCourseTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            
+            const content = document.getElementById('course-tab-content');
+            const data = window.currentCourseData;
+            
+            switch(tabName) {
+                case 'modules':
+                    content.innerHTML = renderCourseModules(data.modules);
+                    break;
+                case 'attendance':
+                    content.innerHTML = `
+                        <div class="course-section">
+                            <h3>Attendance - Term ${currentTerm}</h3>
+                            <button onclick="markAttendance(${data.courseId})" class="btn-primary">Mark Attendance</button>
+                            <div id="attendance-list"></div>
+                        </div>
+                    `;
+                    loadCourseAttendance(data.courseId);
+                    break;
+                case 'assignments':
+                    content.innerHTML = `
+                        <div class="course-section">
+                            <div class="section-header">
+                                <h3>Assignments</h3>
+                                <button onclick="createAssignment(${data.courseId})" class="btn-primary">Create Assignment</button>
+                            </div>
+                            <div class="assignments-list">
+                                ${data.assignments.map(assignment => `
+                                    <div class="assignment-card">
+                                        <h4>${assignment.title}</h4>
+                                        <p>Type: ${assignment.assignment_type}</p>
+                                        <p>Points: ${assignment.total_points}</p>
+                                        <p>Due: ${assignment.due_date ? new Date(assignment.due_date).toLocaleDateString() : 'No due date'}</p>
+                                        <button onclick="viewAssignment(${assignment.id})" class="btn-view">View</button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                    break;
+                case 'grades':
+                    content.innerHTML = `
+                        <div class="course-section">
+                            <h3>Grading Center</h3>
+                            <button onclick="viewGradingCenter(${data.courseId})" class="btn-primary">Open Grading Center</button>
+                        </div>
+                    `;
+                    break;
+                case 'students':
+                    content.innerHTML = `
+                        <div class="course-section">
+                            <h3>Enrolled Students</h3>
+                            <button onclick="enrollStudent(${data.courseId})" class="btn-primary">Enroll Student</button>
+                            <div id="students-list"></div>
+                        </div>
+                    `;
+                    loadCourseStudents(data.courseId);
+                    break;
+            }
+        }
+
+        async function loadCourseAttendance(courseId) {
+            try {
+                const attendance = await apiCall(`/attendance/course/${courseId}`);
+                const list = document.getElementById('attendance-list');
+                list.innerHTML = `
+                    <table class="attendance-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Student</th>
+                                <th>Status</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${attendance.map(record => `
+                                <tr>
+                                    <td>${new Date(record.attendance_date).toLocaleDateString()}</td>
+                                    <td>${record.first_name} ${record.last_name}</td>
+                                    <td>${record.status}</td>
+                                    <td>${record.notes || ''}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                document.getElementById('attendance-list').innerHTML = '<p>Error loading attendance</p>';
+            }
+        }
+
+        async function loadCourseStudents(courseId) {
+            try {
+                const enrollments = await apiCall(`/courses/${courseId}`);
+                // Get enrolled students
+                const students = await apiCall(`/admin/enrollments/pending`); // This needs to be updated to get enrolled students
+                const list = document.getElementById('students-list');
+                list.innerHTML = '<p>Student list feature coming soon</p>';
+            } catch (error) {
+                document.getElementById('students-list').innerHTML = '<p>Error loading students</p>';
+            }
+        }
+
+        // Teacher: Load my courses (legacy - keeping for compatibility)
+        async function loadTeacherCourses() {
+            loadTeacherDashboard();
         }
 
         // Teacher: Show create course form
@@ -625,7 +961,11 @@
                     body: JSON.stringify(data)
                 });
                 alert('Course created successfully!');
-                loadView('my-courses');
+                if (currentTerm && currentAcademicYear) {
+                    loadTermCourses();
+                } else {
+                    loadTeacherDashboard();
+                }
             } catch (error) {
                 alert('Error creating course: ' + error.message);
             }

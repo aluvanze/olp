@@ -6,9 +6,11 @@ const router = express.Router();
 
 router.use(authenticate);
 
-// Get all courses
+// Get all courses (optionally filtered by term and academic year)
 router.get('/', async (req, res) => {
   try {
+    const { term, academic_year } = req.query;
+    
     let query = `
       SELECT c.*, u.first_name as teacher_first_name, u.last_name as teacher_last_name,
              COUNT(DISTINCT ce.student_id) as enrolled_students
@@ -19,6 +21,13 @@ router.get('/', async (req, res) => {
     `;
     const params = [];
     let paramCount = 1;
+    
+    // Filter by academic year if provided
+    if (academic_year) {
+      query += ` AND c.academic_year = $${paramCount}`;
+      params.push(academic_year);
+      paramCount++;
+    }
     
     // Students only see their enrolled courses
     if (req.user.role === 'student') {
@@ -45,6 +54,108 @@ router.get('/', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Get courses error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get terms (available for teachers, students, and admins)
+router.get('/terms', async (req, res) => {
+  try {
+    const { academic_year } = req.query;
+    const currentYear = academic_year || new Date().getFullYear();
+    const academicYearStr = `${currentYear}-${currentYear + 1}`;
+    
+    // Define terms with date ranges
+    const terms = [
+      { 
+        term: 1, 
+        name: `Term 1 ${currentYear}`, 
+        dateRange: 'January - April',
+        academic_year: academicYearStr 
+      },
+      { 
+        term: 2, 
+        name: `Term 2 ${currentYear}`, 
+        dateRange: 'April - July',
+        academic_year: academicYearStr 
+      },
+      { 
+        term: 3, 
+        name: `Term 3 ${currentYear}`, 
+        dateRange: 'August - October',
+        academic_year: academicYearStr 
+      }
+    ];
+    
+    // Get course counts per term
+    for (const termData of terms) {
+      let courseCountQuery = `
+        SELECT COUNT(*) as count 
+        FROM courses 
+        WHERE academic_year = $1 AND is_active = true
+      `;
+      const params = [termData.academic_year];
+      
+      // Teachers only see their own courses
+      if (req.user.role === 'teacher') {
+        courseCountQuery += ' AND teacher_id = $2';
+        params.push(req.user.id);
+      }
+      // Students only see enrolled courses
+      else if (req.user.role === 'student') {
+        courseCountQuery += ` AND id IN (
+          SELECT course_id FROM course_enrollments 
+          WHERE student_id = $2 AND status = 'active'
+        )`;
+        params.push(req.user.id);
+      }
+      
+      const courseCount = await pool.query(courseCountQuery, params);
+      termData.course_count = parseInt(courseCount.rows[0].count);
+    }
+    
+    res.json(terms);
+  } catch (error) {
+    console.error('Get terms error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get courses for a specific term (teachers, students, admins)
+router.get('/term/:term/:academicYear', async (req, res) => {
+  try {
+    const { term, academicYear } = req.params;
+    
+    let query = `
+      SELECT c.*, u.first_name as teacher_first_name, u.last_name as teacher_last_name,
+             COUNT(DISTINCT ce.student_id) as enrolled_students
+      FROM courses c
+      LEFT JOIN users u ON c.teacher_id = u.id
+      LEFT JOIN course_enrollments ce ON c.id = ce.course_id AND ce.status = 'active'
+      WHERE c.is_active = true AND c.academic_year = $1
+    `;
+    const params = [academicYear];
+    let paramCount = 2;
+    
+    // Teachers only see their own courses
+    if (req.user.role === 'teacher') {
+      query += ` AND c.teacher_id = $${paramCount}`;
+      params.push(req.user.id);
+      paramCount++;
+    }
+    // Students only see enrolled courses
+    else if (req.user.role === 'student') {
+      query += ` AND c.id IN (SELECT course_id FROM course_enrollments WHERE student_id = $${paramCount} AND status = 'active')`;
+      params.push(req.user.id);
+      paramCount++;
+    }
+    
+    query += ' GROUP BY c.id, u.first_name, u.last_name ORDER BY c.course_name';
+    
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get courses for term error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
