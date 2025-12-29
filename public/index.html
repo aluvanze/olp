@@ -118,6 +118,7 @@
             } else if (role === 'headteacher' || role === 'deputy_headteacher') {
                 navButtons = `
                     <button onclick="loadView('dashboard')" class="nav-btn">Dashboard</button>
+                    <button onclick="loadView('manage-terms')" class="nav-btn">Manage Terms</button>
                     <button onclick="loadView('teachers-overview')" class="nav-btn">Teachers Overview</button>
                     <button onclick="loadView('add-teacher')" class="nav-btn">Add Teacher</button>
                     <button onclick="loadView('allocate-courses')" class="nav-btn">Allocate Courses</button>
@@ -128,6 +129,7 @@
                 navButtons = `
                     <button onclick="loadView('dashboard')" class="nav-btn">System Dashboard</button>
                     <button onclick="loadView('users')" class="nav-btn">User Management</button>
+                    <button onclick="loadView('manage-terms')" class="nav-btn">Manage Terms</button>
                     <button onclick="loadView('teachers-overview')" class="nav-btn">Teachers Overview</button>
                     <button onclick="loadView('add-teacher')" class="nav-btn">Add Teacher</button>
                     <button onclick="loadView('allocate-courses')" class="nav-btn">Allocate Courses</button>
@@ -241,6 +243,9 @@
                         break;
                     case 'users':
                         await loadUsers();
+                        break;
+                    case 'manage-terms':
+                        await loadManageTerms();
                         break;
                     
                     // Parent views
@@ -1112,6 +1117,209 @@
                     </table>
                 </div>
             `;
+        }
+
+        // Admin: Manage Terms
+        async function loadManageTerms() {
+            const content = document.getElementById('dashboardContent');
+            const currentYear = new Date().getFullYear();
+            const academicYear = `${currentYear}-${currentYear + 1}`;
+            
+            try {
+                const terms = await apiCall(`/terms?academic_year=${academicYear}`);
+                
+                content.innerHTML = `
+                    <div class="view-header">
+                        <h2>Manage Terms - ${academicYear}</h2>
+                        <button onclick="showCreateTermForm()" class="btn-primary">Create New Term</button>
+                    </div>
+                    <div class="terms-management">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Term Number</th>
+                                    <th>Name</th>
+                                    <th>Date Range</th>
+                                    <th>Academic Year</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${terms.length === 0 ? `
+                                    <tr>
+                                        <td colspan="6" style="text-align: center; padding: 2rem;">
+                                            No terms found. Create a term to get started.
+                                        </td>
+                                    </tr>
+                                ` : terms.map(term => `
+                                    <tr>
+                                        <td>Term ${term.term_number}</td>
+                                        <td>${term.name}</td>
+                                        <td>${term.date_range_start} - ${term.date_range_end}</td>
+                                        <td>${term.academic_year}</td>
+                                        <td>${term.is_active ? '<span class="status-active">Active</span>' : '<span class="status-inactive">Inactive</span>'}</td>
+                                        <td>
+                                            <button onclick="editTerm(${term.id})" class="btn-small">Edit</button>
+                                            ${term.is_active ? `
+                                                <button onclick="deactivateTerm(${term.id})" class="btn-small btn-danger">Deactivate</button>
+                                            ` : `
+                                                <button onclick="activateTerm(${term.id})" class="btn-small">Activate</button>
+                                            `}
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="term-form-modal" class="modal" style="display: none;">
+                        <div class="modal-content">
+                            <span class="close" onclick="closeTermModal()">&times;</span>
+                            <h3 id="term-form-title">Create Term</h3>
+                            <form id="term-form" onsubmit="saveTerm(event)">
+                                <input type="hidden" id="term-id" name="id">
+                                <div class="form-group">
+                                    <label>Term Number *</label>
+                                    <select name="term_number" id="term-number" required>
+                                        <option value="">Select Term</option>
+                                        <option value="1">Term 1</option>
+                                        <option value="2">Term 2</option>
+                                        <option value="3">Term 3</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Academic Year *</label>
+                                    <input type="text" name="academic_year" id="academic-year" required placeholder="e.g., 2025-2026">
+                                </div>
+                                <div class="form-group">
+                                    <label>Term Name *</label>
+                                    <input type="text" name="name" id="term-name" required placeholder="e.g., Term 1 2025">
+                                </div>
+                                <div class="form-group">
+                                    <label>Start Month *</label>
+                                    <input type="text" name="date_range_start" id="date-range-start" required placeholder="e.g., January">
+                                </div>
+                                <div class="form-group">
+                                    <label>End Month *</label>
+                                    <input type="text" name="date_range_end" id="date-range-end" required placeholder="e.g., April">
+                                </div>
+                                <div class="form-group">
+                                    <label>Start Date (Optional)</label>
+                                    <input type="date" name="start_date" id="start-date">
+                                </div>
+                                <div class="form-group">
+                                    <label>End Date (Optional)</label>
+                                    <input type="date" name="end_date" id="end-date">
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" class="btn-primary">Save Term</button>
+                                    <button type="button" onclick="closeTermModal()" class="btn-secondary">Cancel</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                content.innerHTML = `<div class="error">Error loading terms: ${error.message}</div>`;
+            }
+        }
+
+        function showCreateTermForm() {
+            document.getElementById('term-form-title').textContent = 'Create Term';
+            document.getElementById('term-form').reset();
+            document.getElementById('term-id').value = '';
+            document.getElementById('academic-year').value = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+            document.getElementById('term-form-modal').style.display = 'block';
+        }
+
+        async function editTerm(termId) {
+            try {
+                const term = await apiCall(`/terms/${termId}`);
+                document.getElementById('term-form-title').textContent = 'Edit Term';
+                document.getElementById('term-id').value = term.id;
+                document.getElementById('term-number').value = term.term_number;
+                document.getElementById('academic-year').value = term.academic_year;
+                document.getElementById('term-name').value = term.name;
+                document.getElementById('date-range-start').value = term.date_range_start;
+                document.getElementById('date-range-end').value = term.date_range_end;
+                document.getElementById('start-date').value = term.start_date || '';
+                document.getElementById('end-date').value = term.end_date || '';
+                document.getElementById('term-form-modal').style.display = 'block';
+            } catch (error) {
+                alert('Error loading term: ' + error.message);
+            }
+        }
+
+        async function saveTerm(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            const termId = data.id;
+            
+            try {
+                if (termId) {
+                    // Update existing term
+                    await apiCall(`/terms/${termId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify({
+                            name: data.name,
+                            date_range_start: data.date_range_start,
+                            date_range_end: data.date_range_end,
+                            start_date: data.start_date || null,
+                            end_date: data.end_date || null
+                        })
+                    });
+                    alert('Term updated successfully!');
+                } else {
+                    // Create new term
+                    await apiCall('/terms', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            term_number: parseInt(data.term_number),
+                            academic_year: data.academic_year,
+                            name: data.name,
+                            date_range_start: data.date_range_start,
+                            date_range_end: data.date_range_end,
+                            start_date: data.start_date || null,
+                            end_date: data.end_date || null
+                        })
+                    });
+                    alert('Term created successfully!');
+                }
+                closeTermModal();
+                loadManageTerms();
+            } catch (error) {
+                alert('Error saving term: ' + error.message);
+            }
+        }
+
+        async function deactivateTerm(termId) {
+            if (!confirm('Are you sure you want to deactivate this term?')) return;
+            
+            try {
+                await apiCall(`/terms/${termId}`, { method: 'DELETE' });
+                alert('Term deactivated successfully!');
+                loadManageTerms();
+            } catch (error) {
+                alert('Error deactivating term: ' + error.message);
+            }
+        }
+
+        async function activateTerm(termId) {
+            try {
+                await apiCall(`/terms/${termId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ is_active: true })
+                });
+                alert('Term activated successfully!');
+                loadManageTerms();
+            } catch (error) {
+                alert('Error activating term: ' + error.message);
+            }
+        }
+
+        function closeTermModal() {
+            document.getElementById('term-form-modal').style.display = 'none';
         }
 
         // Admin: Load dashboard

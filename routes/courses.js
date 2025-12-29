@@ -65,29 +65,34 @@ router.get('/terms', async (req, res) => {
     const currentYear = academic_year || new Date().getFullYear();
     const academicYearStr = `${currentYear}-${currentYear + 1}`;
     
-    // Define terms with date ranges
-    const terms = [
-      { 
-        term: 1, 
-        name: `Term 1 ${currentYear}`, 
-        dateRange: 'January - April',
-        academic_year: academicYearStr 
-      },
-      { 
-        term: 2, 
-        name: `Term 2 ${currentYear}`, 
-        dateRange: 'April - July',
-        academic_year: academicYearStr 
-      },
-      { 
-        term: 3, 
-        name: `Term 3 ${currentYear}`, 
-        dateRange: 'August - October',
-        academic_year: academicYearStr 
-      }
-    ];
+    // Get terms from database
+    const termsResult = await pool.query(
+      `SELECT * FROM terms 
+       WHERE academic_year = $1 AND is_active = true 
+       ORDER BY term_number`,
+      [academicYearStr]
+    );
+    
+    // If no terms exist, return empty array
+    if (termsResult.rows.length === 0) {
+      return res.json([]);
+    }
     
     // Get course counts per term
+    const terms = termsResult.rows.map(term => {
+      return {
+        id: term.id,
+        term: term.term_number,
+        name: term.name,
+        dateRange: `${term.date_range_start} - ${term.date_range_end}`,
+        academic_year: term.academic_year,
+        start_date: term.start_date,
+        end_date: term.end_date,
+        course_count: 0 // Will be populated below
+      };
+    });
+    
+    // Get course counts for each term
     for (const termData of terms) {
       let courseCountQuery = `
         SELECT COUNT(*) as count 
