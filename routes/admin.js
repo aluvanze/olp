@@ -332,30 +332,66 @@ router.post('/enrollments/:enrollmentId/authorize', authorize('teacher', 'headte
   }
 });
 
-// Superadmin: Get all users
+// Superadmin: Get all users with pagination
 router.get('/users', authorize('superadmin'), async (req, res) => {
   try {
-    const { role, search } = req.query;
-    let query = 'SELECT id, username, email, first_name, last_name, role, phone, is_active, created_at FROM users WHERE 1=1';
+    const { role, search, is_active, page = 1, limit = 20 } = req.query;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const offset = (pageNum - 1) * limitNum;
+    
+    // Build WHERE clause
+    let whereClause = 'WHERE 1=1';
     const params = [];
     let paramCount = 1;
     
     if (role) {
-      query += ` AND role = $${paramCount}`;
+      whereClause += ` AND role = $${paramCount}`;
       params.push(role);
       paramCount++;
     }
     
     if (search) {
-      query += ` AND (first_name ILIKE $${paramCount} OR last_name ILIKE $${paramCount} OR email ILIKE $${paramCount})`;
+      whereClause += ` AND (first_name ILIKE $${paramCount} OR last_name ILIKE $${paramCount} OR username ILIKE $${paramCount} OR email ILIKE $${paramCount})`;
       params.push(`%${search}%`);
       paramCount++;
     }
     
-    query += ' ORDER BY created_at DESC';
+    if (is_active !== undefined) {
+      whereClause += ` AND is_active = $${paramCount}`;
+      params.push(is_active === 'true');
+      paramCount++;
+    }
+    
+    // Get total count
+    const countQuery = `SELECT COUNT(*) as total FROM users ${whereClause}`;
+    const countResult = await pool.query(countQuery, params);
+    const total = parseInt(countResult.rows[0].total);
+    const totalPages = Math.ceil(total / limitNum);
+    
+    // Get paginated users
+    let query = `
+      SELECT id, username, email, first_name, last_name, role, phone, is_active, created_at
+      FROM users
+      ${whereClause}
+      ORDER BY created_at DESC
+      LIMIT $${paramCount} OFFSET $${paramCount + 1}
+    `;
+    params.push(limitNum, offset);
     
     const result = await pool.query(query, params);
-    res.json(result.rows);
+    
+    res.json({
+      users: result.rows,
+      pagination: {
+        current_page: pageNum,
+        total_pages: totalPages,
+        total_items: total,
+        items_per_page: limitNum,
+        has_next: pageNum < totalPages,
+        has_prev: pageNum > 1
+      }
+    });
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json({ message: 'Server error' });

@@ -29,9 +29,11 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
 });
 
-// Get all modules for a course
+// Get all modules for a course (term-specific)
 router.get('/course/:courseId', async (req, res) => {
   try {
+    const { term, academic_year } = req.query;
+    
     // Verify course access
     if (req.user.role === 'student') {
       const enrollmentCheck = await pool.query(
@@ -43,15 +45,33 @@ router.get('/course/:courseId', async (req, res) => {
       }
     }
     
-    const result = await pool.query(
-      `SELECT lm.*, u.first_name as created_by_first_name, u.last_name as created_by_last_name
-       FROM learning_modules lm
-       LEFT JOIN users u ON lm.created_by = u.id
-       WHERE lm.course_id = $1
-       ORDER BY lm.module_order, lm.created_at`,
-      [req.params.courseId]
-    );
+    // Get course to verify academic year matches term
+    const courseCheck = await pool.query('SELECT academic_year FROM courses WHERE id = $1', [req.params.courseId]);
+    if (courseCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'Course not found' });
+    }
     
+    // If term and academic_year are provided, only show modules if course matches that term's academic year
+    let query = `
+      SELECT lm.*, u.first_name as created_by_first_name, u.last_name as created_by_last_name
+      FROM learning_modules lm
+      LEFT JOIN users u ON lm.created_by = u.id
+      WHERE lm.course_id = $1
+    `;
+    const params = [req.params.courseId];
+    
+    // Filter by term: only show modules if the course's academic year matches the selected term's academic year
+    if (term && academic_year) {
+      query += ` AND EXISTS (
+        SELECT 1 FROM courses c 
+        WHERE c.id = lm.course_id AND c.academic_year = $2
+      )`;
+      params.push(academic_year);
+    }
+    
+    query += ' ORDER BY lm.module_order, lm.created_at';
+    
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
     console.error('Get modules error:', error);

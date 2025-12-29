@@ -73,13 +73,27 @@ router.get('/terms', async (req, res) => {
       [academicYearStr]
     );
     
-    // If no terms exist, return empty array
+    // If no terms exist for this academic year, try to get any active terms
+    let terms = [];
     if (termsResult.rows.length === 0) {
+      const allTermsResult = await pool.query(
+        `SELECT * FROM terms 
+         WHERE is_active = true 
+         ORDER BY academic_year DESC, term_number
+         LIMIT 3`
+      );
+      terms = allTermsResult.rows;
+    } else {
+      terms = termsResult.rows;
+    }
+    
+    // If still no terms, return empty array
+    if (terms.length === 0) {
       return res.json([]);
     }
     
-    // Get course counts per term
-    const terms = termsResult.rows.map(term => {
+    // Map terms to response format
+    const mappedTerms = terms.map(term => {
       return {
         id: term.id,
         term: term.term_number,
@@ -93,7 +107,7 @@ router.get('/terms', async (req, res) => {
     });
     
     // Get course counts for each term
-    for (const termData of terms) {
+    for (const termData of mappedTerms) {
       let courseCountQuery = `
         SELECT COUNT(*) as count 
         FROM courses 
@@ -114,14 +128,103 @@ router.get('/terms', async (req, res) => {
         )`;
         params.push(req.user.id);
       }
+      // Headteachers, admins see all courses
       
       const courseCount = await pool.query(courseCountQuery, params);
       termData.course_count = parseInt(courseCount.rows[0].count);
     }
     
-    res.json(terms);
+    res.json(mappedTerms);
   } catch (error) {
     console.error('Get terms error:', error);
+    console.error('Error details:', error.stack);
+    res.status(500).json({ message: 'Server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+  }
+});
+
+// Get courses grouped by category/learning area
+router.get('/by-category/:academicYear', async (req, res) => {
+  try {
+    const { academicYear } = req.params;
+
+    // First try to get courses with learning_area_id if column exists
+    let result;
+    try {
+      result = await pool.query(
+        `SELECT c.id, c.course_name, c.course_code, c.description, c.academic_year,
+                u.first_name as teacher_first_name, u.last_name as teacher_last_name,
+                la.name as learning_area_name, la.code as learning_area_code,
+                la.is_core, p.name as pathway_name
+         FROM courses c
+         LEFT JOIN users u ON c.teacher_id = u.id
+         LEFT JOIN learning_areas la ON c.learning_area_id = la.id
+         LEFT JOIN pathways p ON la.pathway_id = p.id
+         WHERE c.academic_year = $1 AND c.is_active = true
+         ORDER BY la.is_core DESC NULLS LAST, p.name, la.name, c.course_name`,
+        [academicYear]
+      );
+    } catch (error) {
+      // If learning_area_id column doesn't exist, get courses without it
+      result = await pool.query(
+        `SELECT c.id, c.course_name, c.course_code, c.description, c.academic_year,
+                u.first_name as teacher_first_name, u.last_name as teacher_last_name
+         FROM courses c
+         LEFT JOIN users u ON c.teacher_id = u.id
+         WHERE c.academic_year = $1 AND c.is_active = true
+         ORDER BY c.course_name`,
+        [academicYear]
+      );
+    }
+
+    // Group courses by category based on course name/code
+    const grouped = {
+      core: [],
+      languages: [],
+      sciences: [],
+      arts: [],
+      social_sciences: [],
+      technical: [],
+      other: []
+    };
+
+    result.rows.forEach(course => {
+      const code = (course.course_code || '').toUpperCase();
+      const name = (course.course_name || '').toLowerCase();
+      const learningAreaCode = (course.learning_area_code || '').toUpperCase();
+      
+      // Determine category
+      if (course.is_core || learningAreaCode.includes('ENG') || learningAreaCode.includes('KISW') || learningAreaCode.includes('MATH') || learningAreaCode.includes('CSL') || 
+          code.includes('ENG') || code.includes('KISW') || code.includes('MATH') || code.includes('CSL') ||
+          name.includes('english') || name.includes('kiswahili') || name.includes('mathematics') || name.includes('community service')) {
+        grouped.core.push(course);
+      } else if (learningAreaCode.includes('LIT') || learningAreaCode.includes('FASIHI') || learningAreaCode.includes('LANG') || learningAreaCode.includes('ARABIC') || learningAreaCode.includes('FRENCH') || learningAreaCode.includes('GERMAN') || learningAreaCode.includes('MANDARIN') || learningAreaCode.includes('SIGN') ||
+               code.includes('LIT') || code.includes('LANG') || code.includes('ARABIC') || code.includes('FRENCH') || code.includes('GERMAN') ||
+               name.includes('literature') || name.includes('language') || name.includes('arabic') || name.includes('french') || name.includes('german')) {
+        grouped.languages.push(course);
+      } else if (learningAreaCode.includes('BIO') || learningAreaCode.includes('CHEM') || learningAreaCode.includes('PHYS') || learningAreaCode.includes('SCI') ||
+               code.includes('BIO') || code.includes('CHEM') || code.includes('PHYS') || code.includes('SCI') ||
+               name.includes('biology') || name.includes('chemistry') || name.includes('physics') || name.includes('science')) {
+        grouped.sciences.push(course);
+      } else if (learningAreaCode.includes('ARTS') || learningAreaCode.includes('MUSIC') || learningAreaCode.includes('THEATRE') || learningAreaCode.includes('SPORTS') || learningAreaCode.includes('FINE') ||
+               code.includes('ARTS') || code.includes('MUSIC') || code.includes('SPORTS') ||
+               name.includes('art') || name.includes('music') || name.includes('sport') || name.includes('dance') || name.includes('theatre')) {
+        grouped.arts.push(course);
+      } else if (learningAreaCode.includes('HISTORY') || learningAreaCode.includes('GEO') || learningAreaCode.includes('BUSINESS') || learningAreaCode.includes('CRE') || learningAreaCode.includes('IRE') || learningAreaCode.includes('HRE') ||
+               code.includes('HIST') || code.includes('GEO') || code.includes('BUSINESS') || code.includes('CRE') || code.includes('IRE') ||
+               name.includes('history') || name.includes('geography') || name.includes('business') || name.includes('religious')) {
+        grouped.social_sciences.push(course);
+      } else if (learningAreaCode.includes('COMPUTER') || learningAreaCode.includes('TECH') || learningAreaCode.includes('BUILDING') || learningAreaCode.includes('ELECTRICITY') || learningAreaCode.includes('METAL') || learningAreaCode.includes('WOOD') || learningAreaCode.includes('AVIATION') || learningAreaCode.includes('MARINE') ||
+               code.includes('COMP') || code.includes('TECH') || code.includes('BUILD') || code.includes('ELECT') ||
+               name.includes('computer') || name.includes('technology') || name.includes('building') || name.includes('electricity') || name.includes('aviation')) {
+        grouped.technical.push(course);
+      } else {
+        grouped.other.push(course);
+      }
+    });
+
+    res.json(grouped);
+  } catch (error) {
+    console.error('Get courses by category error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

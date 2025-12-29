@@ -7,7 +7,8 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "migrate": "node migrations/runMigrations.js",
-    "seed": "node migrations/seedData.js"
+    "seed": "node migrations/seedData.js",
+    "seed-subjects": "node seed-subjects.js"
   },
   "keywords": [
     "lms",

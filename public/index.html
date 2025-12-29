@@ -113,27 +113,15 @@
             } else if (role === 'teacher') {
                 navButtons = `
                     <button onclick="loadView('dashboard')" class="nav-btn">Dashboard</button>
+                    <button onclick="loadView('register-student')" class="nav-btn">Register Student</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
-            } else if (role === 'headteacher' || role === 'deputy_headteacher') {
+            } else if (role === 'headteacher' || role === 'deputy_headteacher' || role === 'superadmin' || role === 'finance') {
                 navButtons = `
                     <button onclick="loadView('dashboard')" class="nav-btn">Dashboard</button>
-                    <button onclick="loadView('manage-terms')" class="nav-btn">Manage Terms</button>
-                    <button onclick="loadView('teachers-overview')" class="nav-btn">Teachers Overview</button>
-                    <button onclick="loadView('add-teacher')" class="nav-btn">Add Teacher</button>
-                    <button onclick="loadView('allocate-courses')" class="nav-btn">Allocate Courses</button>
-                    <button onclick="loadView('all-courses')" class="nav-btn">All Courses</button>
-                    <button onclick="loadView('messages')" class="nav-btn">Messages</button>
-                `;
-            } else if (role === 'superadmin') {
-                navButtons = `
-                    <button onclick="loadView('dashboard')" class="nav-btn">System Dashboard</button>
-                    <button onclick="loadView('users')" class="nav-btn">User Management</button>
-                    <button onclick="loadView('manage-terms')" class="nav-btn">Manage Terms</button>
-                    <button onclick="loadView('teachers-overview')" class="nav-btn">Teachers Overview</button>
-                    <button onclick="loadView('add-teacher')" class="nav-btn">Add Teacher</button>
-                    <button onclick="loadView('allocate-courses')" class="nav-btn">Allocate Courses</button>
-                    <button onclick="loadView('all-courses')" class="nav-btn">All Courses</button>
+                    <button onclick="loadView('register-student')" class="nav-btn">Register Student</button>
+                    ${role === 'superadmin' || role === 'headteacher' ? `<button onclick="loadView('manage-terms')" class="nav-btn">Manage Terms</button>` : ''}
+                    ${role === 'superadmin' ? `<button onclick="loadView('users')" class="nav-btn">User Management</button>` : ''}
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
             } else if (role === 'parent') {
@@ -183,11 +171,7 @@
                 switch(viewName) {
                     // Student views
                     case 'dashboard':
-                        if (currentUser.role === 'student') {
-                            await loadStudentDashboard();
-                        } else if (currentUser.role === 'teacher') {
-                            await loadTeacherDashboard();
-                        }
+                        await loadDashboard();
                         break;
                     case 'term-courses':
                         await loadTermCourses();
@@ -215,8 +199,8 @@
                     case 'my-courses':
                         await loadTeacherCourses();
                         break;
-                    case 'create-course':
-                        await showCreateCourse();
+                    case 'assign-teachers':
+                        await showAssignTeachers();
                         break;
                     case 'pending-enrollments':
                         await loadPendingEnrollments();
@@ -228,6 +212,9 @@
                     // Admin views
                     case 'dashboard':
                         await loadAdminDashboard();
+                        break;
+                    case 'term-courses':
+                        await loadTermCourses();
                         break;
                     case 'teachers-overview':
                         await loadTeachersOverview();
@@ -246,6 +233,9 @@
                         break;
                     case 'manage-terms':
                         await loadManageTerms();
+                        break;
+                    case 'register-student':
+                        await loadRegisterStudent();
                         break;
                     
                     // Parent views
@@ -563,54 +553,59 @@
             `;
         }
 
-        // Teacher: Load dashboard with term selection
-        async function loadTeacherDashboard() {
+        // Load dashboard with term selection (for teachers, students, and all admin roles)
+        async function loadDashboard() {
             const content = document.getElementById('dashboardContent');
             const currentYear = new Date().getFullYear();
+            const role = currentUser.role;
+            const roleName = role === 'teacher' ? 'Teacher' : 
+                           role === 'student' ? 'Student' : 
+                           role === 'headteacher' ? 'Headteacher' :
+                           role === 'deputy_headteacher' ? 'Deputy Headteacher' :
+                           role === 'superadmin' ? 'Superadmin' :
+                           role === 'finance' ? 'Finance Administrator' : 'Dashboard';
             
-            // Get terms
-            const terms = await apiCall(`/courses/terms?academic_year=${currentYear}`);
-            
-            content.innerHTML = `
-                <div class="view-header">
-                    <h2>Teacher Dashboard - ${currentYear}</h2>
-                </div>
-                <div class="terms-grid">
-                    ${terms.map(term => `
-                        <div class="term-card">
-                            <h3>${term.name}</h3>
-                            <p class="term-date-range">${term.dateRange}</p>
-                            <p><strong>Courses:</strong> ${term.course_count || 0}</p>
-                            <button onclick="selectTerm(${term.term}, '${term.academic_year}')" class="btn-primary">Select Term</button>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
+            try {
+                // Get terms
+                const terms = await apiCall(`/courses/terms?academic_year=${currentYear}`);
+                
+                content.innerHTML = `
+                    <div class="view-header">
+                        <h2>${roleName} Dashboard - ${currentYear}</h2>
+                    </div>
+                    <div class="terms-grid">
+                        ${terms.length === 0 ? `
+                            <div class="welcome-message">
+                                <p>No terms available. ${(role === 'headteacher' || role === 'superadmin') ? 'Please create terms first.' : 'Contact administrator.'}</p>
+                            </div>
+                        ` : terms.map(term => `
+                            <div class="term-card">
+                                <h3>${term.name}</h3>
+                                <p class="term-date-range">${term.dateRange}</p>
+                                <p><strong>Courses:</strong> ${term.course_count || 0}</p>
+                                <button onclick="selectTerm(${term.term}, '${term.academic_year}')" class="btn-primary">Select Term</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } catch (error) {
+                content.innerHTML = `<div class="error">Error loading dashboard: ${error.message}</div>`;
+            }
+        }
+
+        // Teacher: Load dashboard with term selection
+        async function loadTeacherDashboard() {
+            await loadDashboard();
         }
 
         // Student: Load dashboard with term selection (same as teacher)
         async function loadStudentDashboard() {
-            const content = document.getElementById('dashboardContent');
-            const currentYear = new Date().getFullYear();
-            
-            // Get terms
-            const terms = await apiCall(`/courses/terms?academic_year=${currentYear}`);
-            
-            content.innerHTML = `
-                <div class="view-header">
-                    <h2>Student Dashboard - ${currentYear}</h2>
-                </div>
-                <div class="terms-grid">
-                    ${terms.map(term => `
-                        <div class="term-card">
-                            <h3>${term.name}</h3>
-                            <p class="term-date-range">${term.dateRange}</p>
-                            <p><strong>Courses:</strong> ${term.course_count || 0}</p>
-                            <button onclick="selectTerm(${term.term}, '${term.academic_year}')" class="btn-primary">Select Term</button>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
+            await loadDashboard();
+        }
+
+        // Admin: Load dashboard with term selection (same interface)
+        async function loadAdminDashboard() {
+            await loadDashboard();
         }
 
         // Store current term and academic year
@@ -624,40 +619,42 @@
             await loadTermCourses();
         }
 
-        // Load courses for selected term (works for both teachers and students)
+        // Load courses for selected term (works for all roles)
         async function loadTermCourses() {
             if (!currentTerm || !currentAcademicYear) {
-                if (currentUser.role === 'teacher') {
-                    loadTeacherDashboard();
-                } else if (currentUser.role === 'student') {
-                    loadStudentDashboard();
-                }
+                loadDashboard();
                 return;
             }
             
+            const role = currentUser.role;
             let courses;
-            if (currentUser.role === 'teacher') {
+            
+            // Get courses based on role
+            if (role === 'teacher') {
                 courses = await apiCall(`/courses/term/${currentTerm}/${currentAcademicYear}`);
+            } else if (role === 'student') {
+                courses = await apiCall(`/courses?academic_year=${currentAcademicYear}`);
             } else {
-                // Students see all enrolled courses for the academic year
+                // Admin roles see all courses for the term
                 courses = await apiCall(`/courses?academic_year=${currentAcademicYear}`);
             }
             
             const content = document.getElementById('dashboardContent');
             const currentYear = new Date().getFullYear();
-            const termNames = {
-                1: `Term 1 ${currentYear} (January - April)`,
-                2: `Term 2 ${currentYear} (April - July)`,
-                3: `Term 3 ${currentYear} (August - October)`
-            };
-            const termName = termNames[currentTerm] || `Term ${currentTerm} ${currentYear}`;
-            const canCreateCourse = currentUser.role === 'teacher' || currentUser.role === 'headteacher';
+            
+            // Get term details to show proper name and date range
+            const terms = await apiCall(`/courses/terms?academic_year=${currentYear}`);
+            const selectedTerm = terms.find(t => t.term === currentTerm);
+            const termName = selectedTerm ? `${selectedTerm.name} (${selectedTerm.dateRange})` : `Term ${currentTerm} ${currentYear}`;
+            
+            const canCreateCourse = ['teacher', 'headteacher', 'superadmin', 'deputy_headteacher'].includes(role);
+            const canManageCourse = ['teacher', 'headteacher', 'superadmin', 'deputy_headteacher'].includes(role);
             
             content.innerHTML = `
                 <div class="view-header">
                     <button onclick="loadView('dashboard')" class="btn-back">← Back to Terms</button>
-                    <h2>${termName} - My Courses</h2>
-                    ${canCreateCourse ? `<button onclick="loadView('create-course')" class="btn-primary">Create New Course</button>` : ''}
+                    <h2>${termName} - Courses</h2>
+                    ${['headteacher', 'superadmin', 'deputy_headteacher'].includes(role) ? `<button onclick="loadView('assign-teachers')" class="btn-primary">Assign Teachers to Subjects</button>` : ''}
                 </div>
                 <div class="courses-grid">
                     ${courses.length === 0 ? `
@@ -669,8 +666,8 @@
                             <h3>${course.course_name}</h3>
                             <p><strong>Code:</strong> ${course.course_code}</p>
                             <p>${course.description || ''}</p>
-                            ${currentUser.role === 'teacher' ? `<p><strong>Students:</strong> ${course.enrolled_students || 0}</p>` : ''}
-                            ${currentUser.role === 'teacher' ? `
+                            ${['teacher', 'headteacher', 'superadmin'].includes(role) ? `<p><strong>Students:</strong> ${course.enrolled_students || 0}</p>` : ''}
+                            ${canManageCourse ? `
                                 <button onclick="viewCourseDetails(${course.id})" class="btn-view">Open Course</button>
                             ` : `
                                 <button onclick="viewCourse(${course.id})" class="btn-view">View Course</button>
@@ -681,11 +678,17 @@
             `;
         }
 
-        // View course details with modules, attendance, assignments (teachers)
+        // View course details with modules, attendance, assignments (teachers and admins)
         async function viewCourseDetails(courseId) {
+            if (!currentTerm || !currentAcademicYear) {
+                alert('Please select a term first');
+                loadDashboard();
+                return;
+            }
+            
             const [course, modules, assignments] = await Promise.all([
                 apiCall(`/courses/${courseId}`),
-                apiCall(`/modules/course/${courseId}`),
+                apiCall(`/modules/course/${courseId}?term=${currentTerm}&academic_year=${currentAcademicYear}`),
                 apiCall(`/assignments/course/${courseId}`)
             ]);
             
@@ -919,62 +922,203 @@
             loadTeacherDashboard();
         }
 
-        // Teacher: Show create course form
-        async function showCreateCourse() {
-            const content = document.getElementById('dashboardContent');
-            content.innerHTML = `
-                <div class="view-header">
-                    <button onclick="loadView('my-courses')" class="btn-back">← Back</button>
-                    <h2>Create New Course</h2>
-                </div>
-                <div class="form-container">
-                    <form id="createCourseForm" onsubmit="createCourse(event)">
-                        <div class="form-group">
-                            <label>Course Code *</label>
-                            <input type="text" name="course_code" required placeholder="e.g., MATH10">
-                        </div>
-                        <div class="form-group">
-                            <label>Course Name *</label>
-                            <input type="text" name="course_name" required placeholder="e.g., Mathematics Grade 10">
-                        </div>
-                        <div class="form-group">
-                            <label>Description</label>
-                            <textarea name="description" rows="3"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label>Academic Year *</label>
-                            <input type="text" name="academic_year" required placeholder="e.g., 2024-2025">
-                        </div>
-                        <div class="form-group">
-                            <label>Semester</label>
-                            <input type="text" name="semester" placeholder="e.g., Fall 2024">
-                        </div>
-                        <button type="submit" class="btn-primary">Create Course</button>
-                    </form>
-                </div>
-            `;
-        }
+        // Headteacher: Assign Teachers to Subjects/Courses for a Term
+        async function showAssignTeachers() {
+            if (!currentTerm || !currentAcademicYear) {
+                alert('Please select a term first from the dashboard');
+                loadView('dashboard');
+                return;
+            }
 
-        async function createCourse(e) {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const data = Object.fromEntries(formData);
+            const content = document.getElementById('dashboardContent');
             
             try {
-                await apiCall('/courses', {
-                    method: 'POST',
-                    body: JSON.stringify(data)
-                });
-                alert('Course created successfully!');
-                if (currentTerm && currentAcademicYear) {
-                    loadTermCourses();
-                } else {
-                    loadTeacherDashboard();
-                }
+                // Load courses, teachers, and current assignments
+                const [courses, teachers, assignments] = await Promise.all([
+                    apiCall('/teacher-assignments/courses'),
+                    apiCall('/teacher-assignments/teachers'),
+                    apiCall(`/teacher-assignments/term/${currentTerm}/${currentAcademicYear}`)
+                ]);
+
+                content.innerHTML = `
+                    <div class="view-header">
+                        <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                        <h2>Assign Teachers to Subjects - Term ${currentTerm} ${currentAcademicYear}</h2>
+                    </div>
+                    
+                    <div class="form-container" style="margin-bottom: 2rem;">
+                        <h3>New Assignment</h3>
+                        <form id="assignTeacherForm" onsubmit="assignTeacher(event)">
+                            <div class="form-group">
+                                <label>Subject/Course *</label>
+                                <div class="subject-search-container">
+                                    <input 
+                                        type="text" 
+                                        id="subject-search-input" 
+                                        placeholder="Search for a subject (e.g., Mathematics, Biology, English)..." 
+                                        autocomplete="off"
+                                        oninput="filterSubjects(this.value)"
+                                        onfocus="showSubjectResults()"
+                                    >
+                                    <div id="subject-results" class="subject-results" style="display: none;"></div>
+                                    <input type="hidden" name="course_id" id="selected-course-id" required>
+                                </div>
+                                <div id="selected-subject-display" style="margin-top: 0.5rem; padding: 0.5rem; background: #e8f5e9; border-radius: 4px; display: none;">
+                                    <strong>Selected:</strong> <span id="selected-subject-name"></span>
+                                    <button type="button" onclick="clearSubjectSelection()" style="margin-left: 1rem; padding: 0.25rem 0.5rem; font-size: 0.875rem;">Change</button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Teacher *</label>
+                                <select name="teacher_id" id="assign-teacher-select" required>
+                                    <option value="">Select a teacher...</option>
+                                    ${teachers.map(t => `<option value="${t.id}">${t.first_name} ${t.last_name} (${t.email})</option>`).join('')}
+                                </select>
+                            </div>
+                            <button type="submit" class="btn-primary">Assign Teacher</button>
+                        </form>
+                    </div>
+
+                    <div class="assignments-list">
+                        <h3>Current Assignments</h3>
+                        ${getAssignmentsHtml(assignments)}
+                    </div>
+                `;
+                
+                // Store courses globally for search
+                window.allCourses = courses;
             } catch (error) {
-                alert('Error creating course: ' + error.message);
+                content.innerHTML = `<div class="error">Error loading assignment interface: ${error.message}</div>`;
+                console.error('Load assign teachers error:', error);
             }
         }
+
+        async function assignTeacher(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const courseId = formData.get('course_id');
+            const teacherId = formData.get('teacher_id');
+
+            try {
+                await apiCall('/teacher-assignments', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        course_id: parseInt(courseId),
+                        teacher_id: parseInt(teacherId),
+                        term_number: currentTerm,
+                        academic_year: currentAcademicYear
+                    })
+                });
+                alert('Teacher assigned successfully!');
+                showAssignTeachers(); // Reload the view
+            } catch (error) {
+                alert('Error assigning teacher: ' + error.message);
+            }
+        }
+
+        async function removeTeacherAssignment(assignmentId) {
+            if (!confirm('Are you sure you want to remove this teacher assignment?')) {
+                return;
+            }
+
+            try {
+                await apiCall(`/teacher-assignments/${assignmentId}`, {
+                    method: 'DELETE'
+                });
+                alert('Assignment removed successfully!');
+                showAssignTeachers(); // Reload the view
+            } catch (error) {
+                alert('Error removing assignment: ' + error.message);
+            }
+        }
+        
+        // Helper function to generate assignments HTML
+        function getAssignmentsHtml(assignments) {
+            if (assignments.length === 0) {
+                return '<div class="welcome-message"><p>No teacher assignments for this term yet. Use the form above to assign teachers to subjects.</p></div>';
+            }
+            let html = '<table class="data-table"><thead><tr><th>Subject</th><th>Course Code</th><th>Teacher</th><th>Email</th><th>Actions</th></tr></thead><tbody>';
+            html += assignments.map(a => {
+                return '<tr><td>' + (a.course_name || '') + '</td><td>' + (a.course_code || '') + '</td><td>' + 
+                       (a.teacher_first_name || '') + ' ' + (a.teacher_last_name || '') + '</td><td>' + 
+                       (a.teacher_email || '') + '</td><td><button onclick="removeTeacherAssignment(' + a.id + ')" class="btn-small btn-danger">Remove</button></td></tr>';
+            }).join('');
+            html += '</tbody></table>';
+            return html;
+        }
+        
+        // Subject search functions (global scope)
+        function filterSubjects(searchTerm) {
+            const resultsDiv = document.getElementById('subject-results');
+            if (!resultsDiv || !window.allCourses) return;
+            
+            if (!searchTerm || searchTerm.length < 1) {
+                resultsDiv.style.display = 'none';
+                return;
+            }
+            
+            const searchLower = searchTerm.toLowerCase();
+            const filtered = window.allCourses.filter(c => {
+                const name = (c.course_name || '').toLowerCase();
+                const code = (c.course_code || '').toLowerCase();
+                return name.includes(searchLower) || code.includes(searchLower);
+            });
+            
+            if (filtered.length === 0) {
+                resultsDiv.innerHTML = '<div class="subject-result-item" style="padding: 1rem; color: #666;">No subjects found</div>';
+            } else {
+                resultsDiv.innerHTML = filtered.slice(0, 10).map(c => {
+                    const safeName = (c.course_name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    const safeCode = (c.course_code || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    return '<div class="subject-result-item" onclick="selectSubject(' + c.id + ', \'' + safeName + '\', \'' + safeCode + '\')">' +
+                        '<strong>' + (c.course_name || '') + '</strong>' +
+                        '<span style="color: #666; font-size: 0.875rem;"> (' + (c.course_code || '') + ')</span>' +
+                        '</div>';
+                }).join('');
+            }
+            
+            resultsDiv.style.display = 'block';
+        }
+        
+        function showSubjectResults() {
+            const searchInput = document.getElementById('subject-search-input');
+            if (searchInput && searchInput.value.length >= 1) {
+                filterSubjects(searchInput.value);
+            }
+        }
+        
+        function selectSubject(courseId, courseName, courseCode) {
+            const courseIdEl = document.getElementById('selected-course-id');
+            const subjectNameEl = document.getElementById('selected-subject-name');
+            const displayEl = document.getElementById('selected-subject-display');
+            const resultsEl = document.getElementById('subject-results');
+            const searchInput = document.getElementById('subject-search-input');
+            
+            if (courseIdEl) courseIdEl.value = courseId;
+            if (subjectNameEl) subjectNameEl.textContent = courseName + ' (' + courseCode + ')';
+            if (displayEl) displayEl.style.display = 'block';
+            if (resultsEl) resultsEl.style.display = 'none';
+            if (searchInput) searchInput.value = '';
+        }
+        
+        function clearSubjectSelection() {
+            const courseIdEl = document.getElementById('selected-course-id');
+            const displayEl = document.getElementById('selected-subject-display');
+            const searchInput = document.getElementById('subject-search-input');
+            
+            if (courseIdEl) courseIdEl.value = '';
+            if (displayEl) displayEl.style.display = 'none';
+            if (searchInput) searchInput.focus();
+        }
+        
+        // Hide results when clicking outside
+        document.addEventListener('click', function(event) {
+            const container = document.querySelector('.subject-search-container');
+            const resultsDiv = document.getElementById('subject-results');
+            if (container && resultsDiv && !container.contains(event.target)) {
+                resultsDiv.style.display = 'none';
+            }
+        });
 
         // Teacher: Load pending enrollments
         async function loadPendingEnrollments() {
@@ -1322,6 +1466,469 @@
             document.getElementById('term-form-modal').style.display = 'none';
         }
 
+        // Register Student - Manage Course Enrollment
+        async function loadRegisterStudent() {
+            if (!currentTerm || !currentAcademicYear) {
+                alert('Please select a term first from the dashboard');
+                loadView('dashboard');
+                return;
+            }
+
+            const content = document.getElementById('dashboardContent');
+            
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                    <h2>Manage Student Course Enrollment - Term ${currentTerm} ${currentAcademicYear}</h2>
+                </div>
+                
+                <div class="student-search-section">
+                    <h3>Search Student by Admission Number</h3>
+                    <div class="form-group">
+                        <label>Admission Number *</label>
+                        <div>
+                            <input type="text" id="admission-number-search" placeholder="Enter admission number">
+                            <button onclick="searchStudentByAdmission()" class="btn-primary">Search</button>
+                        </div>
+                    </div>
+                    <div id="student-search-results"></div>
+                </div>
+                
+                <div id="course-management-section" style="display: none;">
+                    <div id="selected-student-info-section"></div>
+                    <div id="current-enrollments-section"></div>
+                    <div id="available-courses-section"></div>
+                </div>
+            `;
+        }
+
+        let selectedStudentId = null;
+        let selectedStudentInfo = null;
+
+        async function searchStudentByAdmission() {
+            const admissionNumber = document.getElementById('admission-number-search').value.trim();
+            
+            if (!admissionNumber) {
+                alert('Please enter an admission number');
+                return;
+            }
+
+            try {
+                const students = await apiCall(`/student-registration/students?admission_number=${encodeURIComponent(admissionNumber)}`);
+                const resultsDiv = document.getElementById('student-search-results');
+                
+                if (students.length === 0) {
+                    resultsDiv.innerHTML = '<div class="error">No student found with this admission number.</div>';
+                    return;
+                }
+
+                const student = students[0];
+                selectedStudentId = student.id;
+                selectedStudentInfo = student;
+                
+                resultsDiv.innerHTML = `
+                    <div class="success-message">
+                        <p><strong>Student Found:</strong> ${student.first_name} ${student.last_name}</p>
+                        <p>Username: ${student.username} | Email: ${student.email}</p>
+                        ${student.pathway_name ? `<p>Pathway: ${student.pathway_name}</p>` : ''}
+                        <button onclick="loadStudentCourseManagement(${student.id})" class="btn-primary">Manage Courses</button>
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('student-search-results').innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function loadStudentCourseManagement(studentId) {
+            selectedStudentId = studentId;
+            
+            try {
+                const [currentEnrollments, coursesByCategory] = await Promise.all([
+                    apiCall(`/student-registration/students/${studentId}/enrollments?academic_year=${currentAcademicYear}`),
+                    apiCall(`/courses/by-category/${currentAcademicYear}`)
+                ]);
+
+                const student = selectedStudentInfo;
+                const courseManagementSection = document.getElementById('course-management-section');
+                courseManagementSection.style.display = 'block';
+
+                // Student info
+                document.getElementById('selected-student-info-section').innerHTML = `
+                    <div class="student-info-card">
+                        <h3>Student Information</h3>
+                        <p><strong>Name:</strong> ${student.first_name} ${student.last_name}</p>
+                        <p><strong>Admission Number:</strong> ${student.admission_number || 'N/A'}</p>
+                        <p><strong>Pathway:</strong> ${student.pathway_name || 'Not assigned'}</p>
+                    </div>
+                `;
+
+                // Current enrollments
+                document.getElementById('current-enrollments-section').innerHTML = `
+                    <div class="enrollments-section">
+                        <h3>Current Course Enrollments (${currentEnrollments.length})</h3>
+                        ${currentEnrollments.length === 0 ? `
+                            <p>No courses enrolled for this academic year.</p>
+                        ` : `
+                            <div class="enrollments-list">
+                                ${currentEnrollments.map(enrollment => `
+                                    <div class="enrollment-item">
+                                        <div>
+                                            <strong>${enrollment.course_name}</strong> (${enrollment.course_code})
+                                            ${enrollment.teacher_first_name ? `<br><small>Teacher: ${enrollment.teacher_first_name} ${enrollment.teacher_last_name}</small>` : ''}
+                                        </div>
+                                        <button onclick="removeEnrollment(${enrollment.id})" class="btn-danger btn-small">Remove</button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `}
+                    </div>
+                `;
+
+                // Available courses by category
+                document.getElementById('available-courses-section').innerHTML = `
+                    <div class="courses-by-category">
+                        <h3>Available Courses - Select to Add</h3>
+                        ${renderCoursesByCategory(coursesByCategory, currentEnrollments)}
+                    </div>
+                `;
+            } catch (error) {
+                alert('Error loading course management: ' + error.message);
+            }
+        }
+
+        function renderCoursesByCategory(coursesByCategory, currentEnrollments) {
+            const enrolledCourseIds = currentEnrollments.map(e => e.course_id);
+            
+            const categories = [
+                { key: 'core', title: 'Core Subjects', courses: coursesByCategory.core },
+                { key: 'languages', title: 'Languages', courses: coursesByCategory.languages },
+                { key: 'sciences', title: 'Sciences', courses: coursesByCategory.sciences },
+                { key: 'arts', title: 'Arts & Sports', courses: coursesByCategory.arts },
+                { key: 'social_sciences', title: 'Social Sciences', courses: coursesByCategory.social_sciences },
+                { key: 'technical', title: 'Technical Subjects', courses: coursesByCategory.technical },
+                { key: 'other', title: 'Other Subjects', courses: coursesByCategory.other }
+            ];
+
+            return categories.map(category => {
+                if (category.courses.length === 0) return '';
+                
+                return `
+                    <div class="course-category">
+                        <h4>${category.title}</h4>
+                        <div class="category-courses">
+                            ${category.courses.map(course => {
+                                const isEnrolled = enrolledCourseIds.includes(course.id);
+                                return `
+                                    <div class="course-item ${isEnrolled ? 'enrolled' : ''}">
+                                        <label>
+                                            <input type="checkbox" 
+                                                   ${isEnrolled ? 'checked disabled' : ''} 
+                                                   value="${course.id}"
+                                                   onchange="toggleCourseEnrollment(${course.id}, this.checked)">
+                                            <strong>${course.course_name}</strong> (${course.course_code})
+                                            ${course.teacher_first_name ? `<br><small>Teacher: ${course.teacher_first_name} ${course.teacher_last_name}</small>` : ''}
+                                        </label>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function toggleCourseEnrollment(courseId, add) {
+            if (!selectedStudentId) {
+                alert('Please select a student first');
+                return;
+            }
+
+            try {
+                if (add) {
+                    // Add enrollment
+                    await apiCall(`/student-registration/enroll/${selectedStudentId}`, {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            course_ids: [courseId],
+                            term: currentTerm,
+                            academic_year: currentAcademicYear
+                        })
+                    });
+                    alert('Course added successfully!');
+                } else {
+                    // Find enrollment ID and remove
+                    const enrollments = await apiCall(`/student-registration/students/${selectedStudentId}/enrollments?academic_year=${currentAcademicYear}`);
+                    const enrollment = enrollments.find(e => e.course_id === courseId);
+                    if (enrollment) {
+                        await apiCall(`/student-registration/enrollments/${enrollment.id}`, { method: 'DELETE' });
+                        alert('Course removed successfully!');
+                    }
+                }
+                
+                // Reload course management
+                loadStudentCourseManagement(selectedStudentId);
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function removeEnrollment(enrollmentId) {
+            if (!confirm('Are you sure you want to remove this course enrollment?')) return;
+
+            try {
+                await apiCall(`/student-registration/enrollments/${enrollmentId}`, { method: 'DELETE' });
+                alert('Course enrollment removed successfully!');
+                loadStudentCourseManagement(selectedStudentId);
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        function renderNewStudentForm(courses) {
+            return `
+                <div class="form-container">
+                    <form id="registerStudentForm" onsubmit="registerStudent(event)">
+                        <h3>Student Information</h3>
+                        <div class="form-group">
+                            <label>First Name *</label>
+                            <input type="text" name="first_name" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Last Name *</label>
+                            <input type="text" name="last_name" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Username *</label>
+                            <input type="text" name="username" required placeholder="e.g., student001">
+                        </div>
+                        <div class="form-group">
+                            <label>Email *</label>
+                            <input type="email" name="email" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Password *</label>
+                            <input type="password" name="password" required minlength="6">
+                        </div>
+                        <div class="form-group">
+                            <label>Admission Number</label>
+                            <input type="text" name="admission_number" placeholder="Optional">
+                        </div>
+                        
+                        <h3>Parent Information (Optional)</h3>
+                        <div class="form-group">
+                            <label>Parent Name</label>
+                            <input type="text" name="parent_name">
+                        </div>
+                        <div class="form-group">
+                            <label>Parent Email</label>
+                            <input type="email" name="parent_email">
+                        </div>
+                        
+                        <h3>Course Enrollment - Term ${currentTerm}</h3>
+                        <div class="courses-selection">
+                            ${courses.length === 0 ? `
+                                <p class="error">No courses available for this term. Please assign teachers to subjects first.</p>
+                            ` : courses.map(course => `
+                                <div class="course-checkbox">
+                                    <label>
+                                        <input type="checkbox" name="course_ids" value="${course.id}">
+                                        <strong>${course.course_name}</strong> (${course.course_code})
+                                        ${course.teacher_first_name ? `<br><small>Teacher: ${course.teacher_first_name} ${course.teacher_last_name}</small>` : ''}
+                                    </label>
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        <input type="hidden" name="term" value="${currentTerm}">
+                        <input type="hidden" name="academic_year" value="${currentAcademicYear}">
+                        
+                        <div class="form-actions">
+                            <button type="submit" class="btn-primary">Register Student</button>
+                            <button type="button" onclick="loadView('dashboard')" class="btn-secondary">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+                
+                <div id="existing-student-form" style="display: none;">
+                    ${renderExistingStudentForm(courses)}
+                </div>
+            `;
+        }
+
+        function renderExistingStudentForm(courses) {
+            return `
+                <div class="form-container">
+                    <form id="enrollStudentForm" onsubmit="enrollExistingStudent(event)">
+                        <h3>Select Student</h3>
+                        <div class="form-group">
+                            <label>Search Student</label>
+                            <input type="text" id="student-search" placeholder="Search by name, username, or admission number" onkeyup="searchStudents()">
+                            <div id="student-results" class="student-results"></div>
+                        </div>
+                        
+                        <div id="selected-student" style="display: none;">
+                            <h3>Selected Student</h3>
+                            <div id="selected-student-info"></div>
+                            
+                            <h3>Select Courses - Term ${currentTerm}</h3>
+                            <div class="courses-selection">
+                                ${courses.map(course => `
+                                    <div class="course-checkbox">
+                                        <label>
+                                            <input type="checkbox" name="course_ids" value="${course.id}">
+                                            <strong>${course.course_name}</strong> (${course.course_code})
+                                        </label>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            
+                            <input type="hidden" id="selected-student-id">
+                            <input type="hidden" name="term" value="${currentTerm}">
+                            <input type="hidden" name="academic_year" value="${currentAcademicYear}">
+                            
+                            <div class="form-actions">
+                                <button type="submit" class="btn-primary">Enroll in Courses</button>
+                                <button type="button" onclick="clearStudentSelection()" class="btn-secondary">Clear Selection</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            `;
+        }
+
+        function showRegistrationTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            
+            const newForm = document.getElementById('registerStudentForm')?.parentElement;
+            const existingForm = document.getElementById('existing-student-form');
+            
+            if (tab === 'new') {
+                if (newForm) newForm.style.display = 'block';
+                if (existingForm) existingForm.style.display = 'none';
+            } else {
+                if (newForm) newForm.style.display = 'none';
+                if (existingForm) existingForm.style.display = 'block';
+            }
+        }
+
+        async function registerStudent(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            // Get selected course IDs
+            const courseIds = Array.from(e.target.querySelectorAll('input[name="course_ids"]:checked')).map(cb => parseInt(cb.value));
+            
+            if (courseIds.length === 0) {
+                alert('Please select at least one course');
+                return;
+            }
+            
+            try {
+                const result = await apiCall('/student-registration', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        ...data,
+                        course_ids: courseIds
+                    })
+                });
+                
+                alert(`Student registered successfully! Enrolled in ${result.courses_enrolled} course(s).`);
+                e.target.reset();
+            } catch (error) {
+                alert('Error registering student: ' + error.message);
+            }
+        }
+
+        let studentSearchTimeout;
+        async function searchStudents() {
+            clearTimeout(studentSearchTimeout);
+            const searchTerm = document.getElementById('student-search').value;
+            
+            if (searchTerm.length < 2) {
+                document.getElementById('student-results').innerHTML = '';
+                return;
+            }
+            
+            studentSearchTimeout = setTimeout(async () => {
+                try {
+                    const students = await apiCall(`/student-registration/students?search=${encodeURIComponent(searchTerm)}`);
+                    const resultsDiv = document.getElementById('student-results');
+                    
+                    if (students.length === 0) {
+                        resultsDiv.innerHTML = '<p>No students found</p>';
+                        return;
+                    }
+                    
+                    resultsDiv.innerHTML = `
+                        <div class="student-list">
+                            ${students.map(student => `
+                                <div class="student-item" onclick="selectStudent(${student.id}, '${student.first_name}', '${student.last_name}', '${student.admission_number || ''}')">
+                                    <strong>${student.first_name} ${student.last_name}</strong>
+                                    ${student.admission_number ? `<br><small>Admission: ${student.admission_number}</small>` : ''}
+                                    <br><small>Username: ${student.username}</small>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } catch (error) {
+                    document.getElementById('student-results').innerHTML = '<p>Error searching students</p>';
+                }
+            }, 300);
+        }
+
+        function selectStudent(studentId, firstName, lastName, admissionNumber) {
+            document.getElementById('selected-student-id').value = studentId;
+            document.getElementById('selected-student-info').innerHTML = `
+                <p><strong>${firstName} ${lastName}</strong></p>
+                ${admissionNumber ? `<p>Admission Number: ${admissionNumber}</p>` : ''}
+            `;
+            document.getElementById('selected-student').style.display = 'block';
+            document.getElementById('student-results').innerHTML = '';
+            document.getElementById('student-search').value = '';
+        }
+
+        function clearStudentSelection() {
+            document.getElementById('selected-student-id').value = '';
+            document.getElementById('selected-student').style.display = 'none';
+            document.getElementById('student-results').innerHTML = '';
+        }
+
+        async function enrollExistingStudent(e) {
+            e.preventDefault();
+            const studentId = document.getElementById('selected-student-id').value;
+            
+            if (!studentId) {
+                alert('Please select a student first');
+                return;
+            }
+            
+            const courseIds = Array.from(e.target.querySelectorAll('input[name="course_ids"]:checked')).map(cb => parseInt(cb.value));
+            
+            if (courseIds.length === 0) {
+                alert('Please select at least one course');
+                return;
+            }
+            
+            try {
+                const result = await apiCall(`/student-registration/enroll/${studentId}`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        course_ids: courseIds,
+                        term: currentTerm,
+                        academic_year: currentAcademicYear
+                    })
+                });
+                
+                alert(`Student enrolled successfully! Enrolled in ${result.courses_enrolled} course(s).`);
+                clearStudentSelection();
+                e.target.reset();
+            } catch (error) {
+                alert('Error enrolling student: ' + error.message);
+            }
+        }
+
         // Admin: Load dashboard
         async function loadAdminDashboard() {
             const stats = await apiCall('/admin/dashboard');
@@ -1543,45 +2150,171 @@
             `;
         }
 
-        // Superadmin: Load users
-        async function loadUsers() {
-            const users = await apiCall('/admin/users');
+        // Superadmin: Load users with pagination
+        let currentUserPage = 1;
+        let currentUserFilters = {};
+
+        async function loadUsers(page = 1, filters = {}) {
+            currentUserPage = page;
+            currentUserFilters = filters;
+            
+            const queryParams = new URLSearchParams({
+                page: page,
+                limit: 20,
+                ...filters
+            });
+            
+            const data = await apiCall(`/admin/users?${queryParams}`);
             const content = document.getElementById('dashboardContent');
+            
             content.innerHTML = `
                 <div class="view-header">
                     <h2>User Management</h2>
+                    <button onclick="showAddUserForm()" class="btn-primary">Add User</button>
                 </div>
+                
+                <div class="users-filters">
+                    <div class="filter-group">
+                        <label>Search:</label>
+                        <input type="text" id="user-search" placeholder="Search by name, username, or email" 
+                               value="${filters.search || ''}" onkeyup="filterUsers()">
+                    </div>
+                    <div class="filter-group">
+                        <label>Role:</label>
+                        <select id="user-role-filter" onchange="filterUsers()">
+                            <option value="">All Roles</option>
+                            <option value="student" ${filters.role === 'student' ? 'selected' : ''}>Student</option>
+                            <option value="teacher" ${filters.role === 'teacher' ? 'selected' : ''}>Teacher</option>
+                            <option value="headteacher" ${filters.role === 'headteacher' ? 'selected' : ''}>Headteacher</option>
+                            <option value="parent" ${filters.role === 'parent' ? 'selected' : ''}>Parent</option>
+                            <option value="superadmin" ${filters.role === 'superadmin' ? 'selected' : ''}>Superadmin</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Status:</label>
+                        <select id="user-status-filter" onchange="filterUsers()">
+                            <option value="">All</option>
+                            <option value="true" ${filters.is_active === 'true' ? 'selected' : ''}>Active</option>
+                            <option value="false" ${filters.is_active === 'false' ? 'selected' : ''}>Inactive</option>
+                        </select>
+                    </div>
+                    <button onclick="clearUserFilters()" class="btn-secondary">Clear Filters</button>
+                </div>
+                
                 <div class="users-table">
-                    <table>
+                    <table class="data-table">
                         <thead>
                             <tr>
-                                <th>Username</th>
                                 <th>Name</th>
+                                <th>Username</th>
                                 <th>Email</th>
                                 <th>Role</th>
                                 <th>Status</th>
+                                <th>Created</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${users.map(user => `
+                            ${data.users.length === 0 ? `
                                 <tr>
-                                    <td>${user.username}</td>
+                                    <td colspan="7" style="text-align: center; padding: 2rem;">
+                                        No users found.
+                                    </td>
+                                </tr>
+                            ` : data.users.map(user => `
+                                <tr>
                                     <td>${user.first_name} ${user.last_name}</td>
+                                    <td>${user.username}</td>
                                     <td>${user.email}</td>
                                     <td>${user.role}</td>
-                                    <td>${user.is_active ? 'Active' : 'Inactive'}</td>
+                                    <td>${user.is_active ? '<span class="status-active">Active</span>' : '<span class="status-inactive">Inactive</span>'}</td>
+                                    <td>${new Date(user.created_at).toLocaleDateString()}</td>
                                     <td>
-                                        <button onclick="toggleUserStatus(${user.id}, ${!user.is_active})" class="btn-small">
-                                            ${user.is_active ? 'Deactivate' : 'Activate'}
-                                        </button>
+                                        <button onclick="editUser(${user.id})" class="btn-small">Edit</button>
+                                        <button onclick="toggleUserStatus(${user.id}, ${!user.is_active})" class="btn-small ${user.is_active ? 'btn-danger' : ''}">${user.is_active ? 'Deactivate' : 'Activate'}</button>
                                     </td>
                                 </tr>
                             `).join('')}
                         </tbody>
                     </table>
                 </div>
+                
+                <div class="pagination">
+                    <div class="pagination-info">
+                        Showing ${((page - 1) * 20) + 1} to ${Math.min(page * 20, data.pagination.total_items)} of ${data.pagination.total_items} users
+                    </div>
+                    <div class="pagination-controls">
+                        <button onclick="loadUsers(${page - 1}, currentUserFilters)" 
+                                ${!data.pagination.has_prev ? 'disabled' : ''} 
+                                class="btn-secondary">Previous</button>
+                        <span class="page-numbers">
+                            ${generatePageNumbers(page, data.pagination.total_pages).map(p => 
+                                p === '...' ? '<span>...</span>' : 
+                                `<button onclick="loadUsers(${p}, currentUserFilters)" 
+                                         class="${p === page ? 'active' : ''}">${p}</button>`
+                            ).join('')}
+                        </span>
+                        <button onclick="loadUsers(${page + 1}, currentUserFilters)" 
+                                ${!data.pagination.has_next ? 'disabled' : ''} 
+                                class="btn-secondary">Next</button>
+                    </div>
+                </div>
             `;
+        }
+
+        function generatePageNumbers(currentPage, totalPages) {
+            const pages = [];
+            const maxVisible = 5;
+            
+            if (totalPages <= maxVisible) {
+                for (let i = 1; i <= totalPages; i++) {
+                    pages.push(i);
+                }
+            } else {
+                if (currentPage <= 3) {
+                    for (let i = 1; i <= 4; i++) {
+                        pages.push(i);
+                    }
+                    pages.push('...');
+                    pages.push(totalPages);
+                } else if (currentPage >= totalPages - 2) {
+                    pages.push(1);
+                    pages.push('...');
+                    for (let i = totalPages - 3; i <= totalPages; i++) {
+                        pages.push(i);
+                    }
+                } else {
+                    pages.push(1);
+                    pages.push('...');
+                    for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+                        pages.push(i);
+                    }
+                    pages.push('...');
+                    pages.push(totalPages);
+                }
+            }
+            
+            return pages;
+        }
+
+        let userFilterTimeout;
+        function filterUsers() {
+            clearTimeout(userFilterTimeout);
+            userFilterTimeout = setTimeout(() => {
+                const filters = {
+                    search: document.getElementById('user-search').value.trim() || undefined,
+                    role: document.getElementById('user-role-filter').value || undefined,
+                    is_active: document.getElementById('user-status-filter').value || undefined
+                };
+                loadUsers(1, filters);
+            }, 500);
+        }
+
+        function clearUserFilters() {
+            document.getElementById('user-search').value = '';
+            document.getElementById('user-role-filter').value = '';
+            document.getElementById('user-status-filter').value = '';
+            loadUsers(1, {});
         }
 
         async function toggleUserStatus(userId, isActive) {
@@ -1591,10 +2324,20 @@
                     body: JSON.stringify({ is_active: isActive })
                 });
                 alert(`User ${isActive ? 'activated' : 'deactivated'}!`);
-                loadUsers();
+                loadUsers(currentUserPage, currentUserFilters);
             } catch (error) {
                 alert('Error: ' + error.message);
             }
+        }
+
+        async function editUser(userId) {
+            alert('Edit user feature coming soon!');
+            // TODO: Implement user edit functionality
+        }
+
+        function showAddUserForm() {
+            alert('Add user feature coming soon!');
+            // TODO: Implement add user form
         }
 
         // Parent: Load children

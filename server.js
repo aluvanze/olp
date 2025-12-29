@@ -14,6 +14,8 @@ const emailRoutes = require('./routes/email');
 const adminRoutes = require('./routes/admin');
 const assessmentRoutes = require('./routes/assessments');
 const termRoutes = require('./routes/terms');
+const studentRegistrationRoutes = require('./routes/student-registration');
+const teacherAssignmentRoutes = require('./routes/teacher-assignments');
 const { pool } = require('./config/database');
 
 const app = express();
@@ -74,6 +76,8 @@ app.use('/api/email', emailRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/assessments', assessmentRoutes);
 app.use('/api/terms', termRoutes);
+app.use('/api/student-registration', studentRegistrationRoutes);
+app.use('/api/teacher-assignments', teacherAssignmentRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
