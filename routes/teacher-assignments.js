@@ -43,8 +43,8 @@ router.get('/term/:term/:academicYear', authorize('headteacher', 'deputy_headtea
   }
 });
 
-// Get all available courses (subjects) - for assignment selection
-// If no courses exist, return learning areas instead
+// Get all available learning areas - for assignment selection
+// Returns courses (which represent learning areas for a specific academic year)
 router.get('/courses', authorize('headteacher', 'deputy_headteacher', 'superadmin'), async (req, res) => {
   try {
     // First try to get courses

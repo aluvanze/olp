@@ -147,6 +147,10 @@ router.get('/by-category/:academicYear', async (req, res) => {
   try {
     const { academicYear } = req.params;
 
+    if (!academicYear) {
+      return res.status(400).json({ message: 'Academic year is required' });
+    }
+
     // First try to get courses with learning_area_id if column exists
     let result;
     try {
@@ -164,7 +168,8 @@ router.get('/by-category/:academicYear', async (req, res) => {
         [academicYear]
       );
     } catch (error) {
-      // If learning_area_id column doesn't exist, get courses without it
+      // If learning_area_id column doesn't exist or join fails, get courses without it
+      console.log('Learning area join failed, using simple query:', error.message);
       result = await pool.query(
         `SELECT c.id, c.course_name, c.course_code, c.description, c.academic_year,
                 u.first_name as teacher_first_name, u.last_name as teacher_last_name
@@ -225,7 +230,12 @@ router.get('/by-category/:academicYear', async (req, res) => {
     res.json(grouped);
   } catch (error) {
     console.error('Get courses by category error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
