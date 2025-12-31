@@ -1,0 +1,3654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grade 10 OLP System - Online Learner Progress Monitor</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="root">
+        <div class="login-container">
+            <div class="login-left-panel">
+                <div class="login-branding">
+                    <h1 class="brand-title">Grade 10 OLP System</h1>
+                    <h2 class="brand-subtitle">Online Learner Progress Monitor</h2>
+                    <p class="brand-tagline">Unlocking Academic Gates For Future Excellence</p>
+                    <p class="brand-description">Competency-Based Curriculum (CBC) Senior School Management Platform for Grades 10-12. Designed for Kenya's education system.</p>
+                </div>
+            </div>
+            <div class="login-right-panel">
+                <div class="login-form-container">
+                    <h2 class="login-title">Sign In</h2>
+                    <p class="login-subtitle">Enter your credentials to access your account</p>
+
+                <form id="loginForm">
+                    <div class="form-group">
+                            <label for="username">
+                                <span class="input-icon">✉️</span>
+                                Email Address
+                            </label>
+                            <input type="text" id="username" name="username" placeholder="your.email@school.com" required>
+                    </div>
+                    <div class="form-group">
+                            <label for="password">
+                                <span class="input-icon">🔒</span>
+                                Password
+                            </label>
+                            <input type="password" id="password" name="password" placeholder="Enter your password" required>
+                    </div>
+                        <div class="form-options">
+                            <label class="remember-me">
+                                <input type="checkbox" id="rememberMe">
+                                <span>Remember me</span>
+                            </label>
+                            <a href="#" class="forgot-password">Forgot Password?</a>
+                        </div>
+                        <button type="submit" class="btn-primary">
+                            <span>Sign In</span>
+                            <span class="btn-loader" style="display: none;">⏳</span>
+                        </button>
+                    <div id="loginError" class="error-message"></div>
+                </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:3000/api';
+        let currentUser = null;
+        let authToken = null;
+        // Check if user is already logged in
+        window.addEventListener('DOMContentLoaded', () => {
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                authToken = token;
+                checkAuth();
+            }
+        });
+
+        async function checkAuth() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/me`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                if (response.ok) {
+                    currentUser = await response.json();
+                    showDashboard();
+                } else {
+                    localStorage.removeItem('authToken');
+                    authToken = null;
+                }
+            } catch (error) {
+                console.error('Auth check error:', error);
+            }
+        }
+
+        // Login form handler
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('loginError');
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    authToken = data.token;
+                    currentUser = data.user;
+                    localStorage.setItem('authToken', authToken);
+                    errorDiv.textContent = '';
+                    showDashboard();
+                } else {
+                    errorDiv.textContent = data.message || 'Login failed';
+                    console.error('Login error:', data);
+                }
+            } catch (error) {
+                errorDiv.textContent = 'Connection error. Please check if the server is running.';
+                console.error('Login error:', error);
+                console.error('Error details:', error.message);
+            }
+        });
+
+        function showDashboard() {
+            const root = document.getElementById('root');
+            const role = currentUser.role;
+            
+            // Role-specific navigation
+            let navButtons = '';
+            
+            if (role === 'student') {
+                navButtons = `
+                    <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
+                    <button onclick="loadView('messages')" class="nav-btn">Messages</button>
+                `;
+            } else if (role === 'teacher') {
+                navButtons = `
+                    <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
+                    <button onclick="loadView('register-student')" class="nav-btn">Register Student</button>
+                    <button onclick="loadView('messages')" class="nav-btn">Messages</button>
+                `;
+            } else if (role === 'headteacher' || role === 'deputy_headteacher' || role === 'superadmin' || role === 'finance') {
+                navButtons = `
+                    <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
+                    ${role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher' ? `<button onclick="loadView('admin-dashboard')" class="nav-btn">System Overview</button>` : ''}
+                    <button onclick="loadView('register-student')" class="nav-btn">Register Student</button>
+                    ${role === 'superadmin' || role === 'headteacher' ? `<button onclick="loadView('manage-terms')" class="nav-btn">Manage Terms</button>` : ''}
+                    ${role === 'superadmin' ? `<button onclick="loadView('users')" class="nav-btn">User Management</button>` : ''}
+                    <button onclick="loadView('messages')" class="nav-btn">Messages</button>
+                `;
+            } else if (role === 'parent') {
+                navButtons = `
+                    <button onclick="loadView('children')" class="nav-btn">My Children</button>
+                    <button onclick="loadView('grades')" class="nav-btn">Grades</button>
+                    <button onclick="loadView('attendance')" class="nav-btn">Attendance</button>
+                    <button onclick="loadView('messages')" class="nav-btn">Messages</button>
+                `;
+            } else {
+                navButtons = `
+                    <button onclick="loadView('courses')" class="nav-btn">Courses</button>
+                    <button onclick="loadView('messages')" class="nav-btn">Messages</button>
+                `;
+            }
+            
+            root.innerHTML = `
+                <div class="dashboard">
+                    <header class="dashboard-header">
+                        <div class="header-content">
+                            <div class="header-left">
+                                <div class="system-logo-small">
+                                    <span class="logo-text">Grade 10 OLP</span>
+                            </div>
+                                <nav class="main-nav">
+                        ${navButtons}
+                    </nav>
+                            </div>
+                            <div class="header-right">
+                                <div class="user-profile-menu" id="userProfileMenu">
+                                    <button class="user-profile-btn" onclick="toggleUserMenu()">
+                                        <div class="user-avatar">${currentUser.first_name.charAt(0)}${currentUser.last_name.charAt(0)}</div>
+                                        <div class="user-info">
+                                            <span class="user-name">${currentUser.first_name} ${currentUser.last_name}</span>
+                                            <span class="user-role">${formatRoleName(role)}</span>
+                                        </div>
+                                        <svg class="dropdown-icon" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                                            <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                    </button>
+                                    <div class="user-menu-dropdown" id="userMenuDropdown">
+                                        <div class="dropdown-header">
+                                            <div class="user-avatar-large">${currentUser.first_name.charAt(0)}${currentUser.last_name.charAt(0)}</div>
+                                            <div>
+                                                <div class="user-name-large">${currentUser.first_name} ${currentUser.last_name}</div>
+                                                <div class="user-email">${currentUser.email}</div>
+                                                <div class="user-role-badge">${formatRoleName(role)}</div>
+                                            </div>
+                                        </div>
+                                        <div class="dropdown-divider"></div>
+                                        <a href="#" class="dropdown-item" onclick="loadView('profile'); toggleUserMenu(); return false;">
+                                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 8C10.2091 8 12 6.20914 12 4C12 1.79086 10.2091 0 8 0C5.79086 0 4 1.79086 4 4C4 6.20914 5.79086 8 8 8Z" fill="currentColor"/><path d="M0 14C0 11.2386 2.23858 9 5 9H11C13.7614 9 16 11.2386 16 14V16H0V14Z" fill="currentColor"/></svg>
+                                            <span>My Profile</span>
+                                        </a>
+                                        <a href="#" class="dropdown-item" onclick="loadView('profile-settings'); toggleUserMenu(); return false;">
+                                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 10C9.10457 10 10 9.10457 10 8C10 6.89543 9.10457 6 8 6C6.89543 6 6 6.89543 6 8C6 9.10457 6.89543 10 8 10Z" fill="currentColor"/><path d="M13.6569 6.34315L12.2426 4.92893C12.0521 4.73841 11.8357 4.58579 11.6036 4.46447L10.5858 3.41421C10.2107 3.03914 9.70201 2.82843 9.17157 2.82843H6.82843C6.29799 2.82843 5.78929 3.03914 5.41421 3.41421L4.39645 4.46447C4.16435 4.58579 3.94786 4.73841 3.75736 4.92893L2.34315 6.34315C1.95262 6.73367 1.95262 7.36684 2.34315 7.75736L3.75736 9.17157C3.94786 9.36209 4.16435 9.51471 4.39645 9.63503L5.41421 10.6853C5.78929 11.0604 6.29799 11.2711 6.82843 11.2711H9.17157C9.70201 11.2711 10.2107 11.0604 10.5858 10.6853L11.6036 9.63503C11.8357 9.51471 12.0521 9.36209 12.2426 9.17157L13.6569 7.75736C14.0474 7.36684 14.0474 6.73367 13.6569 6.34315Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                            <span>Profile Settings</span>
+                                        </a>
+                                        <a href="#" class="dropdown-item" onclick="logout(); return false;">
+                                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 14H3C2.46957 14 1.96086 13.7893 1.58579 13.4142C1.21071 13.0391 1 12.5304 1 12V4C1 3.46957 1.21071 2.96086 1.58579 2.58579C1.96086 2.21071 2.46957 2 3 2H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 11L15 8L11 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 8H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                            <span>Sign Out</span>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+                    <main class="dashboard-content" id="dashboardContent">
+                        <div class="welcome-message">
+                            <h2>Welcome, ${currentUser.first_name}!</h2>
+                            <p>Select an option from the navigation menu to get started.</p>
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+
+        async function loadView(viewName) {
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = '<div class="loading">Loading...</div>';
+
+            // Update active navigation button
+            document.querySelectorAll('.main-nav .nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(`'${viewName}'`)) {
+                    btn.classList.add('active');
+                }
+            });
+
+            try {
+                switch(viewName) {
+                    // Student views
+                    case 'dashboard':
+                        await loadDashboard();
+                        break;
+                    case 'term-courses':
+                        await loadTermCourses();
+                        break;
+                    case 'courses':
+                        await loadCourses();
+                        break;
+                    case 'modules':
+                        await loadModules();
+                        break;
+                    case 'assignments':
+                        await loadAssignments();
+                        break;
+                    case 'grades':
+                        await loadGrades();
+                        break;
+                    case 'attendance':
+                        await loadAttendance();
+                        break;
+                    case 'messages':
+                        await loadMessages();
+                        break;
+                    case 'profile':
+                        await loadProfile();
+                        break;
+                    case 'profile-settings':
+                        await loadProfileSettings();
+                        break;
+                    
+                    // Teacher views
+                    case 'my-courses':
+                        await loadTeacherCourses();
+                        break;
+                    case 'assign-teachers':
+                        await showAssignTeachers();
+                        break;
+                    case 'pending-enrollments':
+                        await loadPendingEnrollments();
+                        break;
+                    case 'grading-center':
+                        await loadGradingCenter();
+                        break;
+                    
+                    // Admin views
+                    case 'dashboard':
+                        await loadDashboard(); // Per TERM_BASED_NAVIGATION.md, dashboard shows term selection
+                        break;
+                    case 'admin-dashboard':
+                        await loadAdminDashboard(); // Separate view for System Overview per ADMIN_FEATURES.md
+                        break;
+                    case 'term-courses':
+                        await loadTermCourses();
+                        break;
+                    case 'teachers-overview':
+                        await loadTeachersOverview();
+                        break;
+                    case 'add-teacher':
+                        await showAddTeacher();
+                        break;
+                    case 'allocate-courses':
+                        await showAllocateCourses();
+                        break;
+                    case 'all-courses':
+                        await loadAllCourses();
+                        break;
+                    case 'users':
+                        await loadUsers();
+                        break;
+                    case 'manage-terms':
+                        await loadManageTerms();
+                        break;
+                    case 'register-student':
+                        await loadRegisterStudent();
+                        break;
+                    
+                    // Parent views
+                    case 'children':
+                        await loadChildren();
+                        break;
+                }
+            } catch (error) {
+                content.innerHTML = `<div class="error">Error loading ${viewName}: ${error.message}</div>`;
+                console.error('Load view error:', error);
+            }
+        }
+
+        async function apiCall(endpoint, options = {}) {
+            try {
+                const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                    ...options,
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                
+                if (!response.ok) {
+                    let errorData;
+                    try {
+                        errorData = await response.json();
+                    } catch (e) {
+                        errorData = { message: `HTTP ${response.status}: ${response.statusText}` };
+                    }
+                    
+                    const error = new Error(errorData.message || 'API error');
+                    error.status = response.status;
+                    error.response = errorData;
+                    throw error;
+                }
+                return await response.json();
+            } catch (error) {
+                console.error('API call error:', {
+                    endpoint,
+                    method: options.method || 'GET',
+                    error: error.message,
+                    status: error.status,
+                    response: error.response
+                });
+                throw error;
+            }
+        }
+
+        async function loadCourses() {
+            const courses = await apiCall('/courses');
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <div class="view-header">
+                    <h2>My Courses</h2>
+                </div>
+                <div class="courses-grid">
+                    ${courses.map(course => `
+                        <div class="course-card">
+                            <h3>${course.course_name}</h3>
+                            <p><strong>Code:</strong> ${course.course_code}</p>
+                            <p>${course.description || ''}</p>
+                            <p><strong>Teacher:</strong> ${course.teacher_first_name || ''} ${course.teacher_last_name || ''}</p>
+                            <p><strong>Enrolled Students:</strong> ${course.enrolled_students || 0}</p>
+                            <button onclick="viewCourse(${course.id})" class="btn-view">View Course</button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        async function viewCourse(courseId) {
+            try {
+                // Get current term and academic year if available, otherwise use defaults
+                let termFilter = '';
+                if (currentTerm && currentAcademicYear) {
+                    termFilter = `?term=${currentTerm}&academic_year=${currentAcademicYear}`;
+                }
+                
+                const [course, modules, assignments] = await Promise.all([
+                    apiCall(`/courses/${courseId}`),
+                    apiCall(`/modules/course/${courseId}${termFilter}`),
+                    apiCall(`/assignments/course/${courseId}`)
+                ]);
+                
+                // Get attendance data if available
+                let attendance = [];
+                let attendanceStats = null;
+                try {
+                    attendance = await apiCall(`/attendance/course/${courseId}`);
+                    // Calculate attendance stats
+                    if (attendance.length > 0) {
+                        const present = attendance.filter(a => a.status === 'Present').length;
+                        const total = attendance.length;
+                        attendanceStats = {
+                            present,
+                            total,
+                            percentage: Math.round((present / total) * 100)
+                        };
+                    }
+                } catch (e) {
+                    // Attendance not available, continue without it
+                }
+                
+                // Get enrolled students count
+                let enrolledStudents = [];
+                try {
+                    enrolledStudents = await apiCall(`/courses/${courseId}/enrollments`);
+                } catch (e) {
+                    // Enrollments not available
+                }
+            
+            const content = document.getElementById('dashboardContent');
+                const role = currentUser.role;
+                const isReadOnly = ['finance', 'parent', 'student'].includes(role);
+                
+                // Get term info if available
+                let termName = '';
+                if (currentTerm && currentAcademicYear) {
+                    const currentYear = new Date().getFullYear();
+                    const termNames = {
+                        1: `Term 1 ${currentYear} (January - April)`,
+                        2: `Term 2 ${currentYear} (April - July)`,
+                        3: `Term 3 ${currentYear} (August - October)`
+                    };
+                    termName = termNames[currentTerm] || `Term ${currentTerm} ${currentYear}`;
+                }
+                
+            content.innerHTML = `
+                    <!-- Course Header -->
+                    <div class="course-header-section">
+                        <div class="course-header-content">
+                            <div class="course-header-left">
+                                <button onclick="(function() { try { if (currentTerm && currentAcademicYear) { loadTermCourses(); } else { loadView('term-courses'); } } catch(e) { loadView('term-courses'); } })()" class="btn-back">← Back to Courses</button>
+                                <div class="course-title-group">
+                                    <h1 class="course-title">${course.course_name}</h1>
+                                    ${course.course_code ? `<span class="course-code-badge">${course.course_code}</span>` : ''}
+                                    ${termName ? `<p class="course-term">${termName}</p>` : ''}
+                </div>
+                            </div>
+                            <div class="course-header-right">
+                                ${course.description ? `<p class="course-description">${course.description}</p>` : ''}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Course Stats Bar -->
+                    <div class="course-stats-bar">
+                        ${enrolledStudents.length > 0 ? `
+                            <div class="course-stat-item">
+                                <span class="stat-icon">👥</span>
+                                <div class="stat-info">
+                                    <span class="stat-value">${enrolledStudents.length}</span>
+                                    <span class="stat-label">Enrolled Students</span>
+                                </div>
+                            </div>
+                        ` : ''}
+                        <div class="course-stat-item">
+                            <span class="stat-icon">📚</span>
+                            <div class="stat-info">
+                                <span class="stat-value">${modules.length}</span>
+                                <span class="stat-label">Learning Modules</span>
+                            </div>
+                        </div>
+                        <div class="course-stat-item">
+                            <span class="stat-icon">📝</span>
+                            <div class="stat-info">
+                                <span class="stat-value">${assignments.length}</span>
+                                <span class="stat-label">Assignments</span>
+                            </div>
+                        </div>
+                        ${attendanceStats ? `
+                            <div class="course-stat-item">
+                                <span class="stat-icon">✓</span>
+                                <div class="stat-info">
+                                    <span class="stat-value">${attendanceStats.percentage}%</span>
+                                    <span class="stat-label">Attendance Rate</span>
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <!-- Course Tabs -->
+                    <div class="course-tabs">
+                        <button onclick="showCourseViewTab('modules')" class="tab-btn active" id="tab-view-modules">Learning Modules</button>
+                        <button onclick="showCourseViewTab('assignments')" class="tab-btn" id="tab-view-assignments">Assignments</button>
+                        ${attendance.length > 0 || !isReadOnly ? `<button onclick="showCourseViewTab('attendance')" class="tab-btn" id="tab-view-attendance">Attendance</button>` : ''}
+                        ${!isReadOnly ? `<button onclick="showCourseViewTab('grades')" class="tab-btn" id="tab-view-grades">Grading</button>` : ''}
+                        ${enrolledStudents.length > 0 ? `<button onclick="showCourseViewTab('students')" class="tab-btn" id="tab-view-students">Students (${enrolledStudents.length})</button>` : ''}
+                    </div>
+                    
+                    <!-- Course Tab Content -->
+                    <div id="course-view-tab-content">
+                        ${renderCourseViewModules(modules, courseId, isReadOnly)}
+                    </div>
+                `;
+                
+                // Store course data globally for tab switching
+                window.currentCourseViewData = { 
+                    course, 
+                    modules, 
+                    assignments, 
+                    attendance, 
+                    attendanceStats,
+                    enrolledStudents,
+                    courseId,
+                    isReadOnly
+                };
+            } catch (error) {
+                const content = document.getElementById('dashboardContent');
+                content.innerHTML = `<div class="error">Error loading course: ${error.message}</div>`;
+            }
+        }
+
+        function renderCourseViewModules(modules, courseId, isReadOnly) {
+            return `
+                <div class="course-section">
+                    <div class="section-header">
+                        <h3>Learning Modules</h3>
+                        ${!isReadOnly ? `<button onclick="createModule(${courseId})" class="btn-primary">Add Module</button>` : ''}
+                    </div>
+                        <div class="modules-list">
+                        ${modules.length === 0 ? `
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📖</div>
+                                <h4>No Learning Modules</h4>
+                                <p>${isReadOnly ? 'No learning modules have been added to this course yet.' : 'Add a module to get started.'}</p>
+                            </div>
+                        ` : modules.map(module => `
+                                <div class="module-card">
+                                <div class="module-card-header">
+                                    <h4>${module.module_name}</h4>
+                                    ${module.is_published ? `
+                                        <span class="module-status-badge published">Published</span>
+                                    ` : `
+                                        <span class="module-status-badge draft">Draft</span>
+                                    `}
+                                </div>
+                                ${module.module_description ? `<p class="module-description">${module.module_description}</p>` : ''}
+                                    <button onclick="viewModule(${module.id})" class="btn-view">View Module</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+            `;
+        }
+
+        function showCourseViewTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.course-tabs .tab-btn').forEach(btn => btn.classList.remove('active'));
+            const tabBtn = document.getElementById(`tab-view-${tabName}`);
+            if (tabBtn) {
+                tabBtn.classList.add('active');
+            }
+            
+            const content = document.getElementById('course-view-tab-content');
+            const data = window.currentCourseViewData;
+            
+            if (!data) return;
+            
+            switch(tabName) {
+                case 'modules':
+                    content.innerHTML = renderCourseViewModules(data.modules, data.courseId, data.isReadOnly);
+                    break;
+                case 'assignments':
+                    content.innerHTML = `
+                        <div class="course-section">
+                            <div class="section-header">
+                        <h3>Assignments</h3>
+                                ${!data.isReadOnly ? `<button onclick="createAssignment(${data.courseId})" class="btn-primary">Create Assignment</button>` : ''}
+                            </div>
+                        <div class="assignments-list">
+                                ${data.assignments.length === 0 ? `
+                                    <div class="empty-state">
+                                        <div class="empty-state-icon">📝</div>
+                                        <h4>No Assignments</h4>
+                                        <p>${data.isReadOnly ? 'No assignments have been created for this course yet.' : 'Create an assignment to get started.'}</p>
+                                    </div>
+                                ` : data.assignments.map(assignment => `
+                                <div class="assignment-card">
+                                        <div class="assignment-card-header">
+                                    <h4>${assignment.title}</h4>
+                                            <span class="assignment-type-badge">${assignment.assignment_type || 'Assignment'}</span>
+                                        </div>
+                                        ${assignment.description ? `<p class="assignment-description">${assignment.description}</p>` : ''}
+                                        <div class="assignment-details">
+                                            <div class="assignment-detail-item">
+                                                <span class="detail-label">Points:</span>
+                                                <span class="detail-value">${assignment.total_points || 0}</span>
+                                            </div>
+                                            ${assignment.due_date ? `
+                                                <div class="assignment-detail-item">
+                                                    <span class="detail-label">Due Date:</span>
+                                                    <span class="detail-value">${new Date(assignment.due_date).toLocaleDateString()}</span>
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    <button onclick="viewAssignment(${assignment.id})" class="btn-view">View Assignment</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    `;
+                    break;
+                case 'attendance':
+                    content.innerHTML = `
+                        <div class="course-section">
+                            <div class="section-header">
+                                <h3>Attendance Records</h3>
+                                ${!data.isReadOnly ? `<button onclick="markAttendance(${data.courseId})" class="btn-primary">Mark Attendance</button>` : ''}
+                            </div>
+                            ${data.attendanceStats ? `
+                                <div class="attendance-summary">
+                                    <div class="attendance-stat-card">
+                                        <div class="attendance-stat-value">${data.attendanceStats.percentage}%</div>
+                                        <div class="attendance-stat-label">Overall Attendance Rate</div>
+                                        <div class="attendance-stat-details">
+                                            ${data.attendanceStats.present} present out of ${data.attendanceStats.total} records
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            ${data.attendance.length === 0 ? `
+                                <div class="empty-state">
+                                    <div class="empty-state-icon">✓</div>
+                                    <h4>No Attendance Records</h4>
+                                    <p>${data.isReadOnly ? 'No attendance has been marked for this course yet.' : 'Mark attendance to track student presence.'}</p>
+                                </div>
+                            ` : `
+                                <div class="attendance-table-container">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Student</th>
+                                                <th>Status</th>
+                                                <th>Notes</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${data.attendance.slice(0, 20).map(record => `
+                                                <tr>
+                                                    <td>${new Date(record.attendance_date).toLocaleDateString()}</td>
+                                                    <td>${record.first_name || ''} ${record.last_name || ''}</td>
+                                                    <td><span class="status-badge status-${record.status.toLowerCase()}">${record.status}</span></td>
+                                                    <td>${record.notes || '-'}</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                    ${data.attendance.length > 20 ? `<p class="table-footer">Showing 20 of ${data.attendance.length} records</p>` : ''}
+                                </div>
+                            `}
+                </div>
+            `;
+                    break;
+                case 'grades':
+                    content.innerHTML = `
+                        <div class="course-section">
+                            <div class="section-header">
+                                <h3>Grading Center</h3>
+                                <button onclick="viewGradingCenter(${data.courseId})" class="btn-primary">Open Grading Center</button>
+                            </div>
+                            <div class="info-message">
+                                <p>Use the Grading Center to view and manage all grades for this course.</p>
+                            </div>
+                        </div>
+                    `;
+                    break;
+                case 'students':
+                    content.innerHTML = `
+                        <div class="course-section">
+                            <div class="section-header">
+                                <h3>Enrolled Students (${data.enrolledStudents.length})</h3>
+                            </div>
+                            <div class="students-list">
+                                ${data.enrolledStudents.length === 0 ? `
+                                    <div class="empty-state">
+                                        <div class="empty-state-icon">👥</div>
+                                        <h4>No Enrolled Students</h4>
+                                        <p>No students are currently enrolled in this course.</p>
+                                    </div>
+                                ` : `
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Name</th>
+                                                <th>Email</th>
+                                                <th>Admission Number</th>
+                                                <th>Enrollment Date</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${data.enrolledStudents.map(student => `
+                                                <tr>
+                                                    <td>${student.first_name || ''} ${student.last_name || ''}</td>
+                                                    <td>${student.email || '-'}</td>
+                                                    <td>${student.admission_number || '-'}</td>
+                                                    <td>${student.enrollment_date ? new Date(student.enrollment_date).toLocaleDateString() : '-'}</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                `}
+                            </div>
+                        </div>
+                    `;
+                    break;
+            }
+        }
+
+        async function viewModule(moduleId) {
+            const module = await apiCall(`/modules/${moduleId}`);
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('modules')" class="btn-back">← Back</button>
+                    <h2>${module.module_name}</h2>
+                </div>
+                <div class="module-content">
+                    <p>${module.module_description || ''}</p>
+                    <h3>Content</h3>
+                    <div class="content-list">
+                        ${module.content.map(item => `
+                            <div class="content-item">
+                                <h4>${item.title}</h4>
+                                ${item.content_text ? `<p>${item.content_text}</p>` : ''}
+                                ${item.content_url ? `<a href="${item.content_url}" target="_blank" class="btn-download">View/Download</a>` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        async function viewAssignment(assignmentId) {
+            const assignment = await apiCall(`/assignments/${assignmentId}`);
+            let submission = null;
+            try {
+                submission = await apiCall(`/assignments/${assignmentId}/submission`);
+            } catch (e) {
+                // No submission yet
+            }
+            
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('assignments')" class="btn-back">← Back</button>
+                    <h2>${assignment.title}</h2>
+                </div>
+                <div class="assignment-details">
+                    <p><strong>Description:</strong></p>
+                    <p>${assignment.description || ''}</p>
+                    <p><strong>Points:</strong> ${assignment.total_points}</p>
+                    <p><strong>Due Date:</strong> ${assignment.due_date ? new Date(assignment.due_date).toLocaleString() : 'No due date'}</p>
+                    ${assignment.instructions ? `<p><strong>Instructions:</strong><br>${assignment.instructions}</p>` : ''}
+                    ${currentUser.role === 'student' ? `
+                        <div class="submission-section">
+                            <h3>Your Submission</h3>
+                            ${submission ? `
+                                <p><strong>Submitted:</strong> ${new Date(submission.submitted_at).toLocaleString()}</p>
+                                ${submission.submission_text ? `<p>${submission.submission_text}</p>` : ''}
+                                <p>Status: ${submission.status}</p>
+                            ` : `
+                                <form id="submitForm" onsubmit="submitAssignment(event, ${assignmentId})">
+                                    <textarea name="submission_text" placeholder="Enter your submission text" rows="10"></textarea>
+                                    <input type="file" name="files" multiple>
+                                    <button type="submit" class="btn-primary">Submit Assignment</button>
+                                </form>
+                            `}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        async function submitAssignment(e, assignmentId) {
+            e.preventDefault();
+            // Simplified - would need FormData for file uploads
+            alert('File upload submission requires FormData. This is a simplified demo.');
+        }
+
+        async function loadModules() {
+            const courses = await apiCall('/courses');
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                    <h2>Learning Modules</h2>
+                </div>
+                <div class="courses-list">
+                    ${courses.map(course => `
+                        <div class="course-card">
+                            <h3>${course.course_name}</h3>
+                            <button onclick="viewCourse(${course.id})" class="btn-view">View Modules</button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        async function loadAssignments() {
+            const courses = await apiCall('/courses');
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                    <h2>Assignments</h2>
+                </div>
+                <div class="courses-list">
+                    ${courses.map(course => `
+                        <div class="course-card">
+                            <h3>${course.course_name}</h3>
+                            <button onclick="viewCourse(${course.id})" class="btn-view">View Assignments</button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        async function loadGrades() {
+            const courses = await apiCall('/courses');
+            let allGrades = [];
+            
+            for (const course of courses) {
+                try {
+                    const grades = await apiCall(`/grades/course/${course.id}`);
+                    allGrades = allGrades.concat(grades.map(g => ({...g, course_name: course.course_name})));
+                } catch (e) {
+                    // Skip if no grades
+                }
+            }
+            
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                    <h2>My Grades</h2>
+                </div>
+                <div class="grades-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Course</th>
+                                <th>Assignment</th>
+                                <th>Points Earned</th>
+                                <th>Points Possible</th>
+                                <th>Percentage</th>
+                                <th>Letter Grade</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${allGrades.map(grade => `
+                                <tr>
+                                    <td>${grade.course_name}</td>
+                                    <td>${grade.assignment_title || grade.grade_type}</td>
+                                    <td>${grade.points_earned}</td>
+                                    <td>${grade.points_possible}</td>
+                                    <td>${grade.percentage}%</td>
+                                    <td>${grade.letter_grade}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        async function loadAttendance() {
+            const courses = await apiCall('/courses');
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                    <h2>Attendance</h2>
+                </div>
+                <div class="courses-list">
+                    ${courses.map(course => `
+                        <div class="course-card">
+                            <h3>${course.course_name}</h3>
+                            <button onclick="viewAttendance(${course.id})" class="btn-view">View Attendance</button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        async function viewAttendance(courseId) {
+            const attendance = await apiCall(`/attendance/course/${courseId}`);
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('attendance')" class="btn-back">← Back</button>
+                    <h2>Attendance Records</h2>
+                </div>
+                <div class="attendance-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${attendance.map(record => `
+                                <tr>
+                                    <td>${new Date(record.attendance_date).toLocaleDateString()}</td>
+                                    <td>${record.status}</td>
+                                    <td>${record.notes || ''}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        async function loadMessages() {
+            try {
+            const messages = await apiCall('/email/inbox');
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <div class="view-header">
+                    <h2>Messages</h2>
+                    <button onclick="showComposeMessage()" class="btn-primary">Compose</button>
+                </div>
+                <div class="messages-list">
+                        ${messages.length === 0 ? `
+                            <div class="empty-state">
+                                <div class="empty-state-icon">✉️</div>
+                                <h3>No Messages</h3>
+                                <p>You don't have any messages yet.</p>
+                            </div>
+                        ` : messages.map(msg => `
+                            <div class="message-card ${msg.is_read ? '' : 'unread'}" onclick="viewMessage(${msg.id})">
+                                <div class="message-card-header">
+                                    <h4>${msg.subject || '(No Subject)'}</h4>
+                                    ${!msg.is_read ? `<span class="unread-badge">New</span>` : ''}
+                                </div>
+                                <p class="message-from"><strong>From:</strong> ${msg.sender_first_name || ''} ${msg.sender_last_name || ''}</p>
+                                <p class="message-preview">${msg.message_body ? (msg.message_body.length > 150 ? msg.message_body.substring(0, 150) + '...' : msg.message_body) : '(No content)'}</p>
+                                <div class="message-card-footer">
+                                    <span class="message-date">${msg.created_at ? new Date(msg.created_at).toLocaleDateString() : ''}</span>
+                                    <button onclick="event.stopPropagation(); viewMessage(${msg.id})" class="btn-view">Read</button>
+                                </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            } catch (error) {
+                const content = document.getElementById('dashboardContent');
+                content.innerHTML = `<div class="error">Error loading messages: ${error.message}</div>`;
+            }
+        }
+
+        function showComposeMessage() {
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('messages')" class="btn-back">← Back to Messages</button>
+                    <h2>Compose Message</h2>
+                </div>
+                <div class="form-container">
+                    <form id="composeMessageForm" onsubmit="sendMessage(event)">
+                        <div class="form-group">
+                            <label>To *</label>
+                            <input type="text" id="message-to" name="recipient" placeholder="Enter username or email" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Subject *</label>
+                            <input type="text" id="message-subject" name="subject" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Message *</label>
+                            <textarea id="message-body" name="message_body" rows="10" required></textarea>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn-primary">Send Message</button>
+                            <button type="button" onclick="loadView('messages')" class="btn-secondary">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+        }
+
+        async function sendMessage(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = {
+                recipient: formData.get('recipient'),
+                subject: formData.get('subject'),
+                message_body: formData.get('message_body')
+            };
+            
+            try {
+                await apiCall('/email/send', {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+                alert('Message sent successfully!');
+                loadView('messages');
+            } catch (error) {
+                alert('Error sending message: ' + error.message);
+            }
+        }
+
+        async function viewMessage(messageId) {
+            try {
+                const message = await apiCall(`/email/${messageId}`);
+                // Mark as read
+                try {
+                    await apiCall(`/email/${messageId}/read`, { method: 'PUT' });
+                } catch (e) {
+                    // Ignore if marking as read fails
+                }
+                
+                const content = document.getElementById('dashboardContent');
+                content.innerHTML = `
+                    <div class="view-header">
+                        <button onclick="loadView('messages')" class="btn-back">← Back to Messages</button>
+                        <h2>${message.subject || '(No Subject)'}</h2>
+                    </div>
+                    <div class="message-view-container">
+                        <div class="message-view-header">
+                            <div class="message-view-info">
+                                <p><strong>From:</strong> ${message.sender_first_name || ''} ${message.sender_last_name || ''} (${message.sender_email || ''})</p>
+                                <p><strong>Date:</strong> ${message.created_at ? new Date(message.created_at).toLocaleString() : ''}</p>
+                            </div>
+                            <div class="message-view-actions">
+                                <button onclick="replyToMessage(${message.id})" class="btn-primary">Reply</button>
+                                <button onclick="deleteMessage(${message.id})" class="btn-danger">Delete</button>
+                            </div>
+                        </div>
+                        <div class="message-view-body">
+                            <p>${message.message_body || '(No content)'}</p>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                alert('Error loading message: ' + error.message);
+            }
+        }
+
+        async function replyToMessage(messageId) {
+            try {
+                const message = await apiCall(`/email/${messageId}`);
+                showComposeMessage();
+                // Pre-fill the form
+                setTimeout(() => {
+                    document.getElementById('message-to').value = message.sender_email || message.sender_username || '';
+                    document.getElementById('message-subject').value = `Re: ${message.subject || ''}`;
+                }, 100);
+            } catch (error) {
+                alert('Error loading message for reply: ' + error.message);
+            }
+        }
+
+        async function deleteMessage(messageId) {
+            if (!confirm('Are you sure you want to delete this message?')) return;
+            
+            try {
+                await apiCall(`/email/${messageId}`, { method: 'DELETE' });
+                alert('Message deleted successfully!');
+                loadView('messages');
+            } catch (error) {
+                alert('Error deleting message: ' + error.message);
+            }
+        }
+
+        // Load dashboard with term selection - PRIMARY DASHBOARD VIEW
+        // Per TERM_BASED_NAVIGATION.md: Dashboard should show term selection cards
+        // This applies to ALL users: Teachers, Students, Headteachers, Superadmin, etc.
+        async function loadDashboard() {
+            const content = document.getElementById('dashboardContent');
+            const currentYear = new Date().getFullYear();
+            const role = currentUser.role;
+            const roleName = role === 'teacher' ? 'Teacher' : 
+                           role === 'student' ? 'Student' : 
+                           role === 'headteacher' ? 'Headteacher' :
+                           role === 'deputy_headteacher' ? 'Deputy Headteacher' :
+                           role === 'superadmin' ? 'Superadmin' :
+                           role === 'finance' ? 'Finance Administrator' : 'Dashboard';
+            
+            try {
+                // Get terms - per TERM_BASED_NAVIGATION.md, dashboard shows term selection
+                const terms = await apiCall(`/courses/terms?academic_year=${currentYear}`);
+                
+                content.innerHTML = `
+                    <div class="view-header">
+                        <h2>${roleName} Dashboard - ${currentYear}</h2>
+                        <p class="view-subtitle">Welcome back, ${currentUser.first_name || 'User'}. Select a term to view courses and manage academic activities.</p>
+                    </div>
+                    <div class="terms-section">
+                        <h3 class="section-title">Academic Terms</h3>
+                    <div class="terms-grid">
+                        ${terms.length === 0 ? `
+                                <div class="welcome-message academic-welcome">
+                                    <div class="welcome-icon">📅</div>
+                                    <h3>No Terms Available</h3>
+                                    <p>${(role === 'headteacher' || role === 'superadmin') ? 'Please create terms first to organize the academic year.' : 'Contact administrator to set up academic terms.'}</p>
+                                    ${(role === 'headteacher' || role === 'superadmin') ? '<button onclick="loadView(\'manage-terms\')" class="btn-primary">Manage Terms</button>' : ''}
+                            </div>
+                        ` : terms.map(term => `
+                                <div class="term-card academic-term-card">
+                                    <div class="term-card-header">
+                                        <div class="term-icon">📚</div>
+                                <h3>${term.name}</h3>
+                                    </div>
+                                    <p class="term-date-range">${term.dateRange || 'Date range not set'}</p>
+                                    <div class="term-stats">
+                                        <div class="term-stat-item">
+                                            <span class="term-stat-label">Courses:</span>
+                                            <span class="term-stat-value">${term.course_count || 0}</span>
+                                        </div>
+                                    </div>
+                                    <button onclick="selectTerm(${term.term}, '${term.academic_year}')" class="btn-primary term-select-btn">Select Term</button>
+                            </div>
+                        `).join('')}
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                content.innerHTML = `<div class="error">Error loading dashboard: ${error.message}</div>`;
+            }
+        }
+
+        // Teacher: Load dashboard with term selection
+        async function loadTeacherDashboard() {
+            await loadDashboard();
+        }
+
+        // Student: Load dashboard with term selection
+        async function loadStudentDashboard() {
+            await loadDashboard();
+        }
+
+        // Store current term and academic year
+        let currentTerm = null;
+        let currentAcademicYear = null;
+
+        // Teacher: Select term and show courses
+        async function selectTerm(term, academicYear) {
+            currentTerm = term;
+            currentAcademicYear = academicYear;
+            await loadTermCourses();
+        }
+
+        // Load courses for selected term (works for all roles)
+        async function loadTermCourses() {
+            if (!currentTerm || !currentAcademicYear) {
+                loadDashboard();
+                return;
+            }
+            
+            const role = currentUser.role;
+            let courses;
+            
+            // Get courses based on role
+            if (role === 'teacher') {
+                courses = await apiCall(`/courses/term/${currentTerm}/${currentAcademicYear}`);
+            } else if (role === 'student') {
+                courses = await apiCall(`/courses?academic_year=${currentAcademicYear}`);
+            } else {
+                // Admin roles see all courses for the term
+                courses = await apiCall(`/courses?academic_year=${currentAcademicYear}`);
+            }
+            
+            const content = document.getElementById('dashboardContent');
+            const currentYear = new Date().getFullYear();
+            
+            // Get term details to show proper name and date range
+            const terms = await apiCall(`/courses/terms?academic_year=${currentYear}`);
+            const selectedTerm = terms.find(t => t.term === currentTerm);
+            const termName = selectedTerm ? `${selectedTerm.name} (${selectedTerm.dateRange})` : `Term ${currentTerm} ${currentYear}`;
+            
+            const canCreateCourse = ['teacher', 'headteacher', 'superadmin', 'deputy_headteacher'].includes(role);
+            const canManageCourse = ['teacher', 'headteacher', 'superadmin', 'deputy_headteacher'].includes(role);
+            
+            // Get term date range if available
+            let termDateRange = '';
+            if (selectedTerm) {
+                if (selectedTerm.dateRange) {
+                    termDateRange = selectedTerm.dateRange;
+                } else if (selectedTerm.start_date && selectedTerm.end_date) {
+                    const start = new Date(selectedTerm.start_date);
+                    const end = new Date(selectedTerm.end_date);
+                    const startMonth = start.toLocaleDateString('en-US', { month: 'long' });
+                    const endMonth = end.toLocaleDateString('en-US', { month: 'long' });
+                    termDateRange = `${startMonth} – ${endMonth}`;
+                }
+            }
+            const termDisplayName = selectedTerm ? selectedTerm.name : `Term ${currentTerm}`;
+            
+            content.innerHTML = `
+                <div class="view-header" style="margin-bottom: 16px;">
+                    <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                </div>
+                <!-- Context Header Section -->
+                <div class="context-header">
+                    <div class="context-header-content">
+                        <div class="context-header-left">
+                            <div class="context-title-group">
+                                <h1 class="context-title">${termDisplayName} · ${currentAcademicYear}</h1>
+                                ${termDateRange ? `<p class="context-subtitle">${termDateRange}</p>` : ''}
+                                <p class="context-label">Academic Period</p>
+                </div>
+                        </div>
+                        <div class="context-header-right">
+                            ${['headteacher', 'superadmin', 'deputy_headteacher'].includes(role) ? `
+                                <button onclick="loadView('assign-teachers')" class="context-action-btn">
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 8px;">
+                                        <path d="M8 2C9.10457 2 10 2.89543 10 4C10 5.10457 9.10457 6 8 6C6.89543 6 6 5.10457 6 4C6 2.89543 6.89543 2 8 2Z" fill="currentColor"/>
+                                        <path d="M3 14C3 11.2386 5.23858 9 8 9C10.7614 9 13 11.2386 13 14V16H3V14Z" fill="currentColor"/>
+                                        <path d="M13 6L11 4L13 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M11 4H15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    Assign Teachers to Learning Areas
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Content: Learning Area Cards -->
+                <div class="learning-areas-section">
+                    ${courses.length === 0 ? `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📚</div>
+                            <h3>No Learning Areas Available</h3>
+                            <p>${canCreateCourse ? 'Create a new learning area to get started.' : 'No learning areas have been set up for this term yet.'}</p>
+                        </div>
+                    ` : `
+                        <div class="learning-areas-grid">
+                            ${courses.map(course => `
+                                <div class="learning-area-card" onclick="${canManageCourse ? `viewCourseDetails(${course.id})` : `viewCourse(${course.id})`}">
+                                    <div class="learning-area-card-header">
+                                        <h3 class="learning-area-name">${course.course_name}</h3>
+                                        <span class="learning-area-code">${course.course_code || ''}</span>
+                                    </div>
+                                    ${course.description ? `<p class="learning-area-description">${course.description}</p>` : ''}
+                                    <div class="learning-area-footer">
+                                        ${['teacher', 'headteacher', 'superadmin'].includes(role) ? `
+                                            <div class="learning-area-badge">
+                                                <span class="badge-icon">👥</span>
+                                                <span class="badge-text">${course.enrolled_students || 0} Students</span>
+                                            </div>
+                                        ` : ''}
+                                        <button class="learning-area-action-btn" onclick="event.stopPropagation(); ${canManageCourse ? `viewCourseDetails(${course.id})` : `viewCourse(${course.id})`}">
+                                            Open Course
+                                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-left: 8px;">
+                                                <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                        </div>
+                    `).join('')}
+                        </div>
+                    `}
+                </div>
+            `;
+        }
+
+        // View course details with modules, attendance, assignments (teachers and admins)
+        async function viewCourseDetails(courseId) {
+            if (!currentTerm || !currentAcademicYear) {
+                alert('Please select a term first');
+                loadDashboard();
+                return;
+            }
+            
+            const [course, modules, assignments] = await Promise.all([
+                apiCall(`/courses/${courseId}`),
+                apiCall(`/modules/course/${courseId}?term=${currentTerm}&academic_year=${currentAcademicYear}`),
+                apiCall(`/assignments/course/${courseId}`)
+            ]);
+            
+            const content = document.getElementById('dashboardContent');
+            const currentYear = new Date().getFullYear();
+            const termNames = {
+                1: `Term 1 ${currentYear} (January - April)`,
+                2: `Term 2 ${currentYear} (April - July)`,
+                3: `Term 3 ${currentYear} (August - October)`
+            };
+            const termName = termNames[currentTerm] || `Term ${currentTerm} ${currentYear}`;
+            
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadTermCourses()" class="btn-back">← Back to Courses</button>
+                    <h2>${course.course_name} - ${termName}</h2>
+                </div>
+                
+                <div class="course-tabs">
+                    <button onclick="showCourseTab('modules')" class="tab-btn active" id="tab-modules">Learning Modules</button>
+                    <button onclick="showCourseTab('attendance')" class="tab-btn" id="tab-attendance">Attendance</button>
+                    <button onclick="showCourseTab('assignments')" class="tab-btn" id="tab-assignments">Assignments</button>
+                    <button onclick="showCourseTab('grades')" class="tab-btn" id="tab-grades">Grading</button>
+                    <button onclick="showCourseTab('students')" class="tab-btn" id="tab-students">Students</button>
+                </div>
+                
+                <div id="course-tab-content">
+                    ${renderCourseModules(modules, courseId)}
+                </div>
+            `;
+            
+            // Store course data globally for tab switching
+            window.currentCourseData = { course, modules, assignments, courseId };
+        }
+
+        function renderCourseModules(modules, courseId) {
+            return `
+                <div class="course-section">
+                    <div class="section-header">
+                        <h3>Learning Modules</h3>
+                        <button onclick="createModule(${courseId})" class="btn-primary">Add Module</button>
+                    </div>
+                    <div class="modules-list">
+                        ${modules.length === 0 ? '<p>No modules yet. Add a module to get started.</p>' : modules.map(module => `
+                            <div class="module-card">
+                                <h4>${module.module_name}</h4>
+                                <p>${module.module_description || ''}</p>
+                                <p>Status: ${module.is_published ? 'Published' : 'Draft'}</p>
+                                <button onclick="viewModule(${module.id})" class="btn-view">View Module</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        async function createModule(courseId) {
+            const moduleName = prompt('Enter module name:');
+            if (!moduleName) return;
+            
+            const moduleDesc = prompt('Enter module description (optional):') || '';
+            
+            try {
+                await apiCall('/modules', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        course_id: courseId,
+                        module_name: moduleName,
+                        module_description: moduleDesc,
+                        is_published: false
+                    })
+                });
+                alert('Module created!');
+                viewCourseDetails(courseId);
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function markAttendance(courseId) {
+            alert('Attendance marking feature - coming soon!');
+            // TODO: Implement attendance marking interface
+        }
+
+        async function createAssignment(courseId) {
+            alert('Assignment creation - use the assignments tab!');
+            showCourseTab('assignments');
+        }
+
+        async function createModule(courseId) {
+            const moduleName = prompt('Enter module name:');
+            if (!moduleName) return;
+            
+            const moduleDesc = prompt('Enter module description (optional):') || '';
+            
+            try {
+                await apiCall('/modules', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        course_id: courseId,
+                        module_name: moduleName,
+                        module_description: moduleDesc,
+                        is_published: false
+                    })
+                });
+                alert('Module created!');
+                viewCourseDetails(courseId);
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function markAttendance(courseId) {
+            alert('Attendance marking feature - coming soon!');
+        }
+
+        async function createAssignment(courseId) {
+            alert('Assignment creation - use the assignments tab!');
+            showCourseTab('assignments');
+        }
+
+        function showCourseTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            
+            const content = document.getElementById('course-tab-content');
+            const data = window.currentCourseData;
+            
+            switch(tabName) {
+                case 'modules':
+                    content.innerHTML = renderCourseModules(data.modules, data.courseId);
+                    break;
+                case 'attendance':
+                    content.innerHTML = `
+                        <div class="course-section">
+                            <h3>Attendance - Term ${currentTerm}</h3>
+                            <button onclick="markAttendance(${data.courseId})" class="btn-primary">Mark Attendance</button>
+                            <div id="attendance-list"></div>
+                        </div>
+                    `;
+                    loadCourseAttendance(data.courseId);
+                    break;
+                case 'assignments':
+                    content.innerHTML = `
+                        <div class="course-section">
+                            <div class="section-header">
+                                <h3>Assignments</h3>
+                                <button onclick="createAssignment(${data.courseId})" class="btn-primary">Create Assignment</button>
+                            </div>
+                            <div class="assignments-list">
+                                ${data.assignments.map(assignment => `
+                                    <div class="assignment-card">
+                                        <h4>${assignment.title}</h4>
+                                        <p>Type: ${assignment.assignment_type}</p>
+                                        <p>Points: ${assignment.total_points}</p>
+                                        <p>Due: ${assignment.due_date ? new Date(assignment.due_date).toLocaleDateString() : 'No due date'}</p>
+                                        <button onclick="viewAssignment(${assignment.id})" class="btn-view">View</button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                    break;
+                case 'grades':
+                    content.innerHTML = `
+                        <div class="course-section">
+                            <h3>Grading Center</h3>
+                            <button onclick="viewGradingCenter(${data.courseId})" class="btn-primary">Open Grading Center</button>
+                        </div>
+                    `;
+                    break;
+                case 'students':
+                    content.innerHTML = `
+                        <div class="course-section">
+                            <h3>Enrolled Students</h3>
+                            <button onclick="enrollStudent(${data.courseId})" class="btn-primary">Enroll Student</button>
+                            <div id="students-list"></div>
+                        </div>
+                    `;
+                    loadCourseStudents(data.courseId);
+                    break;
+            }
+        }
+
+        async function loadCourseAttendance(courseId) {
+            try {
+                const attendance = await apiCall(`/attendance/course/${courseId}`);
+                const list = document.getElementById('attendance-list');
+                list.innerHTML = `
+                    <table class="attendance-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Student</th>
+                                <th>Status</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${attendance.map(record => `
+                                <tr>
+                                    <td>${new Date(record.attendance_date).toLocaleDateString()}</td>
+                                    <td>${record.first_name} ${record.last_name}</td>
+                                    <td>${record.status}</td>
+                                    <td>${record.notes || ''}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                document.getElementById('attendance-list').innerHTML = '<p>Error loading attendance</p>';
+            }
+        }
+
+        async function loadCourseStudents(courseId) {
+            try {
+                const enrollments = await apiCall(`/courses/${courseId}`);
+                // Get enrolled students
+                const students = await apiCall(`/admin/enrollments/pending`); // This needs to be updated to get enrolled students
+                const list = document.getElementById('students-list');
+                list.innerHTML = '<p>Student list feature coming soon</p>';
+            } catch (error) {
+                document.getElementById('students-list').innerHTML = '<p>Error loading students</p>';
+            }
+        }
+
+        // Teacher: Load my courses (legacy - keeping for compatibility)
+        async function loadTeacherCourses() {
+            loadTeacherDashboard();
+        }
+
+        // Headteacher: Assign Teachers to Learning Areas for a Term
+        async function showAssignTeachers() {
+            if (!currentTerm || !currentAcademicYear) {
+                alert('Please select a term first from the dashboard');
+                loadView('dashboard');
+                return;
+            }
+
+            const content = document.getElementById('dashboardContent');
+            
+            try {
+                // Load courses, teachers, and current assignments
+                const [courses, teachers, assignments] = await Promise.all([
+                    apiCall('/teacher-assignments/courses'),
+                    apiCall('/teacher-assignments/teachers'),
+                    apiCall(`/teacher-assignments/term/${currentTerm}/${currentAcademicYear}`)
+                ]);
+
+                content.innerHTML = `
+                    <div class="view-header">
+                        <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                        <h2>Assign Teachers to Learning Areas - Term ${currentTerm} ${currentAcademicYear}</h2>
+                    </div>
+                    
+                    <div class="form-container" style="margin-bottom: 2rem;">
+                        <h3>New Assignment</h3>
+                        <form id="assignTeacherForm" onsubmit="assignTeacher(event)">
+                            <div class="form-group">
+                                <label>Learning Area *</label>
+                                <div class="subject-search-container">
+                                    <input 
+                                        type="text" 
+                                        id="subject-search-input" 
+                                        placeholder="Search for a learning area (e.g., Mathematics, Biology, English)..." 
+                                        autocomplete="off"
+                                        oninput="filterSubjects(this.value)"
+                                        onfocus="showSubjectResults()"
+                                    >
+                                    <div id="subject-results" class="subject-results" style="display: none;"></div>
+                                    <input type="hidden" name="course_id" id="selected-course-id" required>
+                                </div>
+                                <div id="selected-subject-display" style="margin-top: 0.5rem; padding: 0.5rem; background: #e8f5e9; border-radius: 4px; display: none;">
+                                    <strong>Selected:</strong> <span id="selected-subject-name"></span>
+                                    <button type="button" onclick="clearSubjectSelection()" style="margin-left: 1rem; padding: 0.25rem 0.5rem; font-size: 0.875rem;">Change</button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Teacher *</label>
+                                <select name="teacher_id" id="assign-teacher-select" required>
+                                    <option value="">Select a teacher...</option>
+                                    ${teachers.map(t => `<option value="${t.id}">${t.first_name} ${t.last_name} (${t.email})</option>`).join('')}
+                                </select>
+                            </div>
+                            <button type="submit" class="btn-primary">Assign Teacher</button>
+                        </form>
+                    </div>
+
+                    <div class="assignments-list">
+                        <h3>Current Assignments</h3>
+                        ${getAssignmentsHtml(assignments)}
+                    </div>
+                `;
+                
+                // Store courses globally for search
+                window.allCourses = courses;
+            } catch (error) {
+                content.innerHTML = `<div class="error">Error loading assignment interface: ${error.message}</div>`;
+                console.error('Load assign teachers error:', error);
+            }
+        }
+
+        async function assignTeacher(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const courseId = formData.get('course_id');
+            const teacherId = formData.get('teacher_id');
+
+            try {
+                await apiCall('/teacher-assignments', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        course_id: parseInt(courseId),
+                        teacher_id: parseInt(teacherId),
+                        term_number: currentTerm,
+                        academic_year: currentAcademicYear
+                    })
+                });
+                alert('Teacher assigned successfully!');
+                showAssignTeachers(); // Reload the view
+            } catch (error) {
+                alert('Error assigning teacher: ' + error.message);
+            }
+        }
+
+        async function removeTeacherAssignment(assignmentId) {
+            if (!confirm('Are you sure you want to remove this teacher assignment?')) {
+                return;
+            }
+
+            try {
+                await apiCall(`/teacher-assignments/${assignmentId}`, {
+                    method: 'DELETE'
+                });
+                alert('Assignment removed successfully!');
+                showAssignTeachers(); // Reload the view
+            } catch (error) {
+                alert('Error removing assignment: ' + error.message);
+            }
+        }
+        
+        // Helper function to generate assignments HTML
+        function getAssignmentsHtml(assignments) {
+            if (assignments.length === 0) {
+                return '<div class="welcome-message"><p>No teacher assignments for this term yet. Use the form above to assign teachers to subjects.</p></div>';
+            }
+            let html = '<table class="data-table"><thead><tr><th>Subject</th><th>Course Code</th><th>Teacher</th><th>Email</th><th>Actions</th></tr></thead><tbody>';
+            html += assignments.map(a => {
+                return '<tr><td>' + (a.course_name || '') + '</td><td>' + (a.course_code || '') + '</td><td>' + 
+                       (a.teacher_first_name || '') + ' ' + (a.teacher_last_name || '') + '</td><td>' + 
+                       (a.teacher_email || '') + '</td><td><button onclick="removeTeacherAssignment(' + a.id + ')" class="btn-small btn-danger">Remove</button></td></tr>';
+            }).join('');
+            html += '</tbody></table>';
+            return html;
+        }
+        
+        // Subject search functions (global scope)
+        function filterSubjects(searchTerm) {
+            const resultsDiv = document.getElementById('subject-results');
+            if (!resultsDiv || !window.allCourses) return;
+            
+            if (!searchTerm || searchTerm.length < 1) {
+                resultsDiv.style.display = 'none';
+                return;
+            }
+            
+            const searchLower = searchTerm.toLowerCase();
+            const filtered = window.allCourses.filter(c => {
+                const name = (c.course_name || '').toLowerCase();
+                const code = (c.course_code || '').toLowerCase();
+                return name.includes(searchLower) || code.includes(searchLower);
+            });
+            
+            if (filtered.length === 0) {
+                resultsDiv.innerHTML = '<div class="subject-result-item" style="padding: 1rem; color: #666;">No subjects found</div>';
+            } else {
+                resultsDiv.innerHTML = filtered.slice(0, 10).map(c => {
+                    const safeName = (c.course_name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    const safeCode = (c.course_code || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    return '<div class="subject-result-item" onclick="selectSubject(' + c.id + ', \'' + safeName + '\', \'' + safeCode + '\')">' +
+                        '<strong>' + (c.course_name || '') + '</strong>' +
+                        '<span style="color: #666; font-size: 0.875rem;"> (' + (c.course_code || '') + ')</span>' +
+                        '</div>';
+                }).join('');
+            }
+            
+            resultsDiv.style.display = 'block';
+        }
+        
+        function showSubjectResults() {
+            const searchInput = document.getElementById('subject-search-input');
+            if (searchInput && searchInput.value.length >= 1) {
+                filterSubjects(searchInput.value);
+            }
+        }
+        
+        function selectSubject(courseId, courseName, courseCode) {
+            const courseIdEl = document.getElementById('selected-course-id');
+            const subjectNameEl = document.getElementById('selected-subject-name');
+            const displayEl = document.getElementById('selected-subject-display');
+            const resultsEl = document.getElementById('subject-results');
+            const searchInput = document.getElementById('subject-search-input');
+            
+            if (courseIdEl) courseIdEl.value = courseId;
+            if (subjectNameEl) subjectNameEl.textContent = courseName + ' (' + courseCode + ')';
+            if (displayEl) displayEl.style.display = 'block';
+            if (resultsEl) resultsEl.style.display = 'none';
+            if (searchInput) searchInput.value = '';
+        }
+        
+        function clearSubjectSelection() {
+            const courseIdEl = document.getElementById('selected-course-id');
+            const displayEl = document.getElementById('selected-subject-display');
+            const searchInput = document.getElementById('subject-search-input');
+            
+            if (courseIdEl) courseIdEl.value = '';
+            if (displayEl) displayEl.style.display = 'none';
+            if (searchInput) searchInput.focus();
+        }
+        
+        // Hide results when clicking outside
+        document.addEventListener('click', function(event) {
+            const container = document.querySelector('.subject-search-container');
+            const resultsDiv = document.getElementById('subject-results');
+            if (container && resultsDiv && !container.contains(event.target)) {
+                resultsDiv.style.display = 'none';
+            }
+        });
+
+        // Teacher: Load pending enrollments
+        async function loadPendingEnrollments() {
+            const enrollments = await apiCall('/admin/enrollments/pending');
+            const content = document.getElementById('dashboardContent');
+            
+            if (enrollments.length === 0) {
+                content.innerHTML = `
+                    <div class="view-header">
+                        <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                        <h2>Pending Enrollments</h2>
+                    </div>
+                    <div class="welcome-message">
+                        <p>No pending enrollment requests.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                    <h2>Pending Enrollments (${enrollments.length})</h2>
+                </div>
+                <div class="enrollments-list">
+                    ${enrollments.map(enrollment => `
+                        <div class="enrollment-card">
+                            <h4>${enrollment.first_name} ${enrollment.last_name}</h4>
+                            <p><strong>Course:</strong> ${enrollment.course_name} (${enrollment.course_code})</p>
+                            <p><strong>Requested:</strong> ${new Date(enrollment.created_at).toLocaleDateString()}</p>
+                            <div class="action-buttons">
+                                <button onclick="authorizeEnrollment(${enrollment.id}, 'approved')" class="btn-success">Approve</button>
+                                <button onclick="authorizeEnrollment(${enrollment.id}, 'rejected')" class="btn-danger">Reject</button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        async function authorizeEnrollment(enrollmentId, status) {
+            if (!confirm(`Are you sure you want to ${status} this enrollment?`)) return;
+            
+            try {
+                await apiCall(`/admin/enrollments/${enrollmentId}/authorize`, {
+                    method: 'POST',
+                    body: JSON.stringify({ status, notes: '' })
+                });
+                alert(`Enrollment ${status}!`);
+                loadPendingEnrollments();
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // Teacher: Load grading center
+        async function loadGradingCenter() {
+            const courses = await apiCall('/courses');
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <div class="view-header">
+                    <h2>Grading Center</h2>
+                </div>
+                <div class="courses-list">
+                    ${courses.map(course => `
+                        <div class="course-card">
+                            <h3>${course.course_name}</h3>
+                            <button onclick="viewGradingCenter(${course.id})" class="btn-view">View Grades</button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        async function viewGradingCenter(courseId) {
+            const gradingData = await apiCall(`/grades/course/${courseId}/grading-center`);
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('grading-center')" class="btn-back">← Back</button>
+                    <h2>Grading Center</h2>
+                </div>
+                <div class="grades-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Current Average</th>
+                                <th>Final Grade</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${gradingData.map(student => `
+                                <tr>
+                                    <td>${student.first_name} ${student.last_name}</td>
+                                    <td>${student.currentAverage}%</td>
+                                    <td>${student.finalGrade ? student.finalGrade.letter_grade : 'N/A'}</td>
+                                    <td>
+                                        <button onclick="viewStudentGrades(${courseId}, ${student.id})" class="btn-view">View Details</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        async function viewStudentGrades(courseId, studentId) {
+            const summary = await apiCall(`/grades/course/${courseId}/student/${studentId}/summary`);
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="viewGradingCenter(${courseId})" class="btn-back">← Back</button>
+                    <h2>Student Grade Details</h2>
+                </div>
+                <div class="grades-table">
+                    <p><strong>Current Average:</strong> ${summary.currentAverage}%</p>
+                    <p><strong>Final Grade:</strong> ${summary.finalGrade ? summary.finalGrade.letter_grade : 'N/A'}</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Assignment</th>
+                                <th>Points Earned</th>
+                                <th>Points Possible</th>
+                                <th>Percentage</th>
+                                <th>Grade</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${summary.grades.map(grade => `
+                                <tr>
+                                    <td>${grade.assignment_title || grade.grade_type}</td>
+                                    <td>${grade.points_earned}</td>
+                                    <td>${grade.points_possible}</td>
+                                    <td>${grade.percentage}%</td>
+                                    <td>${grade.letter_grade}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        // Admin: Manage Terms - Premium Institutional Design
+        async function loadManageTerms() {
+            const content = document.getElementById('dashboardContent');
+            const currentYear = new Date().getFullYear();
+            const academicYear = `${currentYear}-${currentYear + 1}`;
+            
+            try {
+                const terms = await apiCall(`/terms?academic_year=${academicYear}`);
+                const role = currentUser.role;
+                const backView = (role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher') ? 'admin-dashboard' : 'dashboard';
+                
+                content.innerHTML = `
+                    <div class="view-header" style="margin-bottom: 24px;">
+                        <button onclick="loadView('${backView}')" class="btn-back">← Back</button>
+                    </div>
+                    <!-- Premium Terms Management Card -->
+                    <div class="terms-management-card">
+                        <div class="terms-card-header">
+                            <div class="terms-header-left">
+                                <div class="terms-header-icon">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                        <path d="M8 2V6M16 2V6M3 10H21M5 4H19C20.1046 4 21 4.89543 21 6V20C21 21.1046 20.1046 22 19 22H5C3.89543 22 3 21.1046 3 20V6C3 4.89543 3.89543 4 5 4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                    </div>
+                                <div class="terms-header-text">
+                                    <h1 class="terms-main-title">Manage Academic Terms</h1>
+                                    <p class="terms-subtitle">Configure and manage academic periods for the school year</p>
+                                    <div class="academic-year-badge">Academic Year ${academicYear}</div>
+                                </div>
+                            </div>
+                            <button onclick="showCreateTermForm()" class="terms-create-btn">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 8px;">
+                                    <path d="M8 3V13M3 8H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                Create New Term
+                            </button>
+                        </div>
+
+                        <div class="terms-content-section">
+                            ${terms.length === 0 ? `
+                                <div class="terms-empty-state">
+                                    <div class="terms-empty-icon">📅</div>
+                                    <h3>No Terms Configured</h3>
+                                    <p>Create academic terms to organize the school year. Each term represents a distinct period of instruction.</p>
+                                    <button onclick="showCreateTermForm()" class="btn-primary">Create First Term</button>
+                                </div>
+                            ` : `
+                                <div class="terms-table-section">
+                                    <div class="terms-section-header">
+                                        <h3>Academic Terms</h3>
+                                        <span class="terms-count-badge">${terms.length} Term${terms.length !== 1 ? 's' : ''}</span>
+                                    </div>
+                                    <div class="terms-table-wrapper">
+                                        <table class="terms-table">
+                            <thead>
+                                <tr>
+                                                    <th>Term</th>
+                                    <th>Name</th>
+                                    <th>Date Range</th>
+                                    <th>Academic Year</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                                ${terms.map(term => `
+                                                    <tr class="term-table-row">
+                                                        <td>
+                                                            <div class="term-number-cell">
+                                                                <div class="term-title-block">
+                                                                    <div class="term-title-primary">Term ${term.term_number}</div>
+                                                                    <div class="term-title-secondary">${term.name}</div>
+                                                                </div>
+                                                            </div>
+                                        </td>
+                                                        <td>
+                                                            <div class="term-name-cell">
+                                                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 8px; opacity: 0.6;">
+                                                                    <path d="M8 2V6M12 2V6M2 8H14M3 4H13C13.5523 4 14 4.44772 14 5V15C14 15.5523 13.5523 16 13 16H3C2.44772 16 2 15.5523 2 15V5C2 4.44772 2.44772 4 3 4Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                </svg>
+                                                                <span class="term-name-text">${term.name}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            <span class="term-date-range">${term.date_range_start || ''} – ${term.date_range_end || ''}</span>
+                                                        </td>
+                                                        <td>
+                                                            <span class="term-academic-year">${term.academic_year}</span>
+                                                        </td>
+                                                        <td>
+                                            ${term.is_active ? `
+                                                                <span class="term-status-badge active" title="This term is currently active for all academic operations">
+                                                                    <span class="status-dot"></span>
+                                                                    Active
+                                                                </span>
+                                            ` : `
+                                                                <span class="term-status-badge inactive" title="This term is not currently active">
+                                                                    <span class="status-dot"></span>
+                                                                    Inactive
+                                                                </span>
+                                            `}
+                                        </td>
+                                                        <td>
+                                                            <div class="term-actions">
+                                                                <button onclick="editTerm(${term.id})" class="btn-edit-term">
+                                                                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="margin-right: 4px;">
+                                                                        <path d="M8.5 2.5L11.5 5.5M10 1L13 4L9.5 7.5L6.5 4.5L10 1Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                        <path d="M1 13L4.5 9.5L7.5 12.5L4 16H1V13Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                    </svg>
+                                                                    Edit Term
+                                                                </button>
+                                                                ${term.is_active ? `
+                                                                    <button onclick="deactivateTerm(${term.id})" class="btn-deactivate-term">
+                                                                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="margin-right: 4px;">
+                                                                            <path d="M7 13C10.3137 13 13 10.3137 13 7C13 3.68629 10.3137 1 7 1C3.68629 1 1 3.68629 1 7C1 10.3137 3.68629 13 7 13Z" stroke="currentColor" stroke-width="1.5"/>
+                                                                            <path d="M4 7H10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                                                        </svg>
+                                                                        Close Term
+                                                                    </button>
+                                                                ` : `
+                                                                    <button onclick="activateTerm(${term.id})" class="btn-activate-term">
+                                                                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="margin-right: 4px;">
+                                                                            <path d="M7 13C10.3137 13 13 10.3137 13 7C13 3.68629 10.3137 1 7 1C3.68629 1 1 3.68629 1 7C1 10.3137 3.68629 13 7 13Z" stroke="currentColor" stroke-width="1.5"/>
+                                                                            <path d="M4 7L6.5 9.5L10 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                        </svg>
+                                                                        Activate
+                                                                    </button>
+                                                                `}
+                                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                                    <div class="terms-legend-panel">
+                                        <h4 class="legend-title">Status Legend</h4>
+                                        <div class="legend-items">
+                                            <div class="legend-item">
+                                                <span class="term-status-badge active">
+                                                    <span class="status-dot"></span>
+                                                    Active
+                                                </span>
+                                                <span class="legend-description">Currently in use for all academic operations</span>
+                                            </div>
+                                            <div class="legend-item">
+                                                <span class="term-status-badge inactive">
+                                                    <span class="status-dot"></span>
+                                                    Inactive
+                                                </span>
+                                                <span class="legend-description">Not currently active for academic activities</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="terms-help-text">
+                                        <p><strong>Note:</strong> Only one term should typically be active at a time. Active terms are used for course enrollment and academic activities.</p>
+                                    </div>
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                    <!-- Premium Term Form Modal -->
+                    <div id="term-form-modal" class="modal-overlay" style="display: none;" onclick="if(event.target === this) closeTermModal()">
+                        <div class="modal-content term-form-modal">
+                            <div class="modal-header">
+                                <h2 id="term-form-title">Create Term</h2>
+                                <button class="modal-close" onclick="closeTermModal()" aria-label="Close">
+                                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                        <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="modal-body">
+                            <form id="term-form" onsubmit="saveTerm(event)">
+                                <input type="hidden" id="term-id" name="id">
+                                <div class="form-group">
+                                    <label>Term Number *</label>
+                                        <select name="term_number" id="term-number" class="term-form-select" required>
+                                        <option value="">Select Term</option>
+                                        <option value="1">Term 1</option>
+                                        <option value="2">Term 2</option>
+                                        <option value="3">Term 3</option>
+                                    </select>
+                                        <small class="form-help-text">Select the term number (1, 2, or 3) for this academic period.</small>
+                                </div>
+                                <div class="form-group">
+                                    <label>Academic Year *</label>
+                                        <input type="text" name="academic_year" id="academic-year" class="term-form-input" required placeholder="e.g., 2025-2026">
+                                        <small class="form-help-text">Format: YYYY-YYYY (e.g., 2025-2026)</small>
+                                </div>
+                                <div class="form-group">
+                                    <label>Term Name *</label>
+                                        <input type="text" name="name" id="term-name" class="term-form-input" required placeholder="e.g., Term 1 2025">
+                                        <small class="form-help-text">A descriptive name for this term.</small>
+                                </div>
+                                <div class="form-group">
+                                    <label>Start Month *</label>
+                                        <input type="text" name="date_range_start" id="date-range-start" class="term-form-input" required placeholder="e.g., January">
+                                        <small class="form-help-text">The month when this term begins.</small>
+                                </div>
+                                <div class="form-group">
+                                    <label>End Month *</label>
+                                        <input type="text" name="date_range_end" id="date-range-end" class="term-form-input" required placeholder="e.g., April">
+                                        <small class="form-help-text">The month when this term ends.</small>
+                                </div>
+                                <div class="form-group">
+                                    <label>Start Date (Optional)</label>
+                                        <input type="date" name="start_date" id="start-date" class="term-form-input">
+                                        <small class="form-help-text">Specific start date for precise scheduling.</small>
+                                </div>
+                                <div class="form-group">
+                                    <label>End Date (Optional)</label>
+                                        <input type="date" name="end_date" id="end-date" class="term-form-input">
+                                        <small class="form-help-text">Specific end date for precise scheduling.</small>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" class="btn-primary">Save Term</button>
+                                    <button type="button" onclick="closeTermModal()" class="btn-secondary">Cancel</button>
+                                </div>
+                            </form>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                content.innerHTML = `<div class="error">Error loading terms: ${error.message}</div>`;
+            }
+        }
+
+        function showCreateTermForm() {
+            document.getElementById('term-form-title').textContent = 'Create New Term';
+            document.getElementById('term-form').reset();
+            document.getElementById('term-id').value = '';
+            document.getElementById('academic-year').value = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+            const modal = document.getElementById('term-form-modal');
+            modal.style.display = 'flex';
+            // Smooth animation
+            setTimeout(() => {
+                modal.classList.add('show');
+            }, 10);
+        }
+
+        async function editTerm(termId) {
+            try {
+                const term = await apiCall(`/terms/${termId}`);
+                document.getElementById('term-form-title').textContent = 'Edit Term';
+                document.getElementById('term-id').value = term.id;
+                document.getElementById('term-number').value = term.term_number;
+                document.getElementById('academic-year').value = term.academic_year;
+                document.getElementById('term-name').value = term.name;
+                document.getElementById('date-range-start').value = term.date_range_start;
+                document.getElementById('date-range-end').value = term.date_range_end;
+                document.getElementById('start-date').value = term.start_date || '';
+                document.getElementById('end-date').value = term.end_date || '';
+                const modal = document.getElementById('term-form-modal');
+                modal.style.display = 'flex';
+                // Smooth animation
+                setTimeout(() => {
+                    modal.classList.add('show');
+                }, 10);
+            } catch (error) {
+                alert('Error loading term: ' + error.message);
+            }
+        }
+
+        async function saveTerm(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            const termId = data.id;
+            
+            try {
+                if (termId) {
+                    // Update existing term
+                    await apiCall(`/terms/${termId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify({
+                            name: data.name,
+                            date_range_start: data.date_range_start,
+                            date_range_end: data.date_range_end,
+                            start_date: data.start_date || null,
+                            end_date: data.end_date || null
+                        })
+                    });
+                    showToast('Term updated successfully!', 'success');
+                } else {
+                    // Create new term
+                    await apiCall('/terms', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            term_number: parseInt(data.term_number),
+                            academic_year: data.academic_year,
+                            name: data.name,
+                            date_range_start: data.date_range_start,
+                            date_range_end: data.date_range_end,
+                            start_date: data.start_date || null,
+                            end_date: data.end_date || null
+                        })
+                    });
+                    showToast('Term created successfully!', 'success');
+                }
+                closeTermModal();
+                loadManageTerms();
+            } catch (error) {
+                alert('Error saving term: ' + error.message);
+            }
+        }
+
+        async function deactivateTerm(termId) {
+            if (!confirm('Are you sure you want to close this term?')) return;
+            
+            try {
+                await apiCall(`/terms/${termId}`, { method: 'DELETE' });
+                showToast('Term closed successfully!', 'success');
+                loadManageTerms();
+            } catch (error) {
+                showToast('Error closing term: ' + error.message, 'error');
+            }
+        }
+
+        async function activateTerm(termId) {
+            try {
+                await apiCall(`/terms/${termId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ is_active: true })
+                });
+                showToast('Term activated successfully!', 'success');
+                loadManageTerms();
+            } catch (error) {
+                showToast('Error activating term: ' + error.message, 'error');
+            }
+        }
+
+        // Toast notification function
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast-notification toast-${type}`;
+            toast.innerHTML = `
+                <div class="toast-icon">
+                    ${type === 'success' ? '✓' : '✕'}
+                </div>
+                <div class="toast-message">${message}</div>
+            `;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    document.body.removeChild(toast);
+                }, 300);
+            }, 3000);
+        }
+
+        function closeTermModal() {
+            const modal = document.getElementById('term-form-modal');
+            modal.classList.remove('show');
+            setTimeout(() => {
+                modal.style.display = 'none';
+            }, 220);
+        }
+
+        // Register Student - Manage Learning Area Enrollment
+        async function loadRegisterStudent() {
+            if (!currentTerm || !currentAcademicYear) {
+                alert('Please select a term first from the dashboard');
+                loadView('dashboard');
+                return;
+            }
+
+            const content = document.getElementById('dashboardContent');
+            
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                    <h2>Manage Student Course Enrollment - Term ${currentTerm} ${currentAcademicYear}</h2>
+                </div>
+                
+                <div class="student-search-section">
+                    <h3>Search Student by Admission Number</h3>
+                    <div class="form-group">
+                        <label>Admission Number *</label>
+                        <div>
+                            <input type="text" id="admission-number-search" placeholder="Enter admission number">
+                            <button onclick="searchStudentByAdmission()" class="btn-primary">Search</button>
+                        </div>
+                    </div>
+                    <div id="student-search-results"></div>
+                </div>
+                
+            `;
+        }
+
+        let selectedStudentId = null;
+        let selectedStudentInfo = null;
+        let pendingCourseSelections = new Set(); // Track selected courses before saving
+
+        async function searchStudentByAdmission() {
+            const admissionNumber = document.getElementById('admission-number-search').value.trim();
+            
+            if (!admissionNumber) {
+                alert('Please enter an admission number');
+                return;
+            }
+
+            try {
+                const students = await apiCall(`/student-registration/students?admission_number=${encodeURIComponent(admissionNumber)}`);
+                const resultsDiv = document.getElementById('student-search-results');
+                
+                if (students.length === 0) {
+                    resultsDiv.innerHTML = '<div class="error">No student found with this admission number.</div><div style="margin-top: 1rem; padding: 1rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;"><strong>Tip:</strong> If this is a new student, use the "Register New Student" tab to create their account first.</div>';
+                    return;
+                }
+
+                const student = students[0];
+                selectedStudentId = student.id;
+                selectedStudentInfo = student;
+                
+                resultsDiv.innerHTML = `
+                    <div class="success-message">
+                        <p><strong>Student Found:</strong> ${student.first_name} ${student.last_name}</p>
+                        <p>Username: ${student.username} | Email: ${student.email}</p>
+                        ${student.pathway_name ? `<p>Pathway: ${student.pathway_name}</p>` : ''}
+                        <button onclick="loadStudentCourseManagement(${student.id})" class="btn-primary">Manage Courses</button>
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('student-search-results').innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function loadStudentCourseManagement(studentId) {
+            selectedStudentId = studentId;
+            pendingCourseSelections.clear();
+            
+            if (!currentAcademicYear) {
+                alert('Please select a term first from the dashboard');
+                loadView('dashboard');
+                return;
+            }
+            
+            try {
+                const [currentEnrollments, coursesByCategory] = await Promise.all([
+                    apiCall(`/student-registration/students/${studentId}/enrollments?academic_year=${currentAcademicYear}`),
+                    apiCall(`/courses/by-category/${currentAcademicYear}`)
+                ]);
+
+                const student = selectedStudentInfo;
+                
+                // Create modal popup
+                const modal = document.createElement('div');
+                modal.id = 'course-management-modal';
+                modal.className = 'modal-overlay';
+                modal.onclick = function(e) {
+                    if (e.target === modal) {
+                        closeCourseManagementModal();
+                    }
+                };
+                modal.innerHTML = `
+                    <div class="modal-content modal-large">
+                        <div class="modal-header">
+                            <h2>Manage Learning Areas - ${student.first_name} ${student.last_name}</h2>
+                            <button onclick="closeCourseManagementModal()" class="modal-close">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="student-info-card" style="margin-bottom: 1.5rem;">
+                                <p><strong>Admission Number:</strong> ${student.admission_number || 'N/A'}</p>
+                                <p><strong>Pathway:</strong> ${student.pathway_name || 'Not assigned'}</p>
+                                <p><strong>Term:</strong> ${currentTerm} ${currentAcademicYear}</p>
+                            </div>
+
+                            <div class="enrollments-section" style="margin-bottom: 2rem;">
+                                <h3>Current Learning Area Enrollments (${currentEnrollments.length})</h3>
+                                ${currentEnrollments.length === 0 ? `
+                                    <p>No learning areas enrolled for this academic year.</p>
+                                ` : `
+                                    <div class="enrollments-list">
+                                        ${currentEnrollments.map(enrollment => `
+                                            <div class="enrollment-item">
+                                                <div>
+                                                    <strong>${enrollment.course_name}</strong> (${enrollment.course_code})
+                                                    ${enrollment.teacher_first_name ? `<br><small>Teacher: ${enrollment.teacher_first_name} ${enrollment.teacher_last_name}</small>` : ''}
+                                                </div>
+                                                <button onclick="removeEnrollment(${enrollment.id})" class="btn-danger btn-small">Remove</button>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                `}
+                            </div>
+
+                            <div class="courses-by-category">
+                                <h3>Available Learning Areas - Select to Add</h3>
+                                ${renderCoursesByCategory(coursesByCategory, currentEnrollments)}
+                            </div>
+
+                            <div id="save-enrollments-section" style="margin-top: 2rem; padding: 1.5rem; background: #e3f2fd; border: 2px solid #2196f3; border-radius: 8px; display: none; position: sticky; bottom: 0; z-index: 100;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                                    <p style="margin: 0; font-size: 1.1rem;"><strong>Selected: <span id="selected-count" style="color: #1976d2; font-size: 1.2rem; font-weight: bold;">0</span> learning area(s)</strong></p>
+                                </div>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <button id="save-enrollments-btn" onclick="saveSelectedEnrollments()" class="btn-primary" style="padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: bold;">Save Enrollments</button>
+                                    <button onclick="clearPendingSelections()" class="btn-secondary" style="padding: 0.75rem 1.5rem;">Clear Selection</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(modal);
+                updateSaveButton();
+                
+                // Close on Escape key
+                const escapeHandler = (e) => {
+                    if (e.key === 'Escape') {
+                        closeCourseManagementModal();
+                        document.removeEventListener('keydown', escapeHandler);
+                    }
+                };
+                document.addEventListener('keydown', escapeHandler);
+            } catch (error) {
+                alert('Error loading course management: ' + error.message);
+            }
+        }
+
+        function closeCourseManagementModal() {
+            const modal = document.getElementById('course-management-modal');
+            if (modal) {
+                modal.remove();
+            }
+            pendingCourseSelections.clear();
+        }
+
+        function clearPendingSelections() {
+            pendingCourseSelections.clear();
+            // Uncheck all pending checkboxes
+            document.querySelectorAll('input[type="checkbox"].course-checkbox-input:checked').forEach(cb => {
+                cb.checked = false;
+            });
+            // Also uncheck by data attribute
+            document.querySelectorAll('input[type="checkbox"][data-course-id]').forEach(cb => {
+                const courseId = parseInt(cb.getAttribute('data-course-id'));
+                if (pendingCourseSelections.has(courseId)) {
+                    cb.checked = false;
+                }
+            });
+            updateSaveButton();
+        }
+
+        function renderCoursesByCategory(coursesByCategory, currentEnrollments) {
+            const enrolledCourseIds = currentEnrollments.map(e => e.course_id);
+            
+            const categories = [
+                { key: 'core', title: 'Core Subjects', courses: coursesByCategory.core },
+                { key: 'languages', title: 'Languages', courses: coursesByCategory.languages },
+                { key: 'sciences', title: 'Sciences', courses: coursesByCategory.sciences },
+                { key: 'arts', title: 'Arts & Sports', courses: coursesByCategory.arts },
+                { key: 'social_sciences', title: 'Social Sciences', courses: coursesByCategory.social_sciences },
+                { key: 'technical', title: 'Technical Subjects', courses: coursesByCategory.technical },
+                { key: 'other', title: 'Other Subjects', courses: coursesByCategory.other }
+            ];
+
+            return categories.map(category => {
+                if (category.courses.length === 0) return '';
+                
+                return `
+                    <div class="course-category">
+                        <h4>${category.title}</h4>
+                        <div class="category-courses">
+                            ${category.courses.map(course => {
+                                const isEnrolled = enrolledCourseIds.includes(course.id);
+                                const isPending = pendingCourseSelections.has(course.id);
+                                return `
+                                    <div class="course-item ${isEnrolled ? 'enrolled' : ''} ${isPending ? 'pending' : ''}">
+                                        <label>
+                                            <input type="checkbox" 
+                                                   ${isEnrolled ? 'checked disabled' : ''} 
+                                                   ${isPending ? 'checked' : ''}
+                                                   value="${course.id}"
+                                                   data-course-id="${course.id}"
+                                                   onchange="toggleCourseSelection(${course.id}, this.checked)"
+                                                   ${isEnrolled ? '' : 'class="course-checkbox-input"'}
+                                                   ${isEnrolled ? '' : 'id="course-checkbox-' + course.id + '"'}>
+                                            <strong>${course.course_name}</strong> (${course.course_code})
+                                            ${course.teacher_first_name ? `<br><small>Teacher: ${course.teacher_first_name} ${course.teacher_last_name}</small>` : ''}
+                                        </label>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function toggleCourseSelection(courseId, checked) {
+            const courseIdNum = parseInt(courseId);
+            console.log('Toggle course selection:', courseIdNum, checked);
+            if (checked) {
+                pendingCourseSelections.add(courseIdNum);
+            } else {
+                pendingCourseSelections.delete(courseIdNum);
+            }
+            console.log('Pending selections:', Array.from(pendingCourseSelections));
+            updateSaveButton();
+        }
+
+        function updateSaveButton() {
+            const saveSection = document.getElementById('save-enrollments-section');
+            const countSpan = document.getElementById('selected-count');
+            const count = pendingCourseSelections.size;
+            
+            if (saveSection) {
+                if (count > 0) {
+                    saveSection.style.display = 'block';
+                    // Scroll to save section to make it visible
+                    setTimeout(() => {
+                        saveSection.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    }, 100);
+                } else {
+                    saveSection.style.display = 'none';
+                }
+            }
+            if (countSpan) {
+                countSpan.textContent = count.toString();
+                countSpan.innerText = count.toString(); // Force update
+            }
+            
+            // Also update visual feedback on checkboxes
+            document.querySelectorAll('input[type="checkbox"][data-course-id]').forEach(cb => {
+                const courseId = parseInt(cb.getAttribute('data-course-id'));
+                const isPending = pendingCourseSelections.has(courseId);
+                const courseItem = cb.closest('.course-item');
+                if (courseItem) {
+                    if (isPending && !courseItem.classList.contains('enrolled')) {
+                        courseItem.classList.add('pending');
+                    } else {
+                        courseItem.classList.remove('pending');
+                    }
+                }
+            });
+        }
+
+        async function saveSelectedEnrollments() {
+            if (!selectedStudentId) {
+                alert('Please select a student first');
+                return;
+            }
+
+            if (pendingCourseSelections.size === 0) {
+                alert('Please select at least one learning area to enroll');
+                return;
+            }
+
+            if (!currentTerm || !currentAcademicYear) {
+                alert('Please select a term first from the dashboard');
+                return;
+            }
+
+            const courseIds = Array.from(pendingCourseSelections);
+            console.log('Saving enrollments:', {
+                studentId: selectedStudentId,
+                courseIds: courseIds,
+                term: currentTerm,
+                academicYear: currentAcademicYear
+            });
+            
+            // Disable save button to prevent double submission
+            const saveBtn = document.getElementById('save-enrollments-btn');
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Saving...';
+            }
+            
+            try {
+                const result = await apiCall(`/student-registration/enroll/${selectedStudentId}`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        course_ids: courseIds,
+                        term: currentTerm,
+                        academic_year: currentAcademicYear
+                    })
+                });
+                
+                alert(`Successfully enrolled in ${result.courses_enrolled || courseIds.length} learning area(s)!`);
+                pendingCourseSelections.clear();
+                
+                // Reload course management
+                await loadStudentCourseManagement(selectedStudentId);
+            } catch (error) {
+                console.error('Enrollment error:', error);
+                console.error('Error details:', {
+                    message: error.message,
+                    response: error.response,
+                    status: error.status
+                });
+                
+                // Re-enable save button
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Save Enrollments';
+                }
+                
+                const errorMsg = error.message || 'Server error. Please check the console (F12) for details.';
+                alert('Error: ' + errorMsg);
+            }
+        }
+
+        async function toggleCourseEnrollment(courseId, add) {
+            if (!selectedStudentId) {
+                alert('Please select a student first');
+                return;
+            }
+
+            if (!courseId) {
+                alert('Invalid course ID');
+                return;
+            }
+
+            // Ensure courseId is a number
+            const courseIdNum = parseInt(courseId);
+            if (isNaN(courseIdNum)) {
+                alert('Invalid course ID format');
+                return;
+            }
+
+            try {
+                if (add) {
+                    // Add enrollment
+                    const result = await apiCall(`/student-registration/enroll/${selectedStudentId}`, {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            course_ids: [courseIdNum],
+                            term: currentTerm,
+                            academic_year: currentAcademicYear
+                        })
+                    });
+                    alert('Learning area added successfully!');
+                } else {
+                    // Find enrollment ID and remove
+                    const enrollments = await apiCall(`/student-registration/students/${selectedStudentId}/enrollments?academic_year=${currentAcademicYear}`);
+                    const enrollment = enrollments.find(e => e.course_id === courseIdNum);
+                    if (enrollment) {
+                        await apiCall(`/student-registration/enrollments/${enrollment.id}`, { method: 'DELETE' });
+                        alert('Learning area removed successfully!');
+                    }
+                }
+                
+                // Reload course management
+                loadStudentCourseManagement(selectedStudentId);
+            } catch (error) {
+                console.error('Enrollment error:', error);
+                alert('Error: ' + (error.message || 'Server error. Please check the console for details.'));
+            }
+        }
+
+        async function removeEnrollment(enrollmentId) {
+            if (!confirm('Are you sure you want to remove this learning area enrollment?')) return;
+
+            try {
+                await apiCall(`/student-registration/enrollments/${enrollmentId}`, { method: 'DELETE' });
+                alert('Learning area enrollment removed successfully!');
+                if (selectedStudentId) {
+                    loadStudentCourseManagement(selectedStudentId);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        function renderNewStudentForm() {
+            return `
+                <div class="form-container">
+                    <form id="registerStudentForm" onsubmit="registerStudent(event)">
+                        <h3>Student Information</h3>
+                        <div class="form-group">
+                            <label>First Name *</label>
+                            <input type="text" name="first_name" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Last Name *</label>
+                            <input type="text" name="last_name" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Username *</label>
+                            <input type="text" name="username" required placeholder="e.g., student001">
+                        </div>
+                        <div class="form-group">
+                            <label>Email *</label>
+                            <input type="email" name="email" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Password *</label>
+                            <input type="password" name="password" required minlength="6">
+                        </div>
+                        <div class="form-group">
+                            <label>Admission Number</label>
+                            <input type="text" name="admission_number" placeholder="Optional">
+                        </div>
+                        
+                        <h3>Parent Information (Optional)</h3>
+                        <div class="form-group">
+                            <label>Parent Name</label>
+                            <input type="text" name="parent_name">
+                        </div>
+                        <div class="form-group">
+                            <label>Parent Email</label>
+                            <input type="email" name="parent_email">
+                        </div>
+                        
+                        <h3>Learning Area Enrollment - Term ${currentTerm}</h3>
+                        <div id="enrollment-steps">
+                            <!-- Step 1: Select Core Learning Areas (4 required) -->
+                            <div id="step-core" class="enrollment-step">
+                                <h4>Step 1: Select Core Learning Areas (Select 4)</h4>
+                                <p class="step-description">All students must take these 4 core learning areas:</p>
+                                <div id="core-learning-areas" class="learning-areas-selection"></div>
+                                <div id="core-selection-status" class="selection-status"></div>
+                                <button type="button" id="btn-next-to-pathway" onclick="proceedToPathwaySelection()" class="btn-primary" style="display: none; margin-top: 1rem;">Next: Select Pathway</button>
+                            </div>
+                            
+                            <!-- Step 2: Select Pathway -->
+                            <div id="step-pathway" class="enrollment-step" style="display: none;">
+                                <h4>Step 2: Select Pathway</h4>
+                                <p class="step-description">Choose ONE pathway. You cannot mix pathways:</p>
+                                <div id="pathway-selection" class="pathway-selection"></div>
+                                <input type="hidden" id="selected-pathway-id" name="pathway_id">
+                                <button type="button" onclick="goBackToCore()" class="btn-secondary" style="margin-top: 1rem;">← Back</button>
+                            </div>
+                            
+                            <!-- Step 3: Select Pathway Electives (3 required) -->
+                            <div id="step-electives" class="enrollment-step" style="display: none;">
+                                <h4>Step 3: Select Pathway Electives (Select exactly 3)</h4>
+                                <p class="step-description">Select 3 learning areas from your chosen pathway:</p>
+                                <div id="pathway-learning-areas" class="learning-areas-selection"></div>
+                                <div id="elective-selection-status" class="selection-status"></div>
+                                <button type="button" onclick="goBackToPathway()" class="btn-secondary" style="margin-top: 1rem;">← Back</button>
+                            </div>
+                        </div>
+                        
+                        <input type="hidden" name="term" value="${currentTerm}">
+                        <input type="hidden" name="academic_year" value="${currentAcademicYear}">
+                        
+                        <div class="form-actions">
+                            <button type="submit" class="btn-primary">Register Student</button>
+                            <button type="button" onclick="loadView('dashboard')" class="btn-secondary">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+                
+                <div id="existing-student-form" style="display: none;">
+                    ${renderExistingStudentForm(courses)}
+                </div>
+            `;
+        }
+
+        function renderExistingStudentForm() {
+            return `
+                <div class="form-container">
+                    <form id="enrollStudentForm" onsubmit="enrollExistingStudent(event)">
+                        <h3>Select Student</h3>
+                        <div class="form-group">
+                            <label>Search Student</label>
+                            <input type="text" id="student-search" placeholder="Search by name, username, or admission number" onkeyup="searchStudents()">
+                            <div id="student-results" class="student-results"></div>
+                        </div>
+                        
+                        <div id="selected-student" style="display: none;">
+                            <h3>Selected Student</h3>
+                            <div id="selected-student-info"></div>
+                            
+                            <h3>Select Learning Areas - Term ${currentTerm}</h3>
+                            <p class="info">Use the same CBC curriculum logic: 4 core + 3 pathway electives</p>
+                            <div id="existing-student-enrollment-steps">
+                                <!-- Same step-by-step enrollment for existing students -->
+                                <div id="existing-step-core" class="enrollment-step">
+                                    <h4>Step 1: Select Core Learning Areas (Select exactly 4)</h4>
+                                    <div id="existing-core-learning-areas" class="learning-areas-selection"></div>
+                                    <div id="existing-core-selection-status" class="selection-status"></div>
+                                    <button type="button" onclick="proceedToPathwaySelectionExisting()" class="btn-primary" style="display: none; margin-top: 1rem;">Next: Select Pathway</button>
+                                </div>
+                                
+                                <div id="existing-step-pathway" class="enrollment-step" style="display: none;">
+                                    <h4>Step 2: Select Pathway</h4>
+                                    <div id="existing-pathway-selection" class="pathway-selection"></div>
+                                    <input type="hidden" id="existing-selected-pathway-id">
+                                    <button type="button" onclick="goBackToCoreExisting()" class="btn-secondary" style="margin-top: 1rem;">← Back</button>
+                                </div>
+                                
+                                <div id="existing-step-electives" class="enrollment-step" style="display: none;">
+                                    <h4>Step 3: Select Pathway Electives (Select exactly 3)</h4>
+                                    <div id="existing-pathway-learning-areas" class="learning-areas-selection"></div>
+                                    <div id="existing-elective-selection-status" class="selection-status"></div>
+                                    <button type="button" onclick="goBackToPathwayExisting()" class="btn-secondary" style="margin-top: 1rem;">← Back</button>
+                                </div>
+                            </div>
+                            
+                            <input type="hidden" id="selected-student-id">
+                            <input type="hidden" name="term" value="${currentTerm}">
+                            <input type="hidden" name="academic_year" value="${currentAcademicYear}">
+                            
+                            <div class="form-actions">
+                                <button type="submit" class="btn-primary">Enroll in Courses</button>
+                                <button type="button" onclick="clearStudentSelection()" class="btn-secondary">Clear Selection</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            `;
+        }
+
+        function showRegistrationTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            
+            const newForm = document.getElementById('registerStudentForm')?.parentElement;
+            const existingForm = document.getElementById('existing-student-form');
+            
+            if (tab === 'new') {
+                if (newForm) newForm.style.display = 'block';
+                if (existingForm) existingForm.style.display = 'none';
+            } else {
+                if (newForm) newForm.style.display = 'none';
+                if (existingForm) existingForm.style.display = 'block';
+            }
+        }
+
+        async function registerStudent(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            // Get selected course IDs
+            const courseIds = Array.from(e.target.querySelectorAll('input[name="course_ids"]:checked')).map(cb => parseInt(cb.value));
+            
+                if (courseIds.length === 0) {
+                    alert('Please select at least one learning area');
+                    return;
+                }
+            
+            try {
+                const result = await apiCall('/student-registration', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        ...data,
+                        course_ids: courseIds
+                    })
+                });
+                
+                alert(`Student registered successfully! Enrolled in ${result.courses_enrolled} course(s).`);
+                e.target.reset();
+            } catch (error) {
+                alert('Error registering student: ' + error.message);
+            }
+        }
+
+        let studentSearchTimeout;
+        async function searchStudents() {
+            clearTimeout(studentSearchTimeout);
+            const searchTerm = document.getElementById('student-search').value;
+            
+            if (searchTerm.length < 2) {
+                document.getElementById('student-results').innerHTML = '';
+                return;
+            }
+            
+            studentSearchTimeout = setTimeout(async () => {
+                try {
+                    const students = await apiCall(`/student-registration/students?search=${encodeURIComponent(searchTerm)}`);
+                    const resultsDiv = document.getElementById('student-results');
+                    
+                    if (students.length === 0) {
+                        resultsDiv.innerHTML = '<p>No students found</p>';
+                        return;
+                    }
+                    
+                    resultsDiv.innerHTML = `
+                        <div class="student-list">
+                            ${students.map(student => `
+                                <div class="student-item" onclick="selectStudent(${student.id}, '${student.first_name}', '${student.last_name}', '${student.admission_number || ''}')">
+                                    <strong>${student.first_name} ${student.last_name}</strong>
+                                    ${student.admission_number ? `<br><small>Admission: ${student.admission_number}</small>` : ''}
+                                    <br><small>Username: ${student.username}</small>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } catch (error) {
+                    document.getElementById('student-results').innerHTML = '<p>Error searching students</p>';
+                }
+            }, 300);
+        }
+
+        function selectStudent(studentId, firstName, lastName, admissionNumber) {
+            document.getElementById('selected-student-id').value = studentId;
+            document.getElementById('selected-student-info').innerHTML = `
+                <p><strong>${firstName} ${lastName}</strong></p>
+                ${admissionNumber ? `<p>Admission Number: ${admissionNumber}</p>` : ''}
+            `;
+            document.getElementById('selected-student').style.display = 'block';
+            document.getElementById('student-results').innerHTML = '';
+            document.getElementById('student-search').value = '';
+        }
+
+        function clearStudentSelection() {
+            document.getElementById('selected-student-id').value = '';
+            document.getElementById('selected-student').style.display = 'none';
+            document.getElementById('student-results').innerHTML = '';
+        }
+
+        async function enrollExistingStudent(e) {
+            e.preventDefault();
+            const studentId = document.getElementById('selected-student-id').value;
+            
+            if (!studentId) {
+                alert('Please select a student first');
+                return;
+            }
+            
+            const courseIds = Array.from(e.target.querySelectorAll('input[name="course_ids"]:checked')).map(cb => parseInt(cb.value));
+            
+                if (courseIds.length === 0) {
+                    alert('Please select at least one learning area');
+                    return;
+                }
+            
+            try {
+                const result = await apiCall(`/student-registration/enroll/${studentId}`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        course_ids: courseIds,
+                        term: currentTerm,
+                        academic_year: currentAcademicYear
+                    })
+                });
+                
+                alert(`Student enrolled successfully! Enrolled in ${result.courses_enrolled} learning area(s).`);
+                clearStudentSelection();
+                e.target.reset();
+            } catch (error) {
+                alert('Error enrolling student: ' + error.message);
+            }
+        }
+
+        // Admin: Load System Overview Dashboard
+        // Per ADMIN_FEATURES.md: "Dashboard Overview" - View system statistics
+        // This is a separate admin feature, not the main dashboard
+        async function loadAdminDashboard() {
+            try {
+            const stats = await apiCall('/admin/dashboard');
+            const content = document.getElementById('dashboardContent');
+                const totalUsers = Object.values(stats.users || {}).reduce((a, b) => a + b, 0);
+                
+            content.innerHTML = `
+                <div class="view-header">
+                        <h2>📊 System Overview</h2>
+                        <p style="color: var(--text-secondary); margin-top: 0.5rem;">Monitor overall system health and statistics</p>
+                </div>
+                    
+                <div class="stats-grid">
+                    <div class="stat-card">
+                            <div class="stat-icon" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">👥</div>
+                        <h3>Users</h3>
+                            <div class="stat-value">${totalUsers}</div>
+                            <div class="stat-details">
+                                <div class="stat-detail-item">
+                                    <span class="stat-label">Students:</span>
+                                    <span class="stat-number">${stats.users?.student || 0}</span>
+                    </div>
+                                <div class="stat-detail-item">
+                                    <span class="stat-label">Teachers:</span>
+                                    <span class="stat-number">${stats.users?.teacher || 0}</span>
+                                </div>
+                                <div class="stat-detail-item">
+                                    <span class="stat-label">Admins:</span>
+                                    <span class="stat-number">${(stats.users?.headteacher || 0) + (stats.users?.superadmin || 0)}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    <div class="stat-card">
+                            <div class="stat-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">📚</div>
+                        <h3>Courses</h3>
+                            <div class="stat-value">${stats.courses?.total_courses || 0}</div>
+                            <div class="stat-details">
+                                <div class="stat-detail-item">
+                                    <span class="stat-label">Active Teachers:</span>
+                                    <span class="stat-number">${stats.courses?.teachers_with_courses || 0}</span>
+                    </div>
+                                <div class="stat-detail-item">
+                                    <span class="stat-label">Enrolled Students:</span>
+                                    <span class="stat-number">${stats.courses?.enrolled_students || 0}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    <div class="stat-card">
+                            <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">📝</div>
+                        <h3>Assignments</h3>
+                            <div class="stat-value">${stats.assignments?.total_assignments || 0}</div>
+                            <div class="stat-details">
+                                <div class="stat-detail-item">
+                                    <span class="stat-label">Courses with Assignments:</span>
+                                    <span class="stat-number">${stats.assignments?.courses_with_assignments || 0}</span>
+                    </div>
+                            </div>
+                        </div>
+                        
+                    <div class="stat-card">
+                            <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">🎯</div>
+                        <h3>Grades</h3>
+                            <div class="stat-value">${parseFloat(stats.grades?.average_percentage || 0).toFixed(1)}%</div>
+                            <div class="stat-details">
+                                <div class="stat-detail-item">
+                                    <span class="stat-label">Total Grades:</span>
+                                    <span class="stat-number">${stats.grades?.total_grades || 0}</span>
+                    </div>
+                                <div class="stat-detail-item">
+                                    <span class="stat-label">Students Graded:</span>
+                                    <span class="stat-number">${stats.grades?.students_graded || 0}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="dashboard-actions" style="margin-top: 2rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+                        ${currentUser.role === 'superadmin' ? `
+                        <div class="action-card" onclick="loadView('users')" style="cursor: pointer;">
+                            <div class="action-icon">👤</div>
+                            <h4>Manage Users</h4>
+                            <p>View and manage all system users</p>
+                        </div>
+                        ` : ''}
+                        <div class="action-card" onclick="loadView('all-courses')" style="cursor: pointer;">
+                            <div class="action-icon">📖</div>
+                            <h4>All Courses</h4>
+                            <p>View and manage all courses</p>
+                        </div>
+                        <div class="action-card" onclick="loadView('teachers-overview')" style="cursor: pointer;">
+                            <div class="action-icon">🎓</div>
+                            <h4>Teachers Overview</h4>
+                            <p>View teacher statistics and classes</p>
+                        </div>
+                        <div class="action-card" onclick="loadView('manage-terms')" style="cursor: pointer;">
+                            <div class="action-icon">📅</div>
+                            <h4>Manage Terms</h4>
+                            <p>Configure academic terms and periods</p>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                const content = document.getElementById('dashboardContent');
+                content.innerHTML = `
+                    <div class="view-header">
+                        <h2>System Dashboard</h2>
+                    </div>
+                    <div class="error">
+                        Error loading dashboard: ${error.message}
+                </div>
+            `;
+            }
+        }
+
+        // Admin: Load teachers overview
+        async function loadTeachersOverview() {
+            const teachers = await apiCall('/admin/teachers/overview');
+            const content = document.getElementById('dashboardContent');
+            const role = currentUser.role;
+            const backView = (role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher') ? 'admin-dashboard' : 'dashboard';
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('${backView}')" class="btn-back">← Back</button>
+                    <h2>Teachers Overview</h2>
+                </div>
+                <div class="teachers-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Teacher</th>
+                                <th>Courses</th>
+                                <th>Students</th>
+                                <th>Assignments</th>
+                                <th>Grades Given</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${teachers.map(teacher => `
+                                <tr>
+                                    <td>${teacher.first_name} ${teacher.last_name}</td>
+                                    <td>${teacher.total_courses || 0}</td>
+                                    <td>${teacher.total_students || 0}</td>
+                                    <td>${teacher.total_assignments || 0}</td>
+                                    <td>${teacher.total_grades_given || 0}</td>
+                                    <td>
+                                        <button onclick="viewTeacherClasses(${teacher.id})" class="btn-view">View Classes</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        async function viewTeacherClasses(teacherId) {
+            const classes = await apiCall(`/admin/teachers/${teacherId}/classes`);
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('teachers-overview')" class="btn-back">← Back</button>
+                    <h2>Teacher Classes</h2>
+                </div>
+                <div class="courses-grid">
+                    ${classes.map(course => `
+                        <div class="course-card">
+                            <h3>${course.course_name}</h3>
+                            <p>Students: ${course.enrolled_students || 0}</p>
+                            <p>Assignments: ${course.assignment_count || 0}</p>
+                            <p>Modules: ${course.module_count || 0}</p>
+                            <p>Avg Grade: ${parseFloat(course.average_grade || 0).toFixed(1)}%</p>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Admin: Show add teacher form
+        async function showAddTeacher() {
+            const content = document.getElementById('dashboardContent');
+            const role = currentUser.role;
+            const backView = (role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher') ? 'teachers-overview' : 'dashboard';
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('${backView}')" class="btn-back">← Back</button>
+                    <h2>Add New Teacher</h2>
+                </div>
+                <div class="form-container">
+                    <form id="addTeacherForm" onsubmit="addTeacher(event)">
+                        <div class="form-group">
+                            <label>Username *</label>
+                            <input type="text" name="username" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Email *</label>
+                            <input type="email" name="email" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Password *</label>
+                            <input type="password" name="password" required>
+                        </div>
+                        <div class="form-group">
+                            <label>First Name *</label>
+                            <input type="text" name="first_name" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Last Name *</label>
+                            <input type="text" name="last_name" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Phone</label>
+                            <input type="text" name="phone">
+                        </div>
+                        <button type="submit" class="btn-primary">Add Teacher</button>
+                    </form>
+                </div>
+            `;
+        }
+
+        async function addTeacher(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            try {
+                await apiCall('/admin/teachers', {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+                alert('Teacher added successfully!');
+                e.target.reset();
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // Admin: Show allocate courses
+        async function showAllocateCourses() {
+            const [courses, teachers] = await Promise.all([
+                apiCall('/courses'),
+                apiCall('/users?role=teacher')
+            ]);
+            
+            const content = document.getElementById('dashboardContent');
+            const role = currentUser.role;
+            const backView = (role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher') ? 'admin-dashboard' : 'dashboard';
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('${backView}')" class="btn-back">← Back</button>
+                    <h2>Allocate Courses to Teachers</h2>
+                </div>
+                <div class="courses-grid">
+                    ${courses.map(course => `
+                        <div class="course-card">
+                            <h3>${course.course_name}</h3>
+                            <p>Current Teacher: ${course.teacher_first_name || 'None'} ${course.teacher_last_name || ''}</p>
+                            <select id="teacher_${course.id}" class="form-select">
+                                <option value="">Select Teacher</option>
+                                ${teachers.map(t => `<option value="${t.id}" ${t.id === course.teacher_id ? 'selected' : ''}>${t.first_name} ${t.last_name}</option>`).join('')}
+                            </select>
+                            <button onclick="allocateCourse(${course.id})" class="btn-primary">Allocate</button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        async function allocateCourse(courseId) {
+            const teacherId = document.getElementById(`teacher_${courseId}`).value;
+            if (!teacherId) {
+                alert('Please select a teacher');
+                return;
+            }
+            
+            try {
+                await apiCall('/admin/allocate-course', {
+                    method: 'POST',
+                    body: JSON.stringify({ teacher_id: parseInt(teacherId), course_id: courseId })
+                });
+                alert('Course allocated successfully!');
+                showAllocateCourses();
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // Admin: Load all courses
+        async function loadAllCourses() {
+            const courses = await apiCall('/courses');
+            const content = document.getElementById('dashboardContent');
+            const role = currentUser.role;
+            const backView = (role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher') ? 'admin-dashboard' : 'dashboard';
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('${backView}')" class="btn-back">← Back</button>
+                    <h2>All Courses</h2>
+                </div>
+                <div class="courses-grid">
+                    ${courses.map(course => `
+                        <div class="course-card">
+                            <h3>${course.course_name}</h3>
+                            <p><strong>Code:</strong> ${course.course_code}</p>
+                            <p><strong>Teacher:</strong> ${course.teacher_first_name || ''} ${course.teacher_last_name || 'Unassigned'}</p>
+                            <p><strong>Students:</strong> ${course.enrolled_students || 0}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Superadmin: Load users with pagination
+        let currentUserPage = 1;
+        let currentUserFilters = {};
+
+        async function loadUsers(page = 1, filters = {}) {
+            currentUserPage = page;
+            currentUserFilters = filters;
+            
+            const queryParams = new URLSearchParams({
+                page: page,
+                limit: 20,
+                ...filters
+            });
+            
+            const data = await apiCall(`/admin/users?${queryParams}`);
+            const content = document.getElementById('dashboardContent');
+            const role = currentUser.role;
+            const backView = (role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher') ? 'admin-dashboard' : 'dashboard';
+            
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('${backView}')" class="btn-back">← Back</button>
+                    <h2>User Management</h2>
+                    <button onclick="showAddUserForm()" class="btn-primary">Add User</button>
+                </div>
+                
+                <div class="users-filters">
+                    <div class="filter-group">
+                        <label>Search:</label>
+                        <input type="text" id="user-search" placeholder="Search by name, username, or email" 
+                               value="${filters.search || ''}" onkeyup="filterUsers()">
+                    </div>
+                    <div class="filter-group">
+                        <label>Role:</label>
+                        <select id="user-role-filter" onchange="filterUsers()">
+                            <option value="">All Roles</option>
+                            <option value="student" ${filters.role === 'student' ? 'selected' : ''}>Student</option>
+                            <option value="teacher" ${filters.role === 'teacher' ? 'selected' : ''}>Teacher</option>
+                            <option value="headteacher" ${filters.role === 'headteacher' ? 'selected' : ''}>Headteacher</option>
+                            <option value="parent" ${filters.role === 'parent' ? 'selected' : ''}>Parent</option>
+                            <option value="superadmin" ${filters.role === 'superadmin' ? 'selected' : ''}>Superadmin</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Status:</label>
+                        <select id="user-status-filter" onchange="filterUsers()">
+                            <option value="">All</option>
+                            <option value="true" ${filters.is_active === 'true' ? 'selected' : ''}>Active</option>
+                            <option value="false" ${filters.is_active === 'false' ? 'selected' : ''}>Inactive</option>
+                        </select>
+                    </div>
+                    <button onclick="clearUserFilters()" class="btn-secondary">Clear Filters</button>
+                </div>
+                
+                <div class="users-table">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Username</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.users.length === 0 ? `
+                                <tr>
+                                    <td colspan="7" style="text-align: center; padding: 2rem;">
+                                        No users found.
+                                    </td>
+                                </tr>
+                            ` : data.users.map(user => `
+                                <tr>
+                                    <td>${user.first_name} ${user.last_name}</td>
+                                    <td>${user.username}</td>
+                                    <td>${user.email}</td>
+                                    <td>${user.role}</td>
+                                    <td>${user.is_active ? '<span class="status-active">Active</span>' : '<span class="status-inactive">Inactive</span>'}</td>
+                                    <td>${new Date(user.created_at).toLocaleDateString()}</td>
+                                    <td>
+                                        <button onclick="editUser(${user.id})" class="btn-small">Edit</button>
+                                        <button onclick="toggleUserStatus(${user.id}, ${!user.is_active})" class="btn-small ${user.is_active ? 'btn-danger' : ''}">${user.is_active ? 'Deactivate' : 'Activate'}</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="pagination">
+                    <div class="pagination-info">
+                        Showing ${((page - 1) * 20) + 1} to ${Math.min(page * 20, data.pagination.total_items)} of ${data.pagination.total_items} users
+                    </div>
+                    <div class="pagination-controls">
+                        <button onclick="loadUsers(${page - 1}, currentUserFilters)" 
+                                ${!data.pagination.has_prev ? 'disabled' : ''} 
+                                class="btn-secondary">Previous</button>
+                        <span class="page-numbers">
+                            ${generatePageNumbers(page, data.pagination.total_pages).map(p => 
+                                p === '...' ? '<span>...</span>' : 
+                                `<button onclick="loadUsers(${p}, currentUserFilters)" 
+                                         class="${p === page ? 'active' : ''}">${p}</button>`
+                            ).join('')}
+                        </span>
+                        <button onclick="loadUsers(${page + 1}, currentUserFilters)" 
+                                ${!data.pagination.has_next ? 'disabled' : ''} 
+                                class="btn-secondary">Next</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function generatePageNumbers(currentPage, totalPages) {
+            const pages = [];
+            const maxVisible = 5;
+            
+            if (totalPages <= maxVisible) {
+                for (let i = 1; i <= totalPages; i++) {
+                    pages.push(i);
+                }
+            } else {
+                if (currentPage <= 3) {
+                    for (let i = 1; i <= 4; i++) {
+                        pages.push(i);
+                    }
+                    pages.push('...');
+                    pages.push(totalPages);
+                } else if (currentPage >= totalPages - 2) {
+                    pages.push(1);
+                    pages.push('...');
+                    for (let i = totalPages - 3; i <= totalPages; i++) {
+                        pages.push(i);
+                    }
+                } else {
+                    pages.push(1);
+                    pages.push('...');
+                    for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+                        pages.push(i);
+                    }
+                    pages.push('...');
+                    pages.push(totalPages);
+                }
+            }
+            
+            return pages;
+        }
+
+        let userFilterTimeout;
+        function filterUsers() {
+            clearTimeout(userFilterTimeout);
+            userFilterTimeout = setTimeout(() => {
+                const filters = {
+                    search: document.getElementById('user-search').value.trim() || undefined,
+                    role: document.getElementById('user-role-filter').value || undefined,
+                    is_active: document.getElementById('user-status-filter').value || undefined
+                };
+                loadUsers(1, filters);
+            }, 500);
+        }
+
+        function clearUserFilters() {
+            document.getElementById('user-search').value = '';
+            document.getElementById('user-role-filter').value = '';
+            document.getElementById('user-status-filter').value = '';
+            loadUsers(1, {});
+        }
+
+        async function toggleUserStatus(userId, isActive) {
+            try {
+                await apiCall(`/admin/users/${userId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ is_active: isActive })
+                });
+                alert(`User ${isActive ? 'activated' : 'deactivated'}!`);
+                loadUsers(currentUserPage, currentUserFilters);
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function editUser(userId) {
+            alert('Edit user feature coming soon!');
+            // TODO: Implement user edit functionality
+        }
+
+        function showAddUserForm() {
+            alert('Add user feature coming soon!');
+            // TODO: Implement add user form
+        }
+
+        // Parent: Load children
+        async function loadChildren() {
+            const children = await apiCall(`/users/parent/${currentUser.id}/students`);
+            const content = document.getElementById('dashboardContent');
+            
+            if (children.length === 0) {
+                content.innerHTML = `
+                    <div class="view-header">
+                        <h2>My Children</h2>
+                    </div>
+                    <div class="welcome-message">
+                        <p>No children linked to your account.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            content.innerHTML = `
+                <div class="view-header">
+                    <h2>My Children</h2>
+                </div>
+                <div class="children-list">
+                    ${children.map(child => `
+                        <div class="child-card">
+                            <h3>${child.first_name} ${child.last_name}</h3>
+                            <p>Email: ${child.email}</p>
+                            <button onclick="viewChildProgress(${child.id})" class="btn-view">View Progress</button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        async function viewChildProgress(studentId) {
+            const courses = await apiCall('/courses');
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('children')" class="btn-back">← Back to My Children</button>
+                    <h2>Child's Progress</h2>
+                </div>
+                <div class="courses-grid">
+                    ${courses.map(course => `
+                        <div class="course-card">
+                            <h3>${course.course_name}</h3>
+                            <button onclick="viewChildCourse(${course.id}, ${studentId})" class="btn-view">View Details</button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        async function viewChildCourse(courseId, studentId) {
+            const [grades, attendance] = await Promise.all([
+                apiCall(`/grades/course/${courseId}/student/${studentId}/summary`),
+                apiCall(`/attendance/course/${courseId}?student_id=${studentId}`)
+            ]);
+            
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="viewChildProgress(${studentId})" class="btn-back">← Back</button>
+                    <h2>Course Details</h2>
+                </div>
+                <div class="child-details">
+                    <h3>Grades</h3>
+                    <p>Current Average: ${grades.currentAverage}%</p>
+                    <p>Final Grade: ${grades.finalGrade ? grades.finalGrade.letter_grade : 'N/A'}</p>
+                    <h3>Attendance</h3>
+                    <p>Total Records: ${attendance.length}</p>
+                </div>
+            `;
+        }
+
+        function formatRoleName(role) {
+            const roleNames = {
+                'superadmin': 'Administrator',
+                'headteacher': 'Head of Institution',
+                'deputy_headteacher': 'Deputy Headteacher',
+                'teacher': 'Teacher',
+                'student': 'Learner',
+                'parent': 'Parent',
+                'finance': 'Finance Administrator'
+            };
+            return roleNames[role] || role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+        }
+
+        function toggleUserMenu() {
+            const dropdown = document.getElementById('userMenuDropdown');
+            if (dropdown) {
+                dropdown.classList.toggle('show');
+            }
+        }
+
+        // Close user menu when clicking outside
+        document.addEventListener('click', (e) => {
+            const menu = document.getElementById('userProfileMenu');
+            const dropdown = document.getElementById('userMenuDropdown');
+            if (menu && dropdown && !menu.contains(e.target)) {
+                dropdown.classList.remove('show');
+            }
+        });
+
+        async function loadProfile() {
+            try {
+                const user = await apiCall('/auth/me');
+                const content = document.getElementById('dashboardContent');
+                content.innerHTML = `
+                    <div class="view-header">
+                        <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                        <h2>My Profile</h2>
+                    </div>
+                    <div class="profile-container">
+                        <div class="profile-card">
+                            <div class="profile-header">
+                                <div class="profile-avatar-large">${user.first_name.charAt(0)}${user.last_name.charAt(0)}</div>
+                                <div class="profile-info">
+                                    <h3>${user.first_name} ${user.last_name}</h3>
+                                    <p class="profile-email">${user.email}</p>
+                                    <span class="role-badge role-${user.role}">${formatRoleName(user.role)}</span>
+                                </div>
+                            </div>
+                            <div class="profile-details">
+                                <div class="detail-row">
+                                    <span class="detail-label">Username:</span>
+                                    <span class="detail-value">${user.username || 'N/A'}</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-label">Email:</span>
+                                    <span class="detail-value">${user.email}</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-label">Role:</span>
+                                    <span class="detail-value">${formatRoleName(user.role)}</span>
+                                </div>
+                                ${user.phone ? `
+                                <div class="detail-row">
+                                    <span class="detail-label">Phone:</span>
+                                    <span class="detail-value">${user.phone}</span>
+                                </div>
+                                ` : ''}
+                                ${user.address ? `
+                                <div class="detail-row">
+                                    <span class="detail-label">Address:</span>
+                                    <span class="detail-value">${user.address}</span>
+                                </div>
+                                ` : ''}
+                                ${user.date_of_birth ? `
+                                <div class="detail-row">
+                                    <span class="detail-label">Date of Birth:</span>
+                                    <span class="detail-value">${new Date(user.date_of_birth).toLocaleDateString()}</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                const content = document.getElementById('dashboardContent');
+                content.innerHTML = `<div class="error">Error loading profile: ${error.message}</div>`;
+            }
+        }
+
+        async function loadProfileSettings() {
+            try {
+                const user = await apiCall('/auth/me');
+                const content = document.getElementById('dashboardContent');
+                content.innerHTML = `
+                    <div class="view-header">
+                        <button onclick="loadView('profile')" class="btn-back">← Back to Profile</button>
+                        <h2>Profile Settings</h2>
+                    </div>
+                    <div class="form-container">
+                        <form id="profileSettingsForm" onsubmit="updateProfile(event)">
+                            <div class="form-group">
+                                <label>First Name</label>
+                                <input type="text" name="first_name" value="${user.first_name || ''}" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Last Name</label>
+                                <input type="text" name="last_name" value="${user.last_name || ''}" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Email</label>
+                                <input type="email" name="email" value="${user.email || ''}" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Phone</label>
+                                <input type="text" name="phone" value="${user.phone || ''}">
+                            </div>
+                            <div class="form-group">
+                                <label>Address</label>
+                                <textarea name="address" rows="3">${user.address || ''}</textarea>
+                            </div>
+                            <div class="action-buttons">
+                                <button type="submit" class="btn-primary">Save Changes</button>
+                                <button type="button" onclick="loadView('profile')" class="btn-secondary">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                `;
+            } catch (error) {
+                const content = document.getElementById('dashboardContent');
+                content.innerHTML = `<div class="error">Error loading profile settings: ${error.message}</div>`;
+            }
+        }
+
+        async function updateProfile(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            try {
+                await apiCall(`/users/${currentUser.id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(data)
+                });
+                alert('Profile updated successfully!');
+                loadProfile();
+            } catch (error) {
+                alert('Error updating profile: ' + error.message);
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('authToken');
+            location.reload();
+        }
+    </script>
+</body>
+</html>
+
