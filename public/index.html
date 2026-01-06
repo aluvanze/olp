@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grade 10 OLP System - Online Learner Progress Monitor</title>
+    <title>Senior School OLP - Online Learner Progress Monitor</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
         <div class="login-container">
             <div class="login-left-panel">
                 <div class="login-branding">
-                    <h1 class="brand-title">Grade 10 OLP System</h1>
+                    <h1 class="brand-title">Senior School OLP</h1>
                     <h2 class="brand-subtitle">Online Learner Progress Monitor</h2>
                     <p class="brand-tagline">Unlocking Academic Gates For Future Excellence</p>
                     <p class="brand-description">Competency-Based Curriculum (CBC) Senior School Management Platform for Grades 10-12. Designed for Kenya's education system.</p>
@@ -158,7 +158,7 @@
                 `;
             } else {
                 navButtons = `
-                    <button onclick="loadView('courses')" class="nav-btn">Courses</button>
+                    <button onclick="loadView('courses')" class="nav-btn">Learning Areas</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
             }
@@ -169,7 +169,7 @@
                         <div class="header-content">
                             <div class="header-left">
                                 <div class="system-logo-small">
-                                    <span class="logo-text">Grade 10 OLP</span>
+                                    <span class="logo-text">Senior School OLP</span>
                             </div>
                                 <nav class="main-nav">
                         ${navButtons}
@@ -217,11 +217,16 @@
                     <main class="dashboard-content" id="dashboardContent">
                         <div class="welcome-message">
                             <h2>Welcome, ${currentUser.first_name}!</h2>
-                            <p>Select an option from the navigation menu to get started.</p>
+                            <p>Loading your dashboard...</p>
                         </div>
                     </main>
                 </div>
             `;
+            
+            // Automatically load the dashboard (terms view) after showing the layout
+            setTimeout(() => {
+                loadView('dashboard');
+            }, 100);
         }
 
         async function loadView(viewName) {
@@ -369,7 +374,7 @@
             const content = document.getElementById('dashboardContent');
             content.innerHTML = `
                 <div class="view-header">
-                    <h2>My Courses</h2>
+                    <h2>My Learning Areas</h2>
                 </div>
                 <div class="courses-grid">
                     ${courses.map(course => `
@@ -379,7 +384,7 @@
                             <p>${course.description || ''}</p>
                             <p><strong>Teacher:</strong> ${course.teacher_first_name || ''} ${course.teacher_last_name || ''}</p>
                             <p><strong>Enrolled Students:</strong> ${course.enrolled_students || 0}</p>
-                            <button onclick="viewCourse(${course.id})" class="btn-view">View Course</button>
+                            <button onclick="viewCourse(${course.id})" class="btn-view">View Learning Area</button>
                         </div>
                     `).join('')}
                 </div>
@@ -448,7 +453,7 @@
                     <div class="course-header-section">
                         <div class="course-header-content">
                             <div class="course-header-left">
-                                <button onclick="(function() { try { if (currentTerm && currentAcademicYear) { loadTermCourses(); } else { loadView('term-courses'); } } catch(e) { loadView('term-courses'); } })()" class="btn-back">← Back to Courses</button>
+                                <button onclick="(function() { try { if (currentTerm && currentAcademicYear) { loadTermCourses(); } else { loadView('term-courses'); } } catch(e) { loadView('term-courses'); } })()" class="btn-back">← Back to Learning Areas</button>
                                 <div class="course-title-group">
                                     <h1 class="course-title">${course.course_name}</h1>
                                     ${course.course_code ? `<span class="course-code-badge">${course.course_code}</span>` : ''}
@@ -500,6 +505,7 @@
                     <!-- Course Tabs -->
                     <div class="course-tabs">
                         <button onclick="showCourseViewTab('modules')" class="tab-btn active" id="tab-view-modules">Learning Modules</button>
+                        <button onclick="showCourseViewTab('curriculum')" class="tab-btn" id="tab-view-curriculum">Curriculum</button>
                         <button onclick="showCourseViewTab('assignments')" class="tab-btn" id="tab-view-assignments">Assignments</button>
                         ${attendance.length > 0 || !isReadOnly ? `<button onclick="showCourseViewTab('attendance')" class="tab-btn" id="tab-view-attendance">Attendance</button>` : ''}
                         ${!isReadOnly ? `<button onclick="showCourseViewTab('grades')" class="tab-btn" id="tab-view-grades">Grading</button>` : ''}
@@ -529,19 +535,119 @@
             }
         }
 
+        function renderCourseCurriculum(course) {
+            const role = currentUser.role;
+            const isReadOnly = ['finance', 'parent', 'student'].includes(role);
+            const courseId = window.currentCourseViewData?.courseId || course.id;
+            
+            if (!course.strands || !Array.isArray(course.strands) || course.strands.length === 0) {
+                return `
+                    <div class="course-section">
+                        <div class="section-header">
+                            <h3>Curriculum Structure</h3>
+                            ${!isReadOnly ? `<button onclick="createSubstrand(${courseId})" class="btn-primary">Create Sub-strand</button>` : ''}
+                        </div>
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📚</div>
+                            <h4>No Curriculum Data</h4>
+                            <p>Curriculum sub-strands have not been configured for this learning area yet.</p>
+                            ${!isReadOnly ? `<p>Click "Create Sub-strand" to add curriculum content.</p>` : ''}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            let html = `
+                <div class="course-section">
+                    <div class="section-header">
+                        <h3>Curriculum Structure</h3>
+                        ${!isReadOnly ? `<button onclick="createSubstrand(${courseId})" class="btn-primary">Create Sub-strand</button>` : ''}
+                        <p class="section-description">Strands, Sub-strands, and Learning Indicators for ${course.course_name || course.learning_area_name || 'this learning area'}</p>
+                    </div>
+                    <div class="curriculum-container">
+            `;
+            
+            course.strands.forEach((strand, strandIndex) => {
+                html += `
+                    <div class="strand-card">
+                        <div class="strand-header">
+                            <div class="strand-number">${strandIndex + 1}</div>
+                            <div class="strand-info">
+                                <h4 class="strand-name">${strand.strand_name || 'Unnamed Strand'}</h4>
+                                ${strand.strand_code ? `<span class="strand-code">${strand.strand_code}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="sub-strands-list">
+                `;
+                
+                if (strand.sub_strands && Array.isArray(strand.sub_strands)) {
+                    strand.sub_strands.forEach((subStrand, subIndex) => {
+                        html += `
+                            <div class="sub-strand-item">
+                                <div class="sub-strand-header">
+                                    <div class="sub-strand-number">${strandIndex + 1}.${subIndex + 1}</div>
+                                    <div class="sub-strand-info">
+                                        <h5 class="sub-strand-name">${subStrand.sub_strand_name || 'Unnamed Sub-strand'}</h5>
+                                        ${subStrand.sub_strand_code ? `<span class="sub-strand-code">${subStrand.sub_strand_code}</span>` : ''}
+                                    </div>
+                                </div>
+                        `;
+                        
+                        if (subStrand.indicators && Array.isArray(subStrand.indicators) && subStrand.indicators.length > 0) {
+                            html += `
+                                <div class="indicators-list">
+                                    <h6 class="indicators-title">Learning Indicators:</h6>
+                                    <ul class="indicators-ul">
+                            `;
+                            
+                            subStrand.indicators.forEach((indicator, indIndex) => {
+                                html += `
+                                    <li class="indicator-item">
+                                        <span class="indicator-code">${indicator.indicator_code || `${strandIndex + 1}.${subIndex + 1}.${indIndex + 1}`}</span>
+                                        <span class="indicator-name">${indicator.indicator_name || 'Unnamed Indicator'}</span>
+                                    </li>
+                                `;
+                            });
+                            
+                            html += `
+                                    </ul>
+                                </div>
+                            `;
+                        }
+                        
+                        html += `
+                            </div>
+                        `;
+                    });
+                }
+                
+                html += `
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+
         function renderCourseViewModules(modules, courseId, isReadOnly) {
             return `
                 <div class="course-section">
                     <div class="section-header">
                         <h3>Learning Modules</h3>
-                        ${!isReadOnly ? `<button onclick="createModule(${courseId})" class="btn-primary">Add Module</button>` : ''}
+                        ${!isReadOnly ? `<button onclick="createSubstrand(${courseId})" class="btn-primary">Create Sub-strand</button>` : ''}
                     </div>
                         <div class="modules-list">
                         ${modules.length === 0 ? `
                             <div class="empty-state">
                                 <div class="empty-state-icon">📖</div>
                                 <h4>No Learning Modules</h4>
-                                <p>${isReadOnly ? 'No learning modules have been added to this course yet.' : 'Add a module to get started.'}</p>
+                                <p>${isReadOnly ? 'No learning modules have been added to this learning area yet.' : 'Add a module to get started.'}</p>
                             </div>
                         ` : modules.map(module => `
                                 <div class="module-card">
@@ -578,6 +684,9 @@
             switch(tabName) {
                 case 'modules':
                     content.innerHTML = renderCourseViewModules(data.modules, data.courseId, data.isReadOnly);
+                    break;
+                case 'curriculum':
+                    content.innerHTML = renderCourseCurriculum(data.course);
                     break;
                 case 'assignments':
                     content.innerHTML = `
@@ -695,7 +804,7 @@
                                     <div class="empty-state">
                                         <div class="empty-state-icon">👥</div>
                                         <h4>No Enrolled Students</h4>
-                                        <p>No students are currently enrolled in this course.</p>
+                                        <p>No students are currently enrolled in this learning area.</p>
                                     </div>
                                 ` : `
                                     <table class="data-table">
@@ -1106,7 +1215,7 @@
                 content.innerHTML = `
                     <div class="view-header">
                         <h2>${roleName} Dashboard - ${currentYear}</h2>
-                        <p class="view-subtitle">Welcome back, ${currentUser.first_name || 'User'}. Select a term to view courses and manage academic activities.</p>
+                        <p class="view-subtitle">Welcome back, ${currentUser.first_name || 'User'}. Select a term to view learning areas and manage academic activities.</p>
                     </div>
                     <div class="terms-section">
                         <h3 class="section-title">Academic Terms</h3>
@@ -1179,7 +1288,7 @@
             } else if (role === 'student') {
                 courses = await apiCall(`/courses?academic_year=${currentAcademicYear}`);
             } else {
-                // Admin roles see all courses for the term
+                // Admin roles see all learning areas for the term
                 courses = await apiCall(`/courses?academic_year=${currentAcademicYear}`);
             }
             
@@ -1264,7 +1373,7 @@
                                             </div>
                                         ` : ''}
                                         <button class="learning-area-action-btn" onclick="event.stopPropagation(); ${canManageCourse ? `viewCourseDetails(${course.id})` : `viewCourse(${course.id})`}">
-                                            Open Course
+                                            Open Learning Area
                                             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-left: 8px;">
                                                 <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                                             </svg>
@@ -1278,7 +1387,7 @@
             `;
         }
 
-        // View course details with modules, attendance, assignments (teachers and admins)
+        // View learning area details with modules, attendance, assignments (teachers and admins)
         async function viewCourseDetails(courseId) {
             if (!currentTerm || !currentAcademicYear) {
                 alert('Please select a term first');
@@ -1329,7 +1438,7 @@
                 <div class="course-section">
                     <div class="section-header">
                         <h3>Learning Modules</h3>
-                        <button onclick="createModule(${courseId})" class="btn-primary">Add Module</button>
+                        <button onclick="createSubstrand(${courseId})" class="btn-primary">Create Sub-strand</button>
                     </div>
                     <div class="modules-list">
                         ${modules.length === 0 ? '<p>No modules yet. Add a module to get started.</p>' : modules.map(module => `
@@ -1398,6 +1507,224 @@
                 viewCourseDetails(courseId);
             } catch (error) {
                 alert('Error: ' + error.message);
+            }
+        }
+
+        async function createSubstrand(courseId) {
+            try {
+                // Get course to find learning area
+                const course = await apiCall(`/courses/${courseId}`);
+                if (!course.learning_area_id) {
+                    alert('This course is not linked to a learning area. Please contact administrator.');
+                    return;
+                }
+                
+                // Get current strands and sub-strands
+                const substrandData = await apiCall(`/substrands/learning-area/${course.learning_area_id}`);
+                const { strands, learningArea } = substrandData;
+                
+                if (!strands || strands.length === 0) {
+                    alert('No strands found for this learning area. Please contact administrator to set up the curriculum structure.');
+                    return;
+                }
+                
+                // Show form to create sub-strand
+                showCreateSubstrandForm(courseId, course.learning_area_id, strands, learningArea);
+            } catch (error) {
+                console.error('Error loading sub-strand form:', error);
+                alert('Error: ' + (error.message || 'Failed to load sub-strand form'));
+            }
+        }
+        
+        function showCreateSubstrandForm(courseId, learningAreaId, strands, learningArea) {
+            const modal = document.createElement('div');
+            modal.id = 'create-substrand-modal';
+            modal.className = 'modal-overlay';
+            modal.onclick = function(e) {
+                if (e.target === modal) {
+                    closeSubstrandModal();
+                }
+            };
+            
+            modal.innerHTML = `
+                <div class="modal-content modal-large">
+                    <div class="modal-header">
+                        <h2>Create Sub-strand - ${learningArea.name}</h2>
+                        <button onclick="closeSubstrandModal()" class="modal-close">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="create-substrand-form" onsubmit="saveSubstrand(event, ${courseId}, ${learningAreaId})">
+                            <div class="form-group">
+                                <label>Select Strand *</label>
+                                <select id="strand-select" name="strand_code" required onchange="updateStrandInfo(this.value)">
+                                    <option value="">-- Select a Strand --</option>
+                                    ${strands.map((strand, idx) => `
+                                        <option value="${strand.strand_code}">${strand.strand_name || `Strand ${idx + 1}`}</option>
+                                    `).join('')}
+                                </select>
+                                <small class="form-help-text">Choose the strand where you want to add this sub-strand</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Sub-strand Code *</label>
+                                <input type="text" id="substrand-code" name="sub_strand_code" placeholder="e.g., SS1.1, SS2.3" required>
+                                <small class="form-help-text">Unique code for this sub-strand (e.g., SS1.1 for first sub-strand in Strand 1)</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Sub-strand Name *</label>
+                                <input type="text" id="substrand-name" name="sub_strand_name" placeholder="e.g., Listening Comprehension" required>
+                                <small class="form-help-text">Descriptive name for this sub-strand</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Learning Indicators</label>
+                                <div id="indicators-container">
+                                    <div class="indicator-item-input" style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center;">
+                                        <input type="text" class="indicator-code-input" placeholder="Code (e.g., IND1.1.1)" style="width: 120px;">
+                                        <input type="text" class="indicator-name-input" placeholder="Indicator description" style="flex: 1;">
+                                        <button type="button" onclick="removeIndicator(this)" class="btn-danger btn-small">Remove</button>
+                                    </div>
+                                </div>
+                                <button type="button" onclick="addIndicatorInput()" class="btn-secondary" style="margin-top: 0.5rem;">+ Add Indicator</button>
+                                <small class="form-help-text">Add learning indicators for this sub-strand</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Rubrics (Levels 1-4)</label>
+                                <div id="rubrics-container">
+                                    ${[1, 2, 3, 4].map(level => `
+                                        <div class="rubric-level-input" style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #ddd; border-radius: 4px;">
+                                            <h4>Level ${level}</h4>
+                                            <input type="text" name="rubric_level_${level}_name" placeholder="Level ${level} Name (e.g., ${level === 1 ? 'Below Basic' : level === 2 ? 'Basic' : level === 3 ? 'Proficient' : 'Advanced'})" style="width: 100%; margin-bottom: 0.5rem;">
+                                            <textarea name="rubric_level_${level}_description" placeholder="Description of what Level ${level} means" rows="2" style="width: 100%;"></textarea>
+                                            <input type="number" name="rubric_level_${level}_score" placeholder="Score (e.g., ${level * 25})" min="0" max="100" step="1" style="width: 100px; margin-top: 0.5rem;">
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <small class="form-help-text">Define rubric levels for assessment (1 = Below Basic, 2 = Basic, 3 = Proficient, 4 = Advanced)</small>
+                            </div>
+                            
+                            <div class="form-actions">
+                                <button type="submit" class="btn-primary">Create Sub-strand</button>
+                                <button type="button" onclick="closeSubstrandModal()" class="btn-secondary">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            
+            // Remove existing modal if any
+            const existingModal = document.getElementById('create-substrand-modal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            document.body.appendChild(modal);
+            modal.style.display = 'flex';
+            
+            setTimeout(() => {
+                modal.classList.add('show');
+            }, 10);
+        }
+        
+        function updateStrandInfo(strandCode) {
+            const strandSelect = document.getElementById('strand-select');
+            const selectedOption = strandSelect.options[strandSelect.selectedIndex];
+            const strandNumber = selectedOption ? selectedOption.text.match(/\d+/)?.[0] || '1' : '1';
+            
+            const substrandCodeInput = document.getElementById('substrand-code');
+            if (substrandCodeInput && !substrandCodeInput.value) {
+                substrandCodeInput.value = `SS${strandNumber}.1`;
+            }
+        }
+        
+        function addIndicatorInput() {
+            const container = document.getElementById('indicators-container');
+            const newInput = document.createElement('div');
+            newInput.className = 'indicator-item-input';
+            newInput.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center;';
+            newInput.innerHTML = `
+                <input type="text" class="indicator-code-input" placeholder="Code (e.g., IND1.1.1)" style="width: 120px;">
+                <input type="text" class="indicator-name-input" placeholder="Indicator description" style="flex: 1;">
+                <button type="button" onclick="removeIndicator(this)" class="btn-danger btn-small">Remove</button>
+            `;
+            container.appendChild(newInput);
+        }
+        
+        function removeIndicator(button) {
+            button.closest('.indicator-item-input').remove();
+        }
+        
+        async function saveSubstrand(e, courseId, learningAreaId) {
+            e.preventDefault();
+            
+            const form = e.target;
+            const strandCode = form.strand_code.value;
+            const subStrandCode = form.sub_strand_code.value;
+            const subStrandName = form.sub_strand_name.value;
+            
+            // Collect indicators
+            const indicators = [];
+            document.querySelectorAll('.indicator-item-input').forEach(item => {
+                const code = item.querySelector('.indicator-code-input').value;
+                const name = item.querySelector('.indicator-name-input').value;
+                if (code && name) {
+                    indicators.push({
+                        indicator_code: code,
+                        indicator_name: name
+                    });
+                }
+            });
+            
+            // Collect rubrics
+            const rubrics = [];
+            for (let level = 1; level <= 4; level++) {
+                const name = form[`rubric_level_${level}_name`].value;
+                const description = form[`rubric_level_${level}_description`].value;
+                const score = parseFloat(form[`rubric_level_${level}_score`].value) || (level * 25);
+                
+                if (name || description) {
+                    rubrics.push({
+                        level: level,
+                        name: name || `Level ${level}`,
+                        description: description,
+                        score: score
+                    });
+                }
+            }
+            
+            try {
+                await apiCall(`/substrands/learning-area/${learningAreaId}/strand/${strandCode}/substrand`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        sub_strand_code: subStrandCode,
+                        sub_strand_name: subStrandName,
+                        indicators: indicators,
+                        rubrics: rubrics
+                    })
+                });
+                
+                alert('Sub-strand created successfully!');
+                closeSubstrandModal();
+                
+                // Reload course view to show updated curriculum
+                if (window.currentCourseViewData && window.currentCourseViewData.courseId) {
+                    await viewCourseDetails(window.currentCourseViewData.courseId);
+                }
+            } catch (error) {
+                console.error('Error creating sub-strand:', error);
+                alert('Error creating sub-strand: ' + (error.message || 'Server error'));
+            }
+        }
+        
+        function closeSubstrandModal() {
+            const modal = document.getElementById('create-substrand-modal');
+            if (modal) {
+                modal.classList.remove('show');
+                setTimeout(() => {
+                    modal.remove();
+                }, 300);
             }
         }
 
@@ -1747,7 +2074,7 @@
                     ${enrollments.map(enrollment => `
                         <div class="enrollment-card">
                             <h4>${enrollment.first_name} ${enrollment.last_name}</h4>
-                            <p><strong>Course:</strong> ${enrollment.course_name} (${enrollment.course_code})</p>
+                            <p><strong>Learning Area:</strong> ${enrollment.course_name} (${enrollment.course_code})</p>
                             <p><strong>Requested:</strong> ${new Date(enrollment.created_at).toLocaleDateString()}</p>
                             <div class="action-buttons">
                                 <button onclick="authorizeEnrollment(${enrollment.id}, 'approved')" class="btn-success">Approve</button>
@@ -2080,6 +2407,20 @@
                                         <input type="date" name="end_date" id="end-date" class="term-form-input">
                                         <small class="form-help-text">Specific end date for precise scheduling.</small>
                                 </div>
+                                <div class="form-group" id="migrate-structure-group" style="display: none;">
+                                    <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <input type="checkbox" id="migrate-structure" name="migrate_structure" onchange="toggleMigrateOptions()">
+                                        <span>Migrate Structure from Previous Term</span>
+                                    </label>
+                                    <small class="form-help-text">Copy learning areas, curriculum structure (strands, sub-strands, rubrics), and teacher assignments. Student data (enrollments, grades, attendance) will NOT be migrated.</small>
+                                    <div id="migrate-options" style="display: none; margin-top: 1rem; padding: 1rem; background: #f5f5f5; border-radius: 4px;">
+                                        <label>Select Source Term *</label>
+                                        <select name="source_term_id" id="source-term-id" class="term-form-select">
+                                            <option value="">-- Select a previous term --</option>
+                                        </select>
+                                        <small class="form-help-text">Choose which term's structure to copy to this new term.</small>
+                                    </div>
+                                </div>
                                 <div class="form-actions">
                                     <button type="submit" class="btn-primary">Save Term</button>
                                     <button type="button" onclick="closeTermModal()" class="btn-secondary">Cancel</button>
@@ -2094,17 +2435,62 @@
             }
         }
 
-        function showCreateTermForm() {
+        async function showCreateTermForm() {
             document.getElementById('term-form-title').textContent = 'Create New Term';
             document.getElementById('term-form').reset();
             document.getElementById('term-id').value = '';
             document.getElementById('academic-year').value = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+            document.getElementById('migrate-structure-group').style.display = 'block';
+            document.getElementById('migrate-structure').checked = false;
+            document.getElementById('migrate-options').style.display = 'none';
+            
+            // Load previous terms for migration dropdown
+            try {
+                const terms = await apiCall('/terms');
+                const sourceTermSelect = document.getElementById('source-term-id');
+                sourceTermSelect.innerHTML = '<option value="">-- Select a previous term --</option>';
+                
+                // Filter and sort terms (most recent first)
+                const sortedTerms = terms
+                    .filter(t => t.is_active !== false)
+                    .sort((a, b) => {
+                        if (a.academic_year !== b.academic_year) {
+                            return b.academic_year.localeCompare(a.academic_year);
+                        }
+                        return b.term_number - a.term_number;
+                    });
+                
+                sortedTerms.forEach(term => {
+                    const option = document.createElement('option');
+                    option.value = term.id;
+                    option.textContent = `${term.name} (${term.academic_year})`;
+                    sourceTermSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading terms for migration:', error);
+            }
+            
             const modal = document.getElementById('term-form-modal');
             modal.style.display = 'flex';
             // Smooth animation
             setTimeout(() => {
                 modal.classList.add('show');
             }, 10);
+        }
+        
+        function toggleMigrateOptions() {
+            const checkbox = document.getElementById('migrate-structure');
+            const options = document.getElementById('migrate-options');
+            const sourceTermSelect = document.getElementById('source-term-id');
+            
+            if (checkbox.checked) {
+                options.style.display = 'block';
+                sourceTermSelect.required = true;
+            } else {
+                options.style.display = 'none';
+                sourceTermSelect.required = false;
+                sourceTermSelect.value = '';
+            }
         }
 
         async function editTerm(termId) {
@@ -2119,6 +2505,8 @@
                 document.getElementById('date-range-end').value = term.date_range_end;
                 document.getElementById('start-date').value = term.start_date || '';
                 document.getElementById('end-date').value = term.end_date || '';
+                // Hide migration options when editing
+                document.getElementById('migrate-structure-group').style.display = 'none';
                 const modal = document.getElementById('term-form-modal');
                 modal.style.display = 'flex';
                 // Smooth animation
@@ -2152,19 +2540,39 @@
                     showToast('Term updated successfully!', 'success');
                 } else {
                     // Create new term
-                    await apiCall('/terms', {
+                    const termData = {
+                        term_number: parseInt(data.term_number),
+                        academic_year: data.academic_year,
+                        name: data.name,
+                        date_range_start: data.date_range_start,
+                        date_range_end: data.date_range_end,
+                        start_date: data.start_date || null,
+                        end_date: data.end_date || null
+                    };
+                    
+                    const newTerm = await apiCall('/terms', {
                         method: 'POST',
-                        body: JSON.stringify({
-                            term_number: parseInt(data.term_number),
-                            academic_year: data.academic_year,
-                            name: data.name,
-                            date_range_start: data.date_range_start,
-                            date_range_end: data.date_range_end,
-                            start_date: data.start_date || null,
-                            end_date: data.end_date || null
-                        })
+                        body: JSON.stringify(termData)
                     });
-                    showToast('Term created successfully!', 'success');
+                    
+                    // If migration is requested, migrate structure
+                    if (data.migrate_structure === 'on' && data.source_term_id) {
+                        try {
+                            showToast('Migrating structure from previous term...', 'info');
+                            await apiCall(`/terms/${newTerm.id}/migrate-structure`, {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                    source_term_id: parseInt(data.source_term_id)
+                                })
+                            });
+                            showToast('Term created and structure migrated successfully!', 'success');
+                        } catch (migrateError) {
+                            console.error('Migration error:', migrateError);
+                            showToast('Term created, but migration failed: ' + migrateError.message, 'error');
+                        }
+                    } else {
+                        showToast('Term created successfully!', 'success');
+                    }
                 }
                 closeTermModal();
                 loadManageTerms();
@@ -2243,7 +2651,7 @@
             content.innerHTML = `
                 <div class="view-header">
                     <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
-                    <h2>Manage Student Course Enrollment - Term ${currentTerm} ${currentAcademicYear}</h2>
+                    <h2>Manage Student Learning Area Enrollment - Term ${currentTerm} ${currentAcademicYear}</h2>
                 </div>
                 
                 <div class="student-search-section">
@@ -2291,7 +2699,7 @@
                         <p><strong>Student Found:</strong> ${student.first_name} ${student.last_name}</p>
                         <p>Username: ${student.username} | Email: ${student.email}</p>
                         ${student.pathway_name ? `<p>Pathway: ${student.pathway_name}</p>` : ''}
-                        <button onclick="loadStudentCourseManagement(${student.id})" class="btn-primary">Manage Courses</button>
+                        <button onclick="loadStudentCourseManagement(${student.id})" class="btn-primary">Manage Learning Areas</button>
                     </div>
                 `;
             } catch (error) {
@@ -2300,16 +2708,70 @@
         }
 
         async function loadStudentCourseManagement(studentId) {
-            selectedStudentId = studentId;
-            pendingCourseSelections.clear();
+            console.log('loadStudentCourseManagement called with studentId:', studentId);
             
-            if (!currentAcademicYear) {
-                alert('Please select a term first from the dashboard');
-                loadView('dashboard');
+            // Ensure studentId is a number
+            studentId = parseInt(studentId);
+            if (isNaN(studentId)) {
+                alert('Invalid student ID');
                 return;
             }
             
+            selectedStudentId = studentId;
+            pendingCourseSelections.clear();
+            
+            // If no academic year is set, try to get the current year
+            if (!currentAcademicYear) {
+                const currentYear = new Date().getFullYear();
+                currentAcademicYear = `${currentYear}-${currentYear + 1}`;
+                console.log('Auto-set academic year to:', currentAcademicYear);
+            }
+            
+            // If no term is set, default to term 1
+            if (!currentTerm) {
+                currentTerm = 1;
+                console.log('Auto-set term to:', currentTerm);
+            }
+            
+            // If student info is not available, fetch it
+            if (!selectedStudentInfo || selectedStudentInfo.id !== studentId) {
+                try {
+                    console.log('Fetching student info for ID:', studentId);
+                    const students = await apiCall(`/student-registration/students?search=${studentId}`);
+                    if (students && students.length > 0) {
+                        selectedStudentInfo = students.find(s => s.id === studentId) || students[0];
+                        console.log('Found student info:', selectedStudentInfo);
+                    } else {
+                        // Try to get student by ID directly
+                        const studentData = await apiCall(`/users/${studentId}`);
+                        selectedStudentInfo = {
+                            id: studentData.id,
+                            first_name: studentData.first_name,
+                            last_name: studentData.last_name,
+                            username: studentData.username,
+                            email: studentData.email,
+                            admission_number: null,
+                            pathway_name: null
+                        };
+                        console.log('Fetched student from users table:', selectedStudentInfo);
+                    }
+                } catch (e) {
+                    console.error('Error fetching student info:', e);
+                    // Continue with basic info
+                    selectedStudentInfo = {
+                        id: studentId,
+                        first_name: 'Student',
+                        last_name: `#${studentId}`,
+                        username: '',
+                        email: '',
+                        admission_number: null,
+                        pathway_name: null
+                    };
+                }
+            }
+            
             try {
+                console.log('Fetching enrollments and courses...');
                 const [currentEnrollments, coursesByCategory] = await Promise.all([
                     apiCall(`/student-registration/students/${studentId}/enrollments?academic_year=${currentAcademicYear}`),
                     apiCall(`/courses/by-category/${currentAcademicYear}`)
@@ -2376,7 +2838,22 @@
                     </div>
                 `;
                 
+                // Remove any existing modal first
+                const existingModal = document.getElementById('course-management-modal');
+                if (existingModal) {
+                    existingModal.remove();
+                }
+                
                 document.body.appendChild(modal);
+                
+                // Ensure modal is visible
+                modal.style.display = 'flex';
+                
+                // Show modal with animation
+                setTimeout(() => {
+                    modal.classList.add('show');
+                }, 10);
+                
                 updateSaveButton();
                 
                 // Close on Escape key
@@ -2387,15 +2864,21 @@
                     }
                 };
                 document.addEventListener('keydown', escapeHandler);
+                
+                console.log('Modal created and displayed successfully');
             } catch (error) {
-                alert('Error loading course management: ' + error.message);
+                console.error('Error loading course management:', error);
+                alert('Error loading course management: ' + (error.message || 'Unknown error. Please check the console (F12) for details.'));
             }
         }
 
         function closeCourseManagementModal() {
             const modal = document.getElementById('course-management-modal');
             if (modal) {
-                modal.remove();
+                modal.classList.remove('show');
+                setTimeout(() => {
+                    modal.remove();
+                }, 300);
             }
             pendingCourseSelections.clear();
         }
@@ -2816,7 +3299,7 @@
                     })
                 });
                 
-                alert(`Student registered successfully! Enrolled in ${result.courses_enrolled} course(s).`);
+                alert(`Student registered successfully! Enrolled in ${result.courses_enrolled} learning area(s).`);
                 e.target.reset();
             } catch (error) {
                 alert('Error registering student: ' + error.message);
@@ -3002,8 +3485,8 @@
                         ` : ''}
                         <div class="action-card" onclick="loadView('all-courses')" style="cursor: pointer;">
                             <div class="action-icon">📖</div>
-                            <h4>All Courses</h4>
-                            <p>View and manage all courses</p>
+                            <h4>All Learning Areas</h4>
+                            <p>View and manage all learning areas</p>
                         </div>
                         <div class="action-card" onclick="loadView('teachers-overview')" style="cursor: pointer;">
                             <div class="action-icon">🎓</div>
@@ -3166,7 +3649,7 @@
             content.innerHTML = `
                 <div class="view-header">
                     <button onclick="loadView('${backView}')" class="btn-back">← Back</button>
-                    <h2>Allocate Courses to Teachers</h2>
+                    <h2>Allocate Learning Areas to Teachers</h2>
                 </div>
                 <div class="courses-grid">
                     ${courses.map(course => `
@@ -3212,7 +3695,7 @@
             content.innerHTML = `
                 <div class="view-header">
                     <button onclick="loadView('${backView}')" class="btn-back">← Back</button>
-                    <h2>All Courses</h2>
+                    <h2>All Learning Areas</h2>
                 </div>
                 <div class="courses-grid">
                     ${courses.map(course => `
@@ -3482,7 +3965,7 @@
             content.innerHTML = `
                 <div class="view-header">
                     <button onclick="viewChildProgress(${studentId})" class="btn-back">← Back</button>
-                    <h2>Course Details</h2>
+                    <h2>Learning Area Details</h2>
                 </div>
                 <div class="child-details">
                     <h3>Grades</h3>

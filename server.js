@@ -16,6 +16,7 @@ const assessmentRoutes = require('./routes/assessments');
 const termRoutes = require('./routes/terms');
 const studentRegistrationRoutes = require('./routes/student-registration');
 const teacherAssignmentRoutes = require('./routes/teacher-assignments');
+const substrandRoutes = require('./routes/substrands');
 const { pool } = require('./config/database');
 
 const app = express();
@@ -78,10 +79,11 @@ app.use('/api/assessments', assessmentRoutes);
 app.use('/api/terms', termRoutes);
 app.use('/api/student-registration', studentRegistrationRoutes);
 app.use('/api/teacher-assignments', teacherAssignmentRoutes);
+app.use('/api/substrands', substrandRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Grade 10 LMS API is running' });
+  res.json({ status: 'ok', message: 'Senior School OLP API is running' });
 });
 
 // Error handling middleware
@@ -99,7 +101,7 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Grade 10 LMS Server running on port ${PORT}`);
+  console.log(`Senior School OLP Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 

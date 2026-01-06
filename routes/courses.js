@@ -279,12 +279,15 @@ router.get('/term/:term/:academicYear', async (req, res) => {
 });
 
 // Get course by ID with detailed info
+// Get course by ID with learning area strands
 router.get('/:id', async (req, res) => {
   try {
     const courseResult = await pool.query(
-      `SELECT c.*, u.first_name as teacher_first_name, u.last_name as teacher_last_name
+      `SELECT c.*, u.first_name as teacher_first_name, u.last_name as teacher_last_name,
+              la.strands, la.name as learning_area_name, la.code as learning_area_code
        FROM courses c
        LEFT JOIN users u ON c.teacher_id = u.id
+       LEFT JOIN learning_areas la ON c.learning_area_id = la.id
        WHERE c.id = $1`,
       [req.params.id]
     );
@@ -294,6 +297,15 @@ router.get('/:id', async (req, res) => {
     }
     
     const course = courseResult.rows[0];
+    
+    // Parse strands if they exist
+    if (course.strands && typeof course.strands === 'string') {
+      try {
+        course.strands = JSON.parse(course.strands);
+      } catch (e) {
+        course.strands = null;
+      }
+    }
     
     // Check access permissions
     if (req.user.role === 'student') {
