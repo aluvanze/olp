@@ -44,7 +44,18 @@ router.post('/login',
         return res.status(401).json({ message: 'Invalid username or password' });
       }
       
-      // Generate JWT token
+      // Get available grades for the user
+      let gradesResult;
+      try {
+        gradesResult = await pool.query(
+          'SELECT id, grade_number, name, description FROM grade_levels WHERE is_active = true ORDER BY grade_number'
+        );
+      } catch (gradeError) {
+        console.error('Error fetching grades:', gradeError);
+        gradesResult = { rows: [] };
+      }
+      
+      // Generate JWT token (without grade_id initially - user will select grade)
       if (!process.env.JWT_SECRET) {
         console.error('JWT_SECRET is not set in environment variables');
         return res.status(500).json({ message: 'Server configuration error' });
@@ -56,6 +67,9 @@ router.post('/login',
         { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
       );
       
+      // Always require grade selection if grades are available
+      const requiresGradeSelection = gradesResult.rows.length > 0;
+      
       res.json({
         message: 'Login successful',
         token,
@@ -66,7 +80,9 @@ router.post('/login',
           role: user.role,
           first_name: user.first_name,
           last_name: user.last_name
-        }
+        },
+        available_grades: gradesResult.rows,
+        requires_grade_selection: requiresGradeSelection
       });
     } catch (error) {
       console.error('Login error:', error);
@@ -74,6 +90,62 @@ router.post('/login',
     }
   }
 );
+
+// Get available grades
+router.get('/grades', authenticate, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, grade_number, name, description FROM grade_levels WHERE is_active = true ORDER BY grade_number'
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get grades error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Select grade and update token
+router.post('/select-grade', authenticate, async (req, res) => {
+  try {
+    const { grade_id } = req.body;
+    
+    if (!grade_id) {
+      return res.status(400).json({ message: 'grade_id is required' });
+    }
+    
+    // Verify grade exists and is active
+    const gradeResult = await pool.query(
+      'SELECT id, grade_number, name, description FROM grade_levels WHERE id = $1 AND is_active = true',
+      [grade_id]
+    );
+    
+    if (gradeResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Grade not found or inactive' });
+    }
+    
+    const grade = gradeResult.rows[0];
+    
+    // Generate new token with grade_id included
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({ message: 'Server configuration error' });
+    }
+    
+    const token = jwt.sign(
+      { userId: req.user.id, role: req.user.role, grade_id: grade.id, grade_number: grade.grade_number },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
+    
+    res.json({
+      message: 'Grade selected successfully',
+      token,
+      grade: grade
+    });
+  } catch (error) {
+    console.error('Select grade error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
 // Get current user profile
 router.get('/me', authenticate, async (req, res) => {
@@ -89,7 +161,18 @@ router.get('/me', authenticate, async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
     
-    res.json(result.rows[0]);
+    const user = result.rows[0];
+    
+    // Include grade information if available in token
+    if (req.user.grade_id) {
+      const gradeResult = await pool.query(
+        'SELECT id, grade_number, name, description FROM grade_levels WHERE id = $1',
+        [req.user.grade_id]
+      );
+      user.current_grade = gradeResult.rows[0] || null;
+    }
+    
+    res.json(user);
   } catch (error) {
     console.error('Get profile error:', error);
     res.status(500).json({ message: 'Server error' });

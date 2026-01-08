@@ -242,5 +242,201 @@ router.post('/:id/migrate-structure', authorize('headteacher', 'superadmin'), as
   }
 });
 
+// Get all users in a term (Headteacher/Superadmin)
+router.get('/:id/users', authorize('headteacher', 'superadmin', 'deputy_headteacher'), async (req, res) => {
+  try {
+    const { id: termId } = req.params;
+    const { role, search } = req.query;
+    
+    // Verify term exists
+    const termCheck = await pool.query('SELECT id, name, academic_year FROM terms WHERE id = $1', [termId]);
+    if (termCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'Term not found' });
+    }
+    
+    let query = `
+      SELECT 
+        u.id, u.username, u.email, u.first_name, u.last_name, u.role, u.phone, u.is_active,
+        ut.id as user_term_id, ut.notes, ut.created_at as added_at,
+        adder.first_name as added_by_first_name, adder.last_name as added_by_last_name
+      FROM user_terms ut
+      INNER JOIN users u ON ut.user_id = u.id
+      LEFT JOIN users adder ON ut.added_by = adder.id
+      WHERE ut.term_id = $1
+    `;
+    
+    const params = [termId];
+    let paramCount = 2;
+    
+    if (role) {
+      query += ` AND u.role = $${paramCount}`;
+      params.push(role);
+      paramCount++;
+    }
+    
+    if (search) {
+      query += ` AND (u.first_name ILIKE $${paramCount} OR u.last_name ILIKE $${paramCount} OR u.username ILIKE $${paramCount} OR u.email ILIKE $${paramCount})`;
+      params.push(`%${search}%`);
+      paramCount++;
+    }
+    
+    query += ' ORDER BY u.role, u.last_name, u.first_name';
+    
+    const result = await pool.query(query, params);
+    
+    res.json({
+      term: termCheck.rows[0],
+      users: result.rows,
+      count: result.rows.length
+    });
+  } catch (error) {
+    console.error('Get term users error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Add users to a term (Headteacher/Superadmin)
+router.post('/:id/users', authorize('headteacher', 'superadmin'), async (req, res) => {
+  try {
+    const { id: termId } = req.params;
+    const { user_ids, notes } = req.body; // user_ids is an array of user IDs
+    
+    if (!user_ids || !Array.isArray(user_ids) || user_ids.length === 0) {
+      return res.status(400).json({ message: 'user_ids array is required and must not be empty' });
+    }
+    
+    // Verify term exists
+    const termCheck = await pool.query('SELECT id, name, academic_year FROM terms WHERE id = $1', [termId]);
+    if (termCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'Term not found' });
+    }
+    
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      const addedUsers = [];
+      const skippedUsers = [];
+      
+      for (const userId of user_ids) {
+        // Verify user exists
+        const userCheck = await client.query(
+          'SELECT id, username, first_name, last_name, role FROM users WHERE id = $1 AND is_active = true',
+          [userId]
+        );
+        
+        if (userCheck.rows.length === 0) {
+          skippedUsers.push({ user_id: userId, reason: 'User not found or inactive' });
+          continue;
+        }
+        
+        // Check if user is already in this term
+        const existingCheck = await client.query(
+          'SELECT id FROM user_terms WHERE user_id = $1 AND term_id = $2',
+          [userId, termId]
+        );
+        
+        if (existingCheck.rows.length > 0) {
+          skippedUsers.push({ 
+            user_id: userId, 
+            user: userCheck.rows[0],
+            reason: 'User already in this term' 
+          });
+          continue;
+        }
+        
+        // Add user to term
+        try {
+          const result = await client.query(
+            `INSERT INTO user_terms (user_id, term_id, added_by, notes)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id`,
+            [userId, termId, req.user.id, notes || null]
+          );
+          
+          addedUsers.push({
+            user_term_id: result.rows[0].id,
+            user: userCheck.rows[0]
+          });
+        } catch (insertError) {
+          if (insertError.code === '23505') { // Unique constraint violation
+            skippedUsers.push({ 
+              user_id: userId, 
+              user: userCheck.rows[0],
+              reason: 'User already in this term' 
+            });
+          } else {
+            throw insertError;
+          }
+        }
+      }
+      
+      await client.query('COMMIT');
+      
+      res.status(201).json({
+        message: 'Users added to term successfully',
+        term: termCheck.rows[0],
+        added: addedUsers,
+        skipped: skippedUsers,
+        summary: {
+          total_requested: user_ids.length,
+          added: addedUsers.length,
+          skipped: skippedUsers.length
+        }
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Add users to term error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Remove a user from a term (Headteacher/Superadmin)
+router.delete('/:id/users/:userId', authorize('headteacher', 'superadmin'), async (req, res) => {
+  try {
+    const { id: termId, userId } = req.params;
+    
+    // Verify term exists
+    const termCheck = await pool.query('SELECT id, name FROM terms WHERE id = $1', [termId]);
+    if (termCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'Term not found' });
+    }
+    
+    // Get user info before deletion
+    const userCheck = await pool.query(
+      'SELECT id, username, first_name, last_name, role FROM users WHERE id = $1',
+      [userId]
+    );
+    
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Remove user from term
+    const result = await pool.query(
+      'DELETE FROM user_terms WHERE term_id = $1 AND user_id = $2 RETURNING id',
+      [termId, userId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'User is not associated with this term' });
+    }
+    
+    res.json({
+      message: 'User removed from term successfully',
+      term: termCheck.rows[0],
+      user: userCheck.rows[0]
+    });
+  } catch (error) {
+    console.error('Remove user from term error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;
 

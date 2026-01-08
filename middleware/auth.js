@@ -22,7 +22,11 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({ message: 'Invalid or inactive user.' });
     }
     
-    req.user = result.rows[0];
+    req.user = {
+      ...result.rows[0],
+      grade_id: decoded.grade_id || null,
+      grade_number: decoded.grade_number || null
+    };
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {

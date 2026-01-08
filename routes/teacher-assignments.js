@@ -22,6 +22,9 @@ router.get('/term/:term/:academicYear', authorize('headteacher', 'deputy_headtea
         c.course_code,
         c.course_name,
         c.description,
+        c.learning_area_id,
+        la.name as learning_area_name,
+        la.code as learning_area_code,
         u.first_name as teacher_first_name,
         u.last_name as teacher_last_name,
         u.email as teacher_email,
@@ -30,8 +33,9 @@ router.get('/term/:term/:academicYear', authorize('headteacher', 'deputy_headtea
       FROM teacher_course_assignments tca
       INNER JOIN courses c ON tca.course_id = c.id
       INNER JOIN users u ON tca.teacher_id = u.id
+      LEFT JOIN learning_areas la ON c.learning_area_id = la.id
       LEFT JOIN users assigned_by_user ON tca.assigned_by = assigned_by_user.id
-      WHERE tca.term_number = $1 AND tca.academic_year = $2
+      WHERE tca.term_number = $1 AND tca.academic_year = $2 AND tca.is_active = true
       ORDER BY c.course_name, u.last_name, u.first_name`,
       [term, academicYear]
     );
@@ -99,49 +103,119 @@ router.get('/teachers', authorize('headteacher', 'deputy_headteacher', 'superadm
 
 // Assign teacher to course for a term
 router.post('/', authorize('headteacher', 'deputy_headteacher', 'superadmin'), async (req, res) => {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+    
     const { course_id, teacher_id, term_number, academic_year } = req.body;
     
     // Validate term number
     if (term_number < 1 || term_number > 3) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ message: 'Term number must be between 1 and 3' });
     }
     
+    // Get course details to check learning_area_id
+    const courseCheck = await client.query(
+      'SELECT id, course_name, course_code, learning_area_id, teacher_id, academic_year FROM courses WHERE id = $1',
+      [course_id]
+    );
+    
+    if (courseCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Course not found' });
+    }
+    
+    const course = courseCheck.rows[0];
+    
+    // Warn if course is not linked to a learning area
+    if (!course.learning_area_id) {
+      console.warn(`Course ${course.course_name} (ID: ${course_id}) is not linked to a learning area`);
+    }
+    
+    // Update course's teacher_id for backward compatibility
+    await client.query(
+      `UPDATE courses 
+       SET teacher_id = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [teacher_id, course_id]
+    );
+    
     // Check if assignment already exists
-    const existingCheck = await pool.query(
+    const existingCheck = await client.query(
       `SELECT id FROM teacher_course_assignments
        WHERE course_id = $1 AND teacher_id = $2 AND term_number = $3 AND academic_year = $4`,
       [course_id, teacher_id, term_number, academic_year]
     );
     
+    let assignment;
     if (existingCheck.rows.length > 0) {
       // Update existing assignment to active
-      const updateResult = await pool.query(
+      const updateResult = await client.query(
         `UPDATE teacher_course_assignments
          SET is_active = true, assigned_by = $1, assigned_at = CURRENT_TIMESTAMP
          WHERE id = $2
          RETURNING *`,
         [req.user.id, existingCheck.rows[0].id]
       );
-      return res.json(updateResult.rows[0]);
+      assignment = updateResult.rows[0];
+    } else {
+      // Create new assignment
+      const result = await client.query(
+        `INSERT INTO teacher_course_assignments 
+         (course_id, teacher_id, term_number, academic_year, assigned_by)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [course_id, teacher_id, term_number, academic_year, req.user.id]
+      );
+      assignment = result.rows[0];
     }
     
-    // Create new assignment
-    const result = await pool.query(
-      `INSERT INTO teacher_course_assignments 
-       (course_id, teacher_id, term_number, academic_year, assigned_by)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *`,
-      [course_id, teacher_id, term_number, academic_year, req.user.id]
+    // Record in teacher_allocations for tracking
+    await client.query(
+      `INSERT INTO teacher_allocations (teacher_id, course_id, allocated_by, notes)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (teacher_id, course_id) 
+       DO UPDATE SET allocated_by = EXCLUDED.allocated_by`,
+      [teacher_id, course_id, req.user.id, `Assigned for Term ${term_number} ${academic_year}`]
     );
     
-    res.status(201).json(result.rows[0]);
+    await client.query('COMMIT');
+    
+    // Get learning area info if available
+    let learningAreaInfo = null;
+    if (course.learning_area_id) {
+      const laResult = await pool.query(
+        'SELECT id, name, code FROM learning_areas WHERE id = $1',
+        [course.learning_area_id]
+      );
+      if (laResult.rows.length > 0) {
+        learningAreaInfo = laResult.rows[0];
+      }
+    }
+    
+    res.status(201).json({
+      ...assignment,
+      course: {
+        id: course.id,
+        course_name: course.course_name,
+        course_code: course.course_code,
+        learning_area_id: course.learning_area_id
+      },
+      learning_area: learningAreaInfo,
+      warning: !course.learning_area_id 
+        ? 'Course is not linked to a learning area. Please link it to a learning area for full functionality.'
+        : null
+    });
   } catch (error) {
+    await client.query('ROLLBACK');
     if (error.code === '23505') { // Unique violation
       return res.status(400).json({ message: 'This teacher is already assigned to this course for this term' });
     }
     console.error('Assign teacher error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error', error: error.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -185,9 +259,13 @@ router.get('/teacher/:teacherId/term/:term/:academicYear', async (req, res) => {
         tca.academic_year,
         c.course_code,
         c.course_name,
-        c.description
+        c.description,
+        c.learning_area_id,
+        la.name as learning_area_name,
+        la.code as learning_area_code
       FROM teacher_course_assignments tca
       INNER JOIN courses c ON tca.course_id = c.id
+      LEFT JOIN learning_areas la ON c.learning_area_id = la.id
       WHERE tca.teacher_id = $1 
         AND tca.term_number = $2 
         AND tca.academic_year = $3

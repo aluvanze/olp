@@ -59,11 +59,17 @@
         const API_BASE_URL = 'http://localhost:3000/api';
         let currentUser = null;
         let authToken = null;
+        let currentGrade = null;
+        
         // Check if user is already logged in
         window.addEventListener('DOMContentLoaded', () => {
             const token = localStorage.getItem('authToken');
+            const grade = localStorage.getItem('currentGrade');
             if (token) {
                 authToken = token;
+                if (grade) {
+                    currentGrade = JSON.parse(grade);
+                }
                 checkAuth();
             }
         });
@@ -76,11 +82,23 @@
                     }
                 });
                 if (response.ok) {
-                    currentUser = await response.json();
-                    showDashboard();
+                    const userData = await response.json();
+                    currentUser = userData;
+                    
+                    // Check if grade is selected (from token or user data)
+                    if (userData.current_grade) {
+                        currentGrade = userData.current_grade;
+                        localStorage.setItem('currentGrade', JSON.stringify(currentGrade));
+                        showDashboard();
+                    } else {
+                        // Need to select grade
+                        showGradeSelection();
+                    }
                 } else {
                     localStorage.removeItem('authToken');
+                    localStorage.removeItem('currentGrade');
                     authToken = null;
+                    currentGrade = null;
                 }
             } catch (error) {
                 console.error('Auth check error:', error);
@@ -110,7 +128,24 @@
                     currentUser = data.user;
                     localStorage.setItem('authToken', authToken);
                     errorDiv.textContent = '';
-                    showDashboard();
+                    
+                    // Debug logging
+                    console.log('Login response:', {
+                        requires_grade_selection: data.requires_grade_selection,
+                        grades_count: data.available_grades ? data.available_grades.length : 0,
+                        grades: data.available_grades
+                    });
+                    
+                    // Check if grade selection is required
+                    if (data.requires_grade_selection && data.available_grades && data.available_grades.length > 0) {
+                        console.log('Showing grade selection screen');
+                        // Show grade selection screen
+                        showGradeSelection(data.available_grades);
+                    } else {
+                        console.log('Proceeding to dashboard (no grade selection needed)');
+                        // Grade already selected or not required, proceed to dashboard
+                        showDashboard();
+                    }
                 } else {
                     errorDiv.textContent = data.message || 'Login failed';
                     console.error('Login error:', data);
@@ -121,6 +156,141 @@
                 console.error('Error details:', error.message);
             }
         });
+
+        // Show grade selection screen
+        async function showGradeSelection(availableGrades = null) {
+            const root = document.getElementById('root');
+            
+            // Check if user is already logged in (switching grades)
+            const isSwitching = currentUser !== null && authToken !== null;
+            
+            // If grades not provided, fetch them
+            if (!availableGrades) {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/auth/grades`, {
+                        headers: {
+                            'Authorization': `Bearer ${authToken}`
+                        }
+                    });
+                    if (response.ok) {
+                        availableGrades = await response.json();
+                    } else {
+                        console.error('Failed to fetch grades');
+                        return;
+                    }
+                } catch (error) {
+                    console.error('Error fetching grades:', error);
+                    return;
+                }
+            }
+            
+            root.innerHTML = `
+                <div class="login-container">
+                    <div class="login-left-panel">
+                        <div class="login-branding">
+                            <h1 class="brand-title">Senior School OLP</h1>
+                            <h2 class="brand-subtitle">Online Learner Progress Monitor</h2>
+                            <p class="brand-tagline">Unlocking Academic Gates For Future Excellence</p>
+                            <p class="brand-description">${isSwitching ? 'Switch to a different grade' : 'Select your grade to continue'}</p>
+                        </div>
+                    </div>
+                    <div class="login-right-panel">
+                        <div class="login-form-container">
+                            <h2 class="login-title">${isSwitching ? 'Switch Grade' : 'Select Grade'}</h2>
+                            <p class="login-subtitle">Choose the grade you want to access</p>
+                            
+                            ${currentGrade ? `<p style="text-align: center; color: #666; margin-bottom: 1rem; padding: 0.5rem; background: #f0f0f0; border-radius: 4px;">Current: <strong>${currentGrade.name}</strong></p>` : ''}
+                            
+                            <div id="gradeSelectionError" class="error-message" style="display: none;"></div>
+                            
+                            <div class="grade-selection-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 2rem 0;">
+                                ${availableGrades.map(grade => `
+                                    <div class="grade-card" onclick="selectGrade(${grade.id})" style="
+                                        border: 2px solid ${currentGrade && currentGrade.id === grade.id ? '#4CAF50' : '#e0e0e0'};
+                                        border-radius: 8px;
+                                        padding: 1.5rem;
+                                        text-align: center;
+                                        cursor: pointer;
+                                        transition: all 0.3s ease;
+                                        background: ${currentGrade && currentGrade.id === grade.id ? '#f0f8f0' : 'white'};
+                                        position: relative;
+                                    " onmouseover="this.style.borderColor='#4CAF50'; this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.1)'" 
+                                    onmouseout="this.style.borderColor='${currentGrade && currentGrade.id === grade.id ? '#4CAF50' : '#e0e0e0'}'; this.style.transform='translateY(0)'; this.style.boxShadow='none'">
+                                        ${currentGrade && currentGrade.id === grade.id ? `<div style="position: absolute; top: 0.5rem; right: 0.5rem; background: #4CAF50; color: white; padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">Current</div>` : ''}
+                                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📚</div>
+                                        <h3 style="margin: 0.5rem 0; color: #333; font-size: 1.5rem;">${grade.name}</h3>
+                                        ${grade.description ? `<p style="margin: 0; color: #666; font-size: 0.9rem;">${grade.description}</p>` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                            
+                            <div style="text-align: center; margin-top: 2rem;">
+                                ${isSwitching ? `
+                                    <button onclick="showDashboard()" class="btn-secondary" style="
+                                        background: #f5f5f5;
+                                        color: #333;
+                                        border: 1px solid #ddd;
+                                        padding: 0.75rem 1.5rem;
+                                        border-radius: 4px;
+                                        cursor: pointer;
+                                        margin-right: 1rem;
+                                    ">Cancel</button>
+                                ` : ''}
+                                <button onclick="logout()" class="btn-secondary" style="
+                                    background: #f5f5f5;
+                                    color: #333;
+                                    border: 1px solid #ddd;
+                                    padding: 0.75rem 1.5rem;
+                                    border-radius: 4px;
+                                    cursor: pointer;
+                                ">${isSwitching ? 'Sign Out' : 'Back to Login'}</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Select grade and proceed
+        async function selectGrade(gradeId) {
+            const errorDiv = document.getElementById('gradeSelectionError');
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/select-grade`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({ grade_id: gradeId })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Update token with grade information
+                    authToken = data.token;
+                    currentGrade = data.grade;
+                    localStorage.setItem('authToken', authToken);
+                    localStorage.setItem('currentGrade', JSON.stringify(currentGrade));
+                    
+                    // Proceed to dashboard (which will show term selection)
+                    showDashboard();
+                } else {
+                    if (errorDiv) {
+                        errorDiv.style.display = 'block';
+                        errorDiv.textContent = data.message || 'Failed to select grade';
+                    }
+                    console.error('Grade selection error:', data);
+                }
+            } catch (error) {
+                if (errorDiv) {
+                    errorDiv.style.display = 'block';
+                    errorDiv.textContent = 'Connection error. Please try again.';
+                }
+                console.error('Grade selection error:', error);
+            }
+        }
 
         function showDashboard() {
             const root = document.getElementById('root');
@@ -176,6 +346,17 @@
                     </nav>
                             </div>
                             <div class="header-right">
+                                ${currentGrade ? `
+                                    <div onclick="switchGrade()" style="margin-right: 1rem; padding: 0.5rem 1rem; background: #4CAF50; color: white; border-radius: 4px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s ease;" 
+                                         onmouseover="this.style.background='#45a049'; this.style.transform='scale(1.05)'" 
+                                         onmouseout="this.style.background='#4CAF50'; this.style.transform='scale(1)'"
+                                         title="Click to switch grade">
+                                        <span>${currentGrade.name}</span>
+                                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="opacity: 0.9;">
+                                            <path d="M4 6L8 10L12 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                    </div>
+                                ` : ''}
                                 <div class="user-profile-menu" id="userProfileMenu">
                                     <button class="user-profile-btn" onclick="toggleUserMenu()">
                                         <div class="user-avatar">${currentUser.first_name.charAt(0)}${currentUser.last_name.charAt(0)}</div>
@@ -204,6 +385,10 @@
                                         <a href="#" class="dropdown-item" onclick="loadView('profile-settings'); toggleUserMenu(); return false;">
                                             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 10C9.10457 10 10 9.10457 10 8C10 6.89543 9.10457 6 8 6C6.89543 6 6 6.89543 6 8C6 9.10457 6.89543 10 8 10Z" fill="currentColor"/><path d="M13.6569 6.34315L12.2426 4.92893C12.0521 4.73841 11.8357 4.58579 11.6036 4.46447L10.5858 3.41421C10.2107 3.03914 9.70201 2.82843 9.17157 2.82843H6.82843C6.29799 2.82843 5.78929 3.03914 5.41421 3.41421L4.39645 4.46447C4.16435 4.58579 3.94786 4.73841 3.75736 4.92893L2.34315 6.34315C1.95262 6.73367 1.95262 7.36684 2.34315 7.75736L3.75736 9.17157C3.94786 9.36209 4.16435 9.51471 4.39645 9.63503L5.41421 10.6853C5.78929 11.0604 6.29799 11.2711 6.82843 11.2711H9.17157C9.70201 11.2711 10.2107 11.0604 10.5858 10.6853L11.6036 9.63503C11.8357 9.51471 12.0521 9.36209 12.2426 9.17157L13.6569 7.75736C14.0474 7.36684 14.0474 6.73367 13.6569 6.34315Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                             <span>Profile Settings</span>
+                                        </a>
+                                        <a href="#" class="dropdown-item" onclick="switchGrade(); toggleUserMenu(); return false;">
+                                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2L2 8L8 14M14 2L8 8L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                            <span>Switch Grade</span>
                                         </a>
                                         <a href="#" class="dropdown-item" onclick="logout(); return false;">
                                             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 14H3C2.46957 14 1.96086 13.7893 1.58579 13.4142C1.21071 13.0391 1 12.5304 1 12V4C1 3.46957 1.21071 2.96086 1.58579 2.58579C1.96086 2.21071 2.46957 2 3 2H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 11L15 8L11 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 8H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1240,12 +1425,25 @@
                                             <span class="term-stat-value">${term.course_count || 0}</span>
                                         </div>
                                     </div>
-                                    <button onclick="selectTerm(${term.term}, '${term.academic_year}')" class="btn-primary term-select-btn">Select Term</button>
+                                    <button class="btn-primary term-select-btn" data-term="${term.term}" data-academic-year="${term.academic_year}">Select Term</button>
                             </div>
                         `).join('')}
                         </div>
                     </div>
                 `;
+                
+                // Add event listeners to term select buttons (using data attributes to avoid quote issues)
+                content.querySelectorAll('.term-select-btn').forEach(button => {
+                    button.addEventListener('click', function() {
+                        const term = parseInt(this.getAttribute('data-term'));
+                        const academicYear = this.getAttribute('data-academic-year');
+                        if (term && academicYear) {
+                            selectTerm(term, academicYear);
+                        } else {
+                            console.error('Missing term data:', { term, academicYear });
+                        }
+                    });
+                });
             } catch (error) {
                 content.innerHTML = `<div class="error">Error loading dashboard: ${error.message}</div>`;
             }
@@ -1265,12 +1463,26 @@
         let currentTerm = null;
         let currentAcademicYear = null;
 
-        // Teacher: Select term and show courses
+        // Select term and show courses (works for all roles)
         async function selectTerm(term, academicYear) {
-            currentTerm = term;
-            currentAcademicYear = academicYear;
-            await loadTermCourses();
+            try {
+                console.log('Selecting term:', term, academicYear);
+                currentTerm = term;
+                currentAcademicYear = academicYear;
+                
+                // Store in localStorage for persistence
+                localStorage.setItem('currentTerm', term);
+                localStorage.setItem('currentAcademicYear', academicYear);
+                
+                await loadTermCourses();
+            } catch (error) {
+                console.error('Error selecting term:', error);
+                alert('Error selecting term: ' + (error.message || 'Unknown error'));
+            }
         }
+        
+        // Make selectTerm globally accessible
+        window.selectTerm = selectTerm;
 
         // Load courses for selected term (works for all roles)
         async function loadTermCourses() {
@@ -1282,14 +1494,28 @@
             const role = currentUser.role;
             let courses;
             
-            // Get courses based on role
-            if (role === 'teacher') {
-                courses = await apiCall(`/courses/term/${currentTerm}/${currentAcademicYear}`);
-            } else if (role === 'student') {
-                courses = await apiCall(`/courses?academic_year=${currentAcademicYear}`);
-            } else {
-                // Admin roles see all learning areas for the term
-                courses = await apiCall(`/courses?academic_year=${currentAcademicYear}`);
+            try {
+                // Get courses based on role
+                if (role === 'teacher') {
+                    courses = await apiCall(`/courses/term/${currentTerm}/${currentAcademicYear}`);
+                } else if (role === 'student') {
+                    courses = await apiCall(`/courses?academic_year=${currentAcademicYear}`);
+                } else {
+                    // Admin roles (headteacher, superadmin, etc.) see all learning areas for the term
+                    // Use term-specific endpoint to get courses for the selected term
+                    courses = await apiCall(`/courses/term/${currentTerm}/${currentAcademicYear}`);
+                }
+            } catch (error) {
+                console.error('Error loading term courses:', error);
+                const content = document.getElementById('dashboardContent');
+                content.innerHTML = `
+                    <div class="error" style="padding: 2rem; text-align: center;">
+                        <h3>Error Loading Courses</h3>
+                        <p>${error.message || 'Failed to load courses for this term. Please try again.'}</p>
+                        <button onclick="loadView('dashboard')" class="btn-primary" style="margin-top: 1rem;">Back to Dashboard</button>
+                    </div>
+                `;
+                return;
             }
             
             const content = document.getElementById('dashboardContent');
@@ -4127,8 +4353,24 @@
             }
         }
 
+        // Switch grade function
+        async function switchGrade() {
+            // Close user menu if open
+            const userMenu = document.getElementById('userMenuDropdown');
+            if (userMenu) {
+                userMenu.style.display = 'none';
+            }
+            
+            // Show grade selection screen
+            await showGradeSelection();
+        }
+
         function logout() {
             localStorage.removeItem('authToken');
+            localStorage.removeItem('currentGrade');
+            authToken = null;
+            currentGrade = null;
+            currentUser = null;
             location.reload();
         }
     </script>

@@ -17,6 +17,7 @@ const termRoutes = require('./routes/terms');
 const studentRegistrationRoutes = require('./routes/student-registration');
 const teacherAssignmentRoutes = require('./routes/teacher-assignments');
 const substrandRoutes = require('./routes/substrands');
+const gradeLevelsRoutes = require('./routes/grades-management');
 const { pool } = require('./config/database');
 
 const app = express();
@@ -80,6 +81,7 @@ app.use('/api/terms', termRoutes);
 app.use('/api/student-registration', studentRegistrationRoutes);
 app.use('/api/teacher-assignments', teacherAssignmentRoutes);
 app.use('/api/substrands', substrandRoutes);
+app.use('/api/admin/grade-levels', gradeLevelsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
