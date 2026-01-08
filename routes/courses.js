@@ -34,8 +34,8 @@ router.get('/', async (req, res) => {
       query += ` AND c.teacher_id = $${paramCount}`;
       params.push(req.user.id);
       paramCount++;
-    } else if (req.user.grade_id) {
-      // Filter by grade for non-teachers (students, parents, etc.)
+    } else if (req.user.grade_id && req.user.role !== 'headteacher' && req.user.role !== 'superadmin' && req.user.role !== 'deputy_headteacher' && req.user.role !== 'finance') {
+      // Filter by grade for non-teachers (students, parents, etc.) but not for admins
       query += ` AND c.grade_id = $${paramCount}`;
       params.push(req.user.grade_id);
       paramCount++;
@@ -67,7 +67,7 @@ router.get('/', async (req, res) => {
       paramCount++;
     }
     
-    query += ' GROUP BY c.id, u.first_name, u.last_name ORDER BY c.course_name';
+    query += ' GROUP BY c.id, u.first_name, u.last_name, la.id, la.name, la.code ORDER BY c.course_name';
     
     const result = await pool.query(query, params);
     res.json(result.rows);

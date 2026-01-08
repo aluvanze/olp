@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Senior School OLP - Online Learner Progress Monitor</title>
     <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div id="root">
@@ -543,13 +544,19 @@
                 }
                 return await response.json();
             } catch (error) {
-                console.error('API call error:', {
-                    endpoint,
-                    method: options.method || 'GET',
-                    error: error.message,
-                    status: error.status,
-                    response: error.response
-                });
+                // Suppress console errors for 404s on finance routes (server may need restart)
+                const isFinanceRoute = endpoint.includes('/finance/');
+                const is404 = error.status === 404;
+                
+                if (!(isFinanceRoute && is404)) {
+                    console.error('API call error:', {
+                        endpoint,
+                        method: options.method || 'GET',
+                        error: error.message,
+                        status: error.status,
+                        response: error.response
+                    });
+                }
                 throw error;
             }
         }
@@ -1394,6 +1401,23 @@
                            role === 'finance' ? 'Finance Administrator' : 'Dashboard';
             
             try {
+                // Teacher Dashboard - Show widgets overview ONLY if term is already selected
+                // Otherwise show term selection first (maintains original flow)
+                if (role === 'teacher' && currentTerm && currentAcademicYear) {
+                    await loadTeacherDashboardOverview();
+                    return;
+                }
+                
+                // Students see courses list first when term is selected, not dashboard
+                // Dashboard is accessible via button in courses view
+                // This maintains the flow: select term -> see courses -> access dashboard
+                
+                // Principal/Headteacher Dashboard - Show term-specific dashboard ONLY if term is already selected
+                if (['headteacher', 'superadmin', 'deputy_headteacher'].includes(role) && currentTerm && currentAcademicYear) {
+                    await loadPrincipalTermDashboard();
+                    return;
+                }
+                
                 // Get terms - per TERM_BASED_NAVIGATION.md, dashboard shows term selection
                 const terms = await apiCall(`/courses/terms?academic_year=${currentYear}`);
                 
@@ -1459,11 +1483,1117 @@
             await loadDashboard();
         }
 
+        // Student Dashboard Overview with all new features
+        async function loadStudentDashboardOverview() {
+            const content = document.getElementById('dashboardContent');
+            
+            if (!currentTerm || !currentAcademicYear) {
+                // If no term selected, show term selection
+                await loadDashboard();
+                return;
+            }
+            
+            try {
+                // Get term details for display
+                const terms = await apiCall(`/courses/terms?academic_year=${currentAcademicYear.split('-')[0]}`).catch(() => []);
+                const selectedTermData = terms.find(t => t.term === currentTerm);
+                const termName = selectedTermData ? selectedTermData.name : `Term ${currentTerm}`;
+                
+                content.innerHTML = `
+                    <div class="student-dashboard-overview">
+                        <div class="view-header" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                            <button onclick="clearTermAndShowSelection()" class="btn-back">← Back to Term Selection</button>
+                            <div style="flex: 1;">
+                                <h2>${termName} Dashboard - ${currentAcademicYear}</h2>
+                                <p class="view-subtitle">Welcome back, ${currentUser.first_name || 'User'}. Track your progress and access learning resources for this term.</p>
+                            </div>
+                            <button onclick="loadTermCourses()" class="context-action-btn" style="white-space: nowrap;">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 8px;">
+                                    <path d="M2 4H14V12H2V4Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M6 6H10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                    <path d="M6 8H10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                    <path d="M6 10H8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                </svg>
+                                View Courses
+                            </button>
+                        </div>
+                        
+                        <div class="student-dashboard-tabs">
+                            <button onclick="showStudentTab('performance')" class="tab-btn active" id="student-tab-performance">Performance View</button>
+                            <button onclick="showStudentTab('resources')" class="tab-btn" id="student-tab-resources">Resource Center</button>
+                            <button onclick="showStudentTab('engagement')" class="tab-btn" id="student-tab-engagement">Engagement Tools</button>
+                            <button onclick="showStudentTab('account')" class="tab-btn" id="student-tab-account">Account Management</button>
+                        </div>
+                        
+                        <div id="student-tab-content">
+                            ${await renderStudentPerformanceView()}
+                        </div>
+                    </div>
+                `;
+                
+                // Store tab content renderers
+                window.studentTabRenderers = {
+                    performance: renderStudentPerformanceView,
+                    resources: renderStudentResourceCenter,
+                    engagement: renderStudentEngagementTools,
+                    account: renderStudentAccountManagement
+                };
+            } catch (error) {
+                content.innerHTML = `<div class="error">Error loading student dashboard: ${error.message}</div>`;
+                console.error('Student dashboard error:', error);
+            }
+        }
+
+        async function showStudentTab(tabName) {
+            document.querySelectorAll('.student-dashboard-tabs .tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`student-tab-${tabName}`).classList.add('active');
+            
+            const content = document.getElementById('student-tab-content');
+            const renderer = window.studentTabRenderers[tabName];
+            
+            if (renderer) {
+                content.innerHTML = await renderer();
+            }
+        }
+
+        async function renderStudentPerformanceView() {
+            try {
+                // Get courses for the selected term only
+                if (!currentTerm || !currentAcademicYear) {
+                    return `<div class="error">Please select a term first</div>`;
+                }
+                
+                const courses = await apiCall(`/courses/term/${currentTerm}/${currentAcademicYear}`);
+                const allGrades = [];
+                const performanceData = {};
+                
+                // Get term date range for filtering grades by term
+                const terms = await apiCall(`/courses/terms?academic_year=${currentAcademicYear.split('-')[0]}`).catch(() => []);
+                const selectedTermData = terms.find(t => t.term === currentTerm);
+                const termStartDate = selectedTermData?.start_date || null;
+                const termEndDate = selectedTermData?.end_date || null;
+                
+                for (const course of courses) {
+                    try {
+                        const grades = await apiCall(`/grades/course/${course.id}`);
+                        // Filter grades by term date range if available
+                        let courseGrades = grades.map(g => ({...g, course_name: course.course_name, course_code: course.course_code}));
+                        
+                        if (termStartDate && termEndDate) {
+                            courseGrades = courseGrades.filter(g => {
+                                if (!g.graded_at) return false;
+                                const gradeDate = new Date(g.graded_at);
+                                const start = new Date(termStartDate);
+                                const end = new Date(termEndDate);
+                                return gradeDate >= start && gradeDate <= end;
+                            });
+                        }
+                        
+                        allGrades.push(...courseGrades);
+                        
+                        if (courseGrades.length > 0) {
+                            const avg = courseGrades.reduce((sum, g) => sum + parseFloat(g.percentage || 0), 0) / courseGrades.length;
+                            performanceData[course.course_name] = {
+                                average: avg,
+                                grades: courseGrades
+                            };
+                        }
+                    } catch (e) {
+                        // Skip if no grades
+                    }
+                }
+                
+                
+                // Prepare chart data
+                const courseNames = Object.keys(performanceData);
+                const averages = courseNames.map(name => performanceData[name].average);
+                
+                // Store chart data globally for rendering after DOM update
+                window.pendingChartData = {
+                    courseNames: courseNames,
+                    averages: averages
+                };
+                
+                const html = `
+                    <div class="student-performance-view">
+                        <div class="performance-charts-section">
+                            <h3>Performance Trends</h3>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                                <div style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+                                    <h4 style="margin-top: 0;">Average Performance by Learning Area</h4>
+                                    <canvas id="performanceBarChart" style="max-height: 300px;"></canvas>
+                                </div>
+                                <div style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+                                    <h4 style="margin-top: 0;">Performance Over Time</h4>
+                                    <canvas id="performanceLineChart" style="max-height: 300px;"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="assessments-table-section">
+                            <h3>All Assessments - Term ${currentTerm}</h3>
+                            <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 1rem;">Individual assignment and assessment scores for this term</p>
+                            <div style="overflow-x: auto;">
+                                <table class="data-table" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th>Learning Area</th>
+                                            <th>Assessment Type</th>
+                                            <th>Title/Description</th>
+                                            <th>Score</th>
+                                            <th>Grade</th>
+                                            <th>Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${allGrades.length === 0 ? '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-secondary);">No assessments yet for this term</td></tr>' : allGrades.map(grade => `
+                                            <tr>
+                                                <td>${grade.course_name || grade.course_code}</td>
+                                                <td><span style="padding: 0.25rem 0.5rem; border-radius: 4px; background: ${grade.grade_type === 'formative' ? '#e3f2fd' : grade.grade_type === 'summative' ? '#fff3e0' : '#f3e5f5'}; color: ${grade.grade_type === 'formative' ? '#1976d2' : grade.grade_type === 'summative' ? '#f57c00' : '#7b1fa2'};">${grade.grade_type || 'assignment'}</span></td>
+                                                <td>${grade.assignment_title || 'Assessment'}</td>
+                                                <td>${grade.points_earned || 0} / ${grade.points_possible || 0} (${grade.percentage || 0}%)</td>
+                                                <td><strong>${grade.letter_grade || 'N/A'}</strong></td>
+                                                <td>${grade.graded_at ? new Date(grade.graded_at).toLocaleDateString() : 'N/A'}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Render charts after DOM is updated
+                setTimeout(() => {
+                    renderPerformanceCharts();
+                }, 100);
+                
+                return html;
+            } catch (error) {
+                return `<div class="error">Error loading performance view: ${error.message}</div>`;
+            }
+        }
+
+        async function renderStudentResourceCenter() {
+            try {
+                // Get assignments with attachments (resources) for selected term only
+                if (!currentTerm || !currentAcademicYear) {
+                    return `<div class="error">Please select a term first</div>`;
+                }
+                
+                const courses = await apiCall(`/courses/term/${currentTerm}/${currentAcademicYear}`);
+                const resources = [];
+                
+                for (const course of courses) {
+                    try {
+                        const assignments = await apiCall(`/assignments/course/${course.id}`);
+                        for (const assignment of assignments) {
+                            if (assignment.attachments) {
+                                let attachments = [];
+                                try {
+                                    attachments = typeof assignment.attachments === 'string' 
+                                        ? JSON.parse(assignment.attachments) 
+                                        : assignment.attachments;
+                                } catch (e) {
+                                    attachments = [];
+                                }
+                                
+                                if (attachments.length > 0) {
+                                    resources.push({
+                                        id: assignment.id,
+                                        course_id: course.id,
+                                        course_name: course.course_name,
+                                        course_code: course.course_code,
+                                        title: assignment.title,
+                                        description: assignment.description,
+                                        assignment_type: assignment.assignment_type,
+                                        attachments: attachments,
+                                        created_at: assignment.created_at
+                                    });
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        // Skip if can't get assignments
+                    }
+                }
+                
+                return `
+                    <div class="student-resource-center">
+                        <h3>Resource Center</h3>
+                        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Download resources uploaded by your teachers</p>
+                        
+                        <div class="resources-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;">
+                            ${resources.length === 0 ? '<div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--text-secondary);">No resources available yet</div>' : resources.map(resource => {
+                                return `
+                                    <div class="resource-card" style="padding: 1.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-secondary);">
+                                        <h4 style="margin-top: 0;">${resource.title}</h4>
+                                        <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 0.5rem;">${resource.course_name} (${resource.course_code})</p>
+                                        ${resource.description ? `<p style="font-size: 0.875rem; margin-bottom: 1rem;">${resource.description}</p>` : ''}
+                                        <div style="margin-bottom: 1rem;">
+                                            ${resource.attachments.map(att => {
+                                                const fileExt = att.filename ? att.filename.split('.').pop().toLowerCase() : '';
+                                                const icon = fileExt === 'pdf' ? '📄' : fileExt === 'docx' || fileExt === 'doc' ? '📝' : fileExt === 'xlsx' || fileExt === 'xls' ? '📊' : fileExt === 'pptx' || fileExt === 'ppt' ? '📊' : fileExt === 'mp4' ? '🎥' : '📎';
+                                                return `
+                                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                                        <span>${icon}</span>
+                                                        <span style="flex: 1; font-size: 0.875rem;">${att.filename || 'File'}</span>
+                                                        <a href="${API_BASE_URL.replace('/api', '')}${att.path}" download class="btn-small btn-primary">Download</a>
+                                                    </div>
+                                                `;
+                                            }).join('')}
+                                        </div>
+                                        <p style="font-size: 0.75rem; color: var(--text-secondary);">Uploaded: ${new Date(resource.created_at).toLocaleDateString()}</p>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                return `<div class="error">Error loading resources: ${error.message}</div>`;
+            }
+        }
+
+        async function renderStudentEngagementTools() {
+            try {
+                // Get teachers for rating (from enrolled courses in selected term)
+                if (!currentTerm || !currentAcademicYear) {
+                    return `<div class="error">Please select a term first</div>`;
+                }
+                
+                const courses = await apiCall(`/courses/term/${currentTerm}/${currentAcademicYear}`);
+                const teachers = [];
+                const teacherMap = {};
+                
+                for (const course of courses) {
+                    if (course.teacher_id && !teacherMap[course.teacher_id]) {
+                        try {
+                            const teacher = await apiCall(`/users/${course.teacher_id}`);
+                            teachers.push({
+                                id: teacher.id,
+                                first_name: teacher.first_name,
+                                last_name: teacher.last_name,
+                                email: teacher.email
+                            });
+                            teacherMap[course.teacher_id] = true;
+                        } catch (e) {
+                            // Skip if can't get teacher
+                        }
+                    }
+                }
+                
+                return `
+                    <div class="student-engagement-tools">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                            <div>
+                                <h3>Aptitude Surveys</h3>
+                                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Participate in aptitude surveys to help improve your learning experience</p>
+                                <div class="surveys-list">
+                                    <p style="color: var(--text-secondary); padding: 2rem; text-align: center;">Survey feature coming soon</p>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <h3>Rate Your Teachers</h3>
+                                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Anonymously rate your teachers to help improve teaching quality</p>
+                                <div class="teachers-rating-list">
+                                    ${teachers.length === 0 ? '<p style="color: var(--text-secondary); padding: 2rem; text-align: center;">No teachers available to rate</p>' : teachers.map(teacher => `
+                                        <div class="teacher-rating-card" style="padding: 1rem; border: 1px solid var(--border-light); border-radius: 8px; margin-bottom: 1rem; background: var(--bg-secondary);">
+                                            <h4 style="margin-top: 0;">${teacher.first_name} ${teacher.last_name}</h4>
+                                            <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem;">${teacher.email}</p>
+                                            <button onclick="rateTeacher(${teacher.id})" class="btn-primary btn-small">Rate Teacher (1-5 stars)</button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                return `<div class="error">Error loading engagement tools: ${error.message}</div>`;
+            }
+        }
+
+        async function renderStudentAccountManagement() {
+            try {
+                return `
+                    <div class="student-account-management">
+                        <h3>My Account</h3>
+                        
+                        <div style="margin-bottom: 2rem;">
+                            <h4>Issued Books</h4>
+                            <p style="color: var(--text-secondary); margin-bottom: 1rem;">Books currently issued to you</p>
+                            <p style="color: var(--text-secondary); padding: 2rem; text-align: center;">Book issuance feature coming soon</p>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                return `<div class="error">Error loading account management: ${error.message}</div>`;
+            }
+        }
+
+        function renderPerformanceCharts() {
+            if (typeof Chart === 'undefined' || !window.pendingChartData) {
+                return;
+            }
+            
+            const { courseNames, averages } = window.pendingChartData;
+            
+            // Bar Chart
+            const barCtx = document.getElementById('performanceBarChart');
+            if (barCtx) {
+                new Chart(barCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: courseNames,
+                        datasets: [{
+                            label: 'Average Score (%)',
+                            data: averages,
+                            backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 100
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Line Chart
+            const lineCtx = document.getElementById('performanceLineChart');
+            if (lineCtx) {
+                new Chart(lineCtx, {
+                    type: 'line',
+                    data: {
+                        labels: courseNames,
+                        datasets: [{
+                            label: 'Performance Trend',
+                            data: averages,
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 100
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Clear pending data
+            window.pendingChartData = null;
+        }
+
+        async function rateTeacher(teacherId) {
+            const rating = prompt('Rate this teacher (1-5 stars):');
+            if (!rating || rating < 1 || rating > 5) {
+                alert('Please enter a rating between 1 and 5');
+                return;
+            }
+            
+            const feedback = prompt('Optional feedback (press Cancel to skip):');
+            
+            try {
+                // Note: This would require a teacher-ratings API endpoint
+                alert('Thank you for your feedback! (Rating feature requires backend API)');
+                showStudentTab('engagement'); // Refresh
+            } catch (error) {
+                alert('Error submitting rating: ' + error.message);
+            }
+        }
+
+        // Principal/Headteacher Term Dashboard
+        async function loadPrincipalTermDashboard() {
+            const content = document.getElementById('dashboardContent');
+            
+            if (!currentTerm || !currentAcademicYear) {
+                await loadDashboard();
+                return;
+            }
+            
+            try {
+                // Get term details
+                const terms = await apiCall(`/courses/terms?academic_year=${currentAcademicYear.split('-')[0]}`).catch(() => []);
+                const selectedTermData = terms.find(t => t.term === currentTerm);
+                const termName = selectedTermData ? selectedTermData.name : `Term ${currentTerm}`;
+                
+                // Get term-specific data
+                const courses = await apiCall(`/courses/term/${currentTerm}/${currentAcademicYear}`);
+                const adminStats = await apiCall(`/admin/dashboard`).catch(() => null);
+                
+                // Calculate term-specific statistics
+                let totalStudents = 0;
+                let totalTeachers = 0;
+                let totalAssignments = 0;
+                let totalGrades = 0;
+                let averageGrade = 0;
+                let attendanceRate = 0;
+                
+                const teacherSet = new Set();
+                const studentSet = new Set();
+                
+                for (const course of courses) {
+                    if (course.teacher_id) teacherSet.add(course.teacher_id);
+                    if (course.enrolled_students) {
+                        totalStudents += parseInt(course.enrolled_students) || 0;
+                    }
+                }
+                
+                totalTeachers = teacherSet.size;
+                
+                // Batch API calls with delays to avoid rate limiting
+                // Process courses in batches of 5 with 200ms delay between batches
+                const courseData = [];
+                const batchSize = 5;
+                
+                for (let i = 0; i < courses.length; i += batchSize) {
+                    const batch = courses.slice(i, i + batchSize);
+                    const batchPromises = batch.map(async (course) => {
+                        try {
+                            const [assignments, grades] = await Promise.all([
+                                apiCall(`/assignments/course/${course.id}`).catch(() => []),
+                                apiCall(`/grades/course/${course.id}`).catch(() => [])
+                            ]);
+                            
+                            const assignmentCount = assignments.length;
+                            const gradeCount = grades.length;
+                            let courseAvg = 0;
+                            
+                            if (grades.length > 0) {
+                                courseAvg = grades.reduce((sum, g) => sum + parseFloat(g.percentage || 0), 0) / grades.length;
+                            }
+                            
+                            return {
+                                course,
+                                assignments: assignmentCount,
+                                grades: gradeCount,
+                                average: courseAvg
+                            };
+                        } catch (e) {
+                            return {
+                                course,
+                                assignments: 0,
+                                grades: 0,
+                                average: 0
+                            };
+                        }
+                    });
+                    
+                    const batchResults = await Promise.all(batchPromises);
+                    courseData.push(...batchResults);
+                    
+                    // Add delay between batches (except for last batch)
+                    if (i + batchSize < courses.length) {
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                    }
+                }
+                
+                // Calculate totals from batched data
+                courseData.forEach(data => {
+                    totalAssignments += data.assignments;
+                    totalGrades += data.grades;
+                    if (data.average > 0) {
+                        averageGrade += data.average;
+                    }
+                });
+                
+                if (courses.length > 0) {
+                    averageGrade = averageGrade / courses.length;
+                }
+                
+                content.innerHTML = `
+                    <div class="principal-term-dashboard">
+                        <div class="view-header" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                            <button onclick="clearTermAndShowSelection()" class="btn-back">← Back to Term Selection</button>
+                            <div style="flex: 1;">
+                                <h2>${termName} Dashboard - ${currentAcademicYear}</h2>
+                                <p class="view-subtitle">Comprehensive overview of academic performance and activities for this term</p>
+                            </div>
+                            <button onclick="loadTermCourses()" class="context-action-btn" style="white-space: nowrap;">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 8px;">
+                                    <path d="M2 4H14V12H2V4Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M6 6H10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                    <path d="M6 8H10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                    <path d="M6 10H8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                </svg>
+                                View Courses
+                            </button>
+                        </div>
+                        
+                        <!-- Statistics Widgets -->
+                        <div class="dashboard-widgets" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                            <div class="dashboard-widget" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-light);">
+                                <div class="widget-header" style="margin-bottom: 1rem;">
+                                    <h3 style="margin: 0; font-size: 0.875rem; color: var(--text-secondary); text-transform: uppercase;">Learning Areas</h3>
+                                </div>
+                                <div class="widget-value" style="font-size: 2rem; font-weight: 600; color: var(--primary-color);">${courses.length}</div>
+                                <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.875rem;">Active courses this term</p>
+                            </div>
+                            
+                            <div class="dashboard-widget" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-light);">
+                                <div class="widget-header" style="margin-bottom: 1rem;">
+                                    <h3 style="margin: 0; font-size: 0.875rem; color: var(--text-secondary); text-transform: uppercase;">Students</h3>
+                                </div>
+                                <div class="widget-value" style="font-size: 2rem; font-weight: 600; color: var(--primary-color);">${totalStudents}</div>
+                                <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.875rem;">Enrolled students</p>
+                            </div>
+                            
+                            <div class="dashboard-widget" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-light);">
+                                <div class="widget-header" style="margin-bottom: 1rem;">
+                                    <h3 style="margin: 0; font-size: 0.875rem; color: var(--text-secondary); text-transform: uppercase;">Teachers</h3>
+                                </div>
+                                <div class="widget-value" style="font-size: 2rem; font-weight: 600; color: var(--primary-color);">${totalTeachers}</div>
+                                <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.875rem;">Active teachers</p>
+                            </div>
+                            
+                            <div class="dashboard-widget" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-light);">
+                                <div class="widget-header" style="margin-bottom: 1rem;">
+                                    <h3 style="margin: 0; font-size: 0.875rem; color: var(--text-secondary); text-transform: uppercase;">Assignments</h3>
+                                </div>
+                                <div class="widget-value" style="font-size: 2rem; font-weight: 600; color: var(--primary-color);">${totalAssignments}</div>
+                                <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.875rem;">Total assignments</p>
+                            </div>
+                            
+                            <div class="dashboard-widget" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-light);">
+                                <div class="widget-header" style="margin-bottom: 1rem;">
+                                    <h3 style="margin: 0; font-size: 0.875rem; color: var(--text-secondary); text-transform: uppercase;">Average Grade</h3>
+                                </div>
+                                <div class="widget-value" style="font-size: 2rem; font-weight: 600; color: var(--primary-color);">${averageGrade > 0 ? averageGrade.toFixed(1) + '%' : 'N/A'}</div>
+                                <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.875rem;">Term average</p>
+                            </div>
+                            
+                            <div class="dashboard-widget" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-light);">
+                                <div class="widget-header" style="margin-bottom: 1rem;">
+                                    <h3 style="margin: 0; font-size: 0.875rem; color: var(--text-secondary); text-transform: uppercase;">Grades Recorded</h3>
+                                </div>
+                                <div class="widget-value" style="font-size: 2rem; font-weight: 600; color: var(--primary-color);">${totalGrades}</div>
+                                <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.875rem;">Total grades entered</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Course Performance Table -->
+                        <div style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-light); margin-bottom: 2rem;">
+                            <h3 style="margin-top: 0;">Learning Area Performance</h3>
+                            <div style="overflow-x: auto;">
+                                <table class="data-table" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th>Learning Area</th>
+                                            <th>Code</th>
+                                            <th>Teacher</th>
+                                            <th>Students</th>
+                                            <th>Assignments</th>
+                                            <th>Avg Grade</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${courses.length === 0 ? '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-secondary);">No courses for this term</td></tr>' : courseData.map(data => {
+                                            const course = data.course;
+                                            return `
+                                                <tr>
+                                                    <td><strong>${course.course_name}</strong></td>
+                                                    <td>${course.course_code || ''}</td>
+                                                    <td>${course.teacher_first_name ? `${course.teacher_first_name} ${course.teacher_last_name}` : 'Unassigned'}</td>
+                                                    <td>${course.enrolled_students || 0}</td>
+                                                    <td>${data.assignments}</td>
+                                                    <td>${data.average > 0 ? data.average.toFixed(1) + '%' : 'N/A'}</td>
+                                                    <td><button onclick="viewCourseDetails(${course.id})" class="btn-small btn-primary">View Details</button></td>
+                                                </tr>
+                                            `;
+                                        }).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                content.innerHTML = `<div class="error">Error loading term dashboard: ${error.message}</div>`;
+                console.error('Principal term dashboard error:', error);
+            }
+        }
+
+        // Finance Term Dashboard
+        async function loadFinanceTermDashboard() {
+            const content = document.getElementById('dashboardContent');
+            
+            if (!currentTerm || !currentAcademicYear) {
+                await loadDashboard();
+                return;
+            }
+            
+            try {
+                // Get term details
+                const terms = await apiCall(`/courses/terms?academic_year=${currentAcademicYear.split('-')[0]}`).catch(() => []);
+                const selectedTermData = terms.find(t => t.term === currentTerm);
+                const termName = selectedTermData ? selectedTermData.name : `Term ${currentTerm}`;
+                
+                // Get finance statistics for the term
+                let stats = {
+                    payments: { total_transactions: 0, total_amount: 0, mpesa_count: 0, verified_count: 0 },
+                    books: { total_books: 0, total_copies: 0, available_copies: 0 },
+                    capitation: { total_received: 0, records_count: 0 }
+                };
+                try {
+                    const statsData = await apiCall(`/finance/dashboard/stats?term=${currentTerm}&academic_year=${currentAcademicYear}`);
+                    if (statsData) stats = statsData;
+                } catch (e) {
+                    console.warn('Could not load finance stats:', e.message);
+                }
+                
+                // Get recent transactions
+                let transactions = [];
+                try {
+                    transactions = await apiCall(`/finance/transactions?term=${currentTerm}&academic_year=${currentAcademicYear}`);
+                } catch (e) {
+                    console.warn('Could not load transactions:', e.message);
+                }
+                
+                // Get books inventory
+                let books = [];
+                try {
+                    books = await apiCall(`/finance/inventory/books`);
+                } catch (e) {
+                    console.warn('Could not load books inventory:', e.message);
+                }
+                
+                // Get capitation records
+                let capitation = [];
+                try {
+                    capitation = await apiCall(`/finance/capitation?term=${currentTerm}&academic_year=${currentAcademicYear}`);
+                } catch (e) {
+                    console.warn('Could not load capitation records:', e.message);
+                }
+                
+                content.innerHTML = `
+                    <div class="finance-term-dashboard">
+                        <div class="view-header" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                            <button onclick="clearTermAndShowSelection()" class="btn-back">← Back to Term Selection</button>
+                            <div style="flex: 1;">
+                                <h2>${termName} Finance Dashboard - ${currentAcademicYear}</h2>
+                                <p class="view-subtitle">Financial management and tracking for this term</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Statistics Widgets -->
+                        <div class="dashboard-widgets" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                            <div class="dashboard-widget" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-light);">
+                                <div class="widget-header" style="margin-bottom: 1rem;">
+                                    <h3 style="margin: 0; font-size: 0.875rem; color: var(--text-secondary); text-transform: uppercase;">Total Payments</h3>
+                                </div>
+                                <div class="widget-value" style="font-size: 2rem; font-weight: 600; color: var(--primary-color);">KES ${parseFloat(stats.payments?.total_amount || 0).toLocaleString()}</div>
+                                <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.875rem;">${stats.payments?.total_transactions || 0} transactions</p>
+                            </div>
+                            
+                            <div class="dashboard-widget" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-light);">
+                                <div class="widget-header" style="margin-bottom: 1rem;">
+                                    <h3 style="margin: 0; font-size: 0.875rem; color: var(--text-secondary); text-transform: uppercase;">M-Pesa Payments</h3>
+                                </div>
+                                <div class="widget-value" style="font-size: 2rem; font-weight: 600; color: var(--primary-color);">${stats.payments?.mpesa_count || 0}</div>
+                                <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.875rem;">Verified: ${stats.payments?.verified_count || 0}</p>
+                            </div>
+                            
+                            <div class="dashboard-widget" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-light);">
+                                <div class="widget-header" style="margin-bottom: 1rem;">
+                                    <h3 style="margin: 0; font-size: 0.875rem; color: var(--text-secondary); text-transform: uppercase;">Books in Stock</h3>
+                                </div>
+                                <div class="widget-value" style="font-size: 2rem; font-weight: 600; color: var(--primary-color);">${stats.books?.total_books || 0}</div>
+                                <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.875rem;">${stats.books?.available_copies || 0} available copies</p>
+                            </div>
+                            
+                            <div class="dashboard-widget" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-light);">
+                                <div class="widget-header" style="margin-bottom: 1rem;">
+                                    <h3 style="margin: 0; font-size: 0.875rem; color: var(--text-secondary); text-transform: uppercase;">Capitation Funds</h3>
+                                </div>
+                                <div class="widget-value" style="font-size: 2rem; font-weight: 600; color: var(--primary-color);">KES ${parseFloat(stats.capitation?.total_received || 0).toLocaleString()}</div>
+                                <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.875rem;">${stats.capitation?.records_count || 0} records</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Finance Tabs -->
+                        <div class="finance-dashboard-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-light);">
+                            <button onclick="showFinanceTab('payments')" class="tab-btn active" id="finance-tab-payments">Payment Recording</button>
+                            <button onclick="showFinanceTab('inventory')" class="tab-btn" id="finance-tab-inventory">Inventory Management</button>
+                            <button onclick="showFinanceTab('capitation')" class="tab-btn" id="finance-tab-capitation">Capitation</button>
+                        </div>
+                        
+                        <div id="finance-tab-content">
+                            ${await renderFinancePaymentsTab(transactions)}
+                        </div>
+                    </div>
+                `;
+                
+                // Store tab renderers
+                window.financeTabRenderers = {
+                    payments: () => renderFinancePaymentsTab(transactions),
+                    inventory: () => renderFinanceInventoryTab(books),
+                    capitation: () => renderFinanceCapitationTab(capitation)
+                };
+            } catch (error) {
+                content.innerHTML = `<div class="error">Error loading finance dashboard: ${error.message}</div>`;
+                console.error('Finance term dashboard error:', error);
+            }
+        }
+
+        async function showFinanceTab(tabName) {
+            // Update active tab
+            document.querySelectorAll('.finance-dashboard-tabs .tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`finance-tab-${tabName}`).classList.add('active');
+            
+            // Render tab content
+            const content = document.getElementById('finance-tab-content');
+            if (window.financeTabRenderers && window.financeTabRenderers[tabName]) {
+                content.innerHTML = await window.financeTabRenderers[tabName]();
+            }
+        }
+
+        async function renderFinancePaymentsTab(transactions) {
+            return `
+                <div class="finance-payments-section">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <h3>Payment Recording</h3>
+                        <button onclick="openRecordPaymentModal()" class="btn-primary">Record Payment</button>
+                    </div>
+                    
+                    <div style="overflow-x: auto;">
+                        <table class="data-table" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Student</th>
+                                    <th>Type</th>
+                                    <th>Amount</th>
+                                    <th>Method</th>
+                                    <th>M-Pesa Code</th>
+                                    <th>Verified</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${transactions.length === 0 ? '<tr><td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-secondary);">No payments recorded for this term</td></tr>' : transactions.map(t => `
+                                    <tr>
+                                        <td>${new Date(t.transaction_date).toLocaleDateString()}</td>
+                                        <td>${t.first_name} ${t.last_name} (${t.admission_number || 'N/A'})</td>
+                                        <td>${t.transaction_type}</td>
+                                        <td>KES ${parseFloat(t.amount).toLocaleString()}</td>
+                                        <td>${t.payment_method || 'N/A'}</td>
+                                        <td>${t.mpesa_confirmation_code || '-'}</td>
+                                        <td>${t.verified ? '<span style="color: green;">✓ Verified</span>' : '<span style="color: orange;">Pending</span>'}</td>
+                                        <td><button onclick="editPayment(${t.id})" class="btn-small btn-primary">Edit</button></td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function renderFinanceInventoryTab(books) {
+            return `
+                <div class="finance-inventory-section">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <h3>Books Inventory</h3>
+                        <button onclick="openAddBookModal()" class="btn-primary">Add Book</button>
+                    </div>
+                    
+                    <div style="overflow-x: auto;">
+                        <table class="data-table" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th>Title</th>
+                                    <th>ISBN</th>
+                                    <th>Learning Area</th>
+                                    <th>Total Copies</th>
+                                    <th>Available</th>
+                                    <th>Publisher</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${books.length === 0 ? '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-secondary);">No books in inventory</td></tr>' : books.map(b => `
+                                    <tr>
+                                        <td><strong>${b.title}</strong></td>
+                                        <td>${b.isbn || '-'}</td>
+                                        <td>${b.learning_area_name || '-'}</td>
+                                        <td>${b.total_copies || 0}</td>
+                                        <td>${b.available_copies || 0}</td>
+                                        <td>${b.publisher || '-'}</td>
+                                        <td><button onclick="editBook(${b.id})" class="btn-small btn-primary">Edit</button></td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function renderFinanceCapitationTab(capitation) {
+            return `
+                <div class="finance-capitation-section">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <h3>Government Capitation Funds</h3>
+                        <button onclick="openRecordCapitationModal()" class="btn-primary">Record Capitation</button>
+                    </div>
+                    
+                    <div style="overflow-x: auto;">
+                        <table class="data-table" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th>Date Received</th>
+                                    <th>Amount</th>
+                                    <th>Allocation Details</th>
+                                    <th>Notes</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${capitation.length === 0 ? '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-secondary);">No capitation records for this term</td></tr>' : capitation.map(c => {
+                                    const allocation = typeof c.allocation_details === 'string' ? JSON.parse(c.allocation_details) : c.allocation_details;
+                                    return `
+                                        <tr>
+                                            <td>${new Date(c.received_date).toLocaleDateString()}</td>
+                                            <td>KES ${parseFloat(c.amount_received).toLocaleString()}</td>
+                                            <td>${allocation ? JSON.stringify(allocation) : '-'}</td>
+                                            <td>${c.notes || '-'}</td>
+                                            <td><button onclick="editCapitation(${c.id})" class="btn-small btn-primary">Edit</button></td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        function openRecordPaymentModal() {
+            // Get students list for dropdown
+            apiCall('/student-registration/students').then(students => {
+                const modal = document.createElement('div');
+                modal.id = 'record-payment-modal';
+                modal.className = 'modal';
+                modal.innerHTML = `
+                    <div class="modal-content" style="max-width: 600px;">
+                        <div class="modal-header">
+                            <h3>Record Payment</h3>
+                            <button onclick="closeRecordPaymentModal()" class="modal-close">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="payment-form" onsubmit="submitPayment(event)">
+                                <div class="form-group">
+                                    <label>Student *</label>
+                                    <select id="payment-learner-id" required class="form-control">
+                                        <option value="">Select Student</option>
+                                        ${students.map(s => `<option value="${s.id}">${s.first_name} ${s.last_name} (${s.admission_number || 'N/A'})</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Transaction Type *</label>
+                                    <select id="payment-type" required class="form-control">
+                                        <option value="fee_payment">Fee Payment</option>
+                                        <option value="bursary">Bursary</option>
+                                        <option value="refund">Refund</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Amount (KES) *</label>
+                                    <input type="number" id="payment-amount" step="0.01" min="0" required class="form-control" placeholder="0.00">
+                                </div>
+                                <div class="form-group">
+                                    <label>Payment Method</label>
+                                    <select id="payment-method" class="form-control">
+                                        <option value="mpesa">M-Pesa</option>
+                                        <option value="bank">Bank Transfer</option>
+                                        <option value="cash">Cash</option>
+                                        <option value="cheque">Cheque</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>M-Pesa Confirmation Code</label>
+                                    <input type="text" id="payment-mpesa-code" class="form-control" placeholder="Enter M-Pesa confirmation code">
+                                </div>
+                                <div class="form-group">
+                                    <label>Reference Number</label>
+                                    <input type="text" id="payment-reference" class="form-control" placeholder="Optional reference number">
+                                </div>
+                                <div class="form-group">
+                                    <label>Transaction Date</label>
+                                    <input type="date" id="payment-date" class="form-control" value="${new Date().toISOString().split('T')[0]}">
+                                </div>
+                                <div class="form-group">
+                                    <label>Notes</label>
+                                    <textarea id="payment-notes" class="form-control" rows="3" placeholder="Additional notes"></textarea>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" onclick="closeRecordPaymentModal()" class="btn-secondary">Cancel</button>
+                                    <button type="submit" class="btn-primary">Record Payment</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            }).catch(error => {
+                alert('Error loading students: ' + error.message);
+            });
+        }
+
+        function closeRecordPaymentModal() {
+            const modal = document.getElementById('record-payment-modal');
+            if (modal) modal.remove();
+        }
+
+        async function submitPayment(event) {
+            event.preventDefault();
+            try {
+                const userId = parseInt(document.getElementById('payment-learner-id').value);
+
+                await apiCall('/finance/transactions', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        user_id: userId, // Backend will convert to learner_id
+                        transaction_type: document.getElementById('payment-type').value,
+                        amount: parseFloat(document.getElementById('payment-amount').value),
+                        payment_method: document.getElementById('payment-method').value,
+                        mpesa_confirmation_code: document.getElementById('payment-mpesa-code').value || null,
+                        reference_number: document.getElementById('payment-reference').value || null,
+                        transaction_date: document.getElementById('payment-date').value,
+                        notes: document.getElementById('payment-notes').value || null
+                    })
+                });
+                
+                closeRecordPaymentModal();
+                alert('Payment recorded successfully!');
+                await loadFinanceTermDashboard();
+            } catch (error) {
+                alert('Error recording payment: ' + error.message);
+            }
+        }
+
+        function openAddBookModal() {
+            // TODO: Implement add book modal
+            alert('Add book feature - coming soon!');
+        }
+
+        function openRecordCapitationModal() {
+            const modal = document.createElement('div');
+            modal.id = 'record-capitation-modal';
+            modal.className = 'modal';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 600px;">
+                    <div class="modal-header">
+                        <h3>Record Capitation Funds</h3>
+                        <button onclick="closeRecordCapitationModal()" class="modal-close">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="capitation-form" onsubmit="submitCapitation(event)">
+                            <div class="form-group">
+                                <label>Term *</label>
+                                <input type="number" id="capitation-term" min="1" max="3" value="${currentTerm || ''}" required class="form-control" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label>Academic Year *</label>
+                                <input type="text" id="capitation-year" value="${currentAcademicYear || ''}" required class="form-control" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label>Amount Received (KES) *</label>
+                                <input type="number" id="capitation-amount" step="0.01" min="0" required class="form-control" placeholder="0.00">
+                            </div>
+                            <div class="form-group">
+                                <label>Date Received</label>
+                                <input type="date" id="capitation-date" class="form-control" value="${new Date().toISOString().split('T')[0]}">
+                            </div>
+                            <div class="form-group">
+                                <label>Allocation Details (JSON)</label>
+                                <textarea id="capitation-allocation" class="form-control" rows="4" placeholder='{"category": "amount", ...}'></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Notes</label>
+                                <textarea id="capitation-notes" class="form-control" rows="3" placeholder="Additional notes"></textarea>
+                            </div>
+                            <div class="form-actions">
+                                <button type="button" onclick="closeRecordCapitationModal()" class="btn-secondary">Cancel</button>
+                                <button type="submit" class="btn-primary">Record Capitation</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function closeRecordCapitationModal() {
+            const modal = document.getElementById('record-capitation-modal');
+            if (modal) modal.remove();
+        }
+
+        async function submitCapitation(event) {
+            event.preventDefault();
+            try {
+                let allocationDetails = null;
+                const allocationText = document.getElementById('capitation-allocation').value;
+                if (allocationText) {
+                    try {
+                        allocationDetails = JSON.parse(allocationText);
+                    } catch (e) {
+                        alert('Invalid JSON in allocation details');
+                        return;
+                    }
+                }
+
+                await apiCall('/finance/capitation', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        term: parseInt(document.getElementById('capitation-term').value),
+                        academic_year: document.getElementById('capitation-year').value,
+                        amount_received: parseFloat(document.getElementById('capitation-amount').value),
+                        received_date: document.getElementById('capitation-date').value,
+                        allocation_details: allocationDetails,
+                        notes: document.getElementById('capitation-notes').value || null
+                    })
+                });
+                
+                closeRecordCapitationModal();
+                alert('Capitation recorded successfully!');
+                await loadFinanceTermDashboard();
+            } catch (error) {
+                alert('Error recording capitation: ' + error.message);
+            }
+        }
+
         // Store current term and academic year
         let currentTerm = null;
         let currentAcademicYear = null;
 
-        // Select term and show courses (works for all roles)
+        // Clear term selection and show term selection page
+        function clearTermAndShowSelection() {
+            currentTerm = null;
+            currentAcademicYear = null;
+            localStorage.removeItem('currentTerm');
+            localStorage.removeItem('currentAcademicYear');
+            loadView('dashboard');
+        }
+
+        // Select term and show appropriate view based on role
         async function selectTerm(term, academicYear) {
             try {
                 console.log('Selecting term:', term, academicYear);
@@ -1474,7 +2604,19 @@
                 localStorage.setItem('currentTerm', term);
                 localStorage.setItem('currentAcademicYear', academicYear);
                 
-                await loadTermCourses();
+                // Students see courses list first, then can access dashboard via button
+                if (currentUser.role === 'student') {
+                    await loadTermCourses();
+                } else if (['headteacher', 'superadmin', 'deputy_headteacher'].includes(currentUser.role)) {
+                    // Principals/Headteachers see term dashboard with performance data
+                    await loadPrincipalTermDashboard();
+                } else if (currentUser.role === 'finance') {
+                    // Finance administrators see finance term dashboard
+                    await loadFinanceTermDashboard();
+                } else {
+                    // Teachers see courses
+                    await loadTermCourses();
+                }
             } catch (error) {
                 console.error('Error selecting term:', error);
                 alert('Error selecting term: ' + (error.message || 'Unknown error'));
@@ -1483,6 +2625,7 @@
         
         // Make selectTerm globally accessible
         window.selectTerm = selectTerm;
+        window.clearTermAndShowSelection = clearTermAndShowSelection;
 
         // Load courses for selected term (works for all roles)
         async function loadTermCourses() {
@@ -1499,7 +2642,8 @@
                 if (role === 'teacher') {
                     courses = await apiCall(`/courses/term/${currentTerm}/${currentAcademicYear}`);
                 } else if (role === 'student') {
-                    courses = await apiCall(`/courses?academic_year=${currentAcademicYear}`);
+                    // Students see courses for the selected term
+                    courses = await apiCall(`/courses/term/${currentTerm}/${currentAcademicYear}`);
                 } else {
                     // Admin roles (headteacher, superadmin, etc.) see all learning areas for the term
                     // Use term-specific endpoint to get courses for the selected term
@@ -1544,9 +2688,23 @@
             }
             const termDisplayName = selectedTerm ? selectedTerm.name : `Term ${currentTerm}`;
             
+            // Determine back button based on user role
+            let backButtonAction = 'clearTermAndShowSelection()';
+            let backButtonText = '← Back to Term Selection';
+            if (['headteacher', 'superadmin', 'deputy_headteacher'].includes(role)) {
+                backButtonAction = 'loadPrincipalTermDashboard()';
+                backButtonText = `← Back to Term ${currentTerm} Dashboard`;
+            } else if (role === 'finance') {
+                backButtonAction = 'loadFinanceTermDashboard()';
+                backButtonText = `← Back to Term ${currentTerm} Dashboard`;
+            }
+            
+            // Debug: Log role to console
+            console.log('loadTermCourses - Current role:', role, 'Current user:', currentUser);
+            
             content.innerHTML = `
                 <div class="view-header" style="margin-bottom: 16px;">
-                    <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                    <button onclick="${backButtonAction}" class="btn-back">${backButtonText}</button>
                 </div>
                 <!-- Context Header Section -->
                 <div class="context-header">
@@ -1558,7 +2716,18 @@
                                 <p class="context-label">Academic Period</p>
                 </div>
                         </div>
-                        <div class="context-header-right">
+                        <div class="context-header-right" style="display: flex !important; align-items: center !important; justify-content: flex-end !important;">
+                            ${role === 'student' ? `
+                                <button onclick="loadStudentDashboardOverview()" class="context-action-btn" style="background: #2563EB !important; color: white !important; font-weight: 700 !important; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4) !important; border: 2px solid #2563EB !important; padding: 0.875rem 1.75rem !important; font-size: 1.05rem !important; transition: all 0.2s ease !important; min-width: 180px !important; letter-spacing: 0.3px !important; display: flex !important; align-items: center !important; cursor: pointer !important; z-index: 10 !important; visibility: visible !important; opacity: 1 !important;">
+                                    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" style="margin-right: 10px; stroke-width: 2;">
+                                        <path d="M2 2H14V14H2V2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M6 6H10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                        <path d="M6 9H10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                        <path d="M6 12H8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                    </svg>
+                                    Term Dashboard
+                                </button>
+                            ` : ''}
                             ${['headteacher', 'superadmin', 'deputy_headteacher'].includes(role) ? `
                                 <button onclick="loadView('assign-teachers')" class="context-action-btn">
                                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 8px;">
@@ -1636,9 +2805,17 @@
             };
             const termName = termNames[currentTerm] || `Term ${currentTerm} ${currentYear}`;
             
+            // Determine back button based on user role
+            let backButtonAction = 'loadTermCourses()';
+            if (['headteacher', 'superadmin', 'deputy_headteacher'].includes(currentUser.role)) {
+                backButtonAction = 'loadPrincipalTermDashboard()';
+            } else if (currentUser.role === 'finance') {
+                backButtonAction = 'loadFinanceTermDashboard()';
+            }
+            
             content.innerHTML = `
                 <div class="view-header">
-                    <button onclick="loadTermCourses()" class="btn-back">← Back to Courses</button>
+                    <button onclick="${backButtonAction}" class="btn-back">← Back to Term Dashboard</button>
                     <h2>${course.course_name} - ${termName}</h2>
                 </div>
                 
@@ -3631,75 +4808,71 @@
                 
             content.innerHTML = `
                 <div class="view-header">
-                        <h2>📊 System Overview</h2>
+                        <h2>System Overview</h2>
                         <p style="color: var(--text-secondary); margin-top: 0.5rem;">Monitor overall system health and statistics</p>
                 </div>
                     
                 <div class="stats-grid">
                     <div class="stat-card">
-                            <div class="stat-icon" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">👥</div>
-                        <h3>Users</h3>
-                            <div class="stat-value">${totalUsers}</div>
-                            <div class="stat-details">
-                                <div class="stat-detail-item">
-                                    <span class="stat-label">Students:</span>
-                                    <span class="stat-number">${stats.users?.student || 0}</span>
-                    </div>
-                                <div class="stat-detail-item">
-                                    <span class="stat-label">Teachers:</span>
-                                    <span class="stat-number">${stats.users?.teacher || 0}</span>
-                                </div>
-                                <div class="stat-detail-item">
-                                    <span class="stat-label">Admins:</span>
-                                    <span class="stat-number">${(stats.users?.headteacher || 0) + (stats.users?.superadmin || 0)}</span>
-                                </div>
+                        <h3 style="font-size: 1.5rem; font-weight: 600; margin: 0 0 1rem 0; color: var(--text-primary); text-transform: uppercase;">Users</h3>
+                        <div class="stat-value">${totalUsers}</div>
+                        <div class="stat-details">
+                            <div class="stat-detail-item">
+                                <span class="stat-label">Students:</span>
+                                <span class="stat-number">${stats.users?.student || 0}</span>
+                            </div>
+                            <div class="stat-detail-item">
+                                <span class="stat-label">Teachers:</span>
+                                <span class="stat-number">${stats.users?.teacher || 0}</span>
+                            </div>
+                            <div class="stat-detail-item">
+                                <span class="stat-label">Admins:</span>
+                                <span class="stat-number">${(stats.users?.headteacher || 0) + (stats.users?.superadmin || 0)}</span>
                             </div>
                         </div>
+                    </div>
                         
                     <div class="stat-card">
-                            <div class="stat-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">📚</div>
-                        <h3>Courses</h3>
-                            <div class="stat-value">${stats.courses?.total_courses || 0}</div>
-                            <div class="stat-details">
-                                <div class="stat-detail-item">
-                                    <span class="stat-label">Active Teachers:</span>
-                                    <span class="stat-number">${stats.courses?.teachers_with_courses || 0}</span>
-                    </div>
-                                <div class="stat-detail-item">
-                                    <span class="stat-label">Enrolled Students:</span>
-                                    <span class="stat-number">${stats.courses?.enrolled_students || 0}</span>
-                                </div>
+                        <h3 style="font-size: 1.5rem; font-weight: 600; margin: 0 0 1rem 0; color: var(--text-primary); text-transform: uppercase;">Courses</h3>
+                        <div class="stat-value">${stats.courses?.total_courses || 0}</div>
+                        <div class="stat-details">
+                            <div class="stat-detail-item">
+                                <span class="stat-label">Active Teachers:</span>
+                                <span class="stat-number">${stats.courses?.teachers_with_courses || 0}</span>
+                            </div>
+                            <div class="stat-detail-item">
+                                <span class="stat-label">Enrolled Students:</span>
+                                <span class="stat-number">${stats.courses?.enrolled_students || 0}</span>
                             </div>
                         </div>
+                    </div>
                         
                     <div class="stat-card">
-                            <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">📝</div>
-                        <h3>Assignments</h3>
-                            <div class="stat-value">${stats.assignments?.total_assignments || 0}</div>
-                            <div class="stat-details">
-                                <div class="stat-detail-item">
-                                    <span class="stat-label">Courses with Assignments:</span>
-                                    <span class="stat-number">${stats.assignments?.courses_with_assignments || 0}</span>
-                    </div>
+                        <h3 style="font-size: 1.5rem; font-weight: 600; margin: 0 0 1rem 0; color: var(--text-primary); text-transform: uppercase;">Assignments</h3>
+                        <div class="stat-value">${stats.assignments?.total_assignments || 0}</div>
+                        <div class="stat-details">
+                            <div class="stat-detail-item">
+                                <span class="stat-label">Courses with Assignments:</span>
+                                <span class="stat-number">${stats.assignments?.courses_with_assignments || 0}</span>
                             </div>
                         </div>
+                    </div>
                         
                     <div class="stat-card">
-                            <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">🎯</div>
-                        <h3>Grades</h3>
-                            <div class="stat-value">${parseFloat(stats.grades?.average_percentage || 0).toFixed(1)}%</div>
-                            <div class="stat-details">
-                                <div class="stat-detail-item">
-                                    <span class="stat-label">Total Grades:</span>
-                                    <span class="stat-number">${stats.grades?.total_grades || 0}</span>
-                    </div>
-                                <div class="stat-detail-item">
-                                    <span class="stat-label">Students Graded:</span>
-                                    <span class="stat-number">${stats.grades?.students_graded || 0}</span>
-                                </div>
+                        <h3 style="font-size: 1.5rem; font-weight: 600; margin: 0 0 1rem 0; color: var(--text-primary); text-transform: uppercase;">Grades</h3>
+                        <div class="stat-value">${parseFloat(stats.grades?.average_percentage || 0).toFixed(1)}%</div>
+                        <div class="stat-details">
+                            <div class="stat-detail-item">
+                                <span class="stat-label">Total Grades:</span>
+                                <span class="stat-number">${stats.grades?.total_grades || 0}</span>
+                            </div>
+                            <div class="stat-detail-item">
+                                <span class="stat-label">Students Graded:</span>
+                                <span class="stat-number">${stats.grades?.students_graded || 0}</span>
                             </div>
                         </div>
                     </div>
+                </div>
                     
                     <div class="dashboard-actions" style="margin-top: 2rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
                         ${currentUser.role === 'superadmin' ? `

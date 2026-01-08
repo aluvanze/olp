@@ -18,6 +18,7 @@ const studentRegistrationRoutes = require('./routes/student-registration');
 const teacherAssignmentRoutes = require('./routes/teacher-assignments');
 const substrandRoutes = require('./routes/substrands');
 const gradeLevelsRoutes = require('./routes/grades-management');
+const financeRoutes = require('./routes/finance');
 const { pool } = require('./config/database');
 
 const app = express();
@@ -28,11 +29,11 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-hashes'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-hashes'", "https://cdn.jsdelivr.net"],
       scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "http://localhost:3000"],
+      connectSrc: ["'self'", "http://localhost:3000", "https://cdn.jsdelivr.net"],
     },
   },
 }));
@@ -43,12 +44,30 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting
-const limiter = rateLimit({
+// Rate limiting - More lenient for development and dashboard usage
+const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: 1000, // Increased to 1000 requests per 15 minutes for dashboard usage
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
 });
-app.use('/api/', limiter);
+
+// Stricter rate limiter for auth endpoints (to prevent brute force)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 50, // 50 login attempts per 15 minutes
+  message: 'Too many login attempts, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply rate limiting
+// Auth endpoints with stricter limits (security-sensitive)
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/change-password', authLimiter);
+// General API rate limiting (more lenient for dashboard operations)
+app.use('/api/', generalLimiter);
 
 // Test database connection
 pool.connect((err, client, release) => {
@@ -82,6 +101,7 @@ app.use('/api/student-registration', studentRegistrationRoutes);
 app.use('/api/teacher-assignments', teacherAssignmentRoutes);
 app.use('/api/substrands', substrandRoutes);
 app.use('/api/admin/grade-levels', gradeLevelsRoutes);
+app.use('/api/finance', financeRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
