@@ -164,13 +164,13 @@ router.post('/', authorize('teacher', 'headteacher', 'deputy_headteacher', 'supe
 });
 
 // Get students for registration (list existing students)
-router.get('/students', authorize('teacher', 'headteacher', 'deputy_headteacher', 'superadmin'), async (req, res) => {
+router.get('/students', authorize('teacher', 'headteacher', 'deputy_headteacher', 'superadmin', 'finance'), async (req, res) => {
   try {
     const { search, admission_number } = req.query;
     
     let query = `
       SELECT u.id, u.username, u.email, u.first_name, u.last_name, u.is_active,
-             lp.admission_number, lp.school_id, lp.pathway_id,
+             lp.id as learner_id, lp.admission_number, lp.school_id, lp.pathway_id,
              p.name as pathway_name
       FROM users u
       LEFT JOIN learner_profiles lp ON u.id = lp.user_id

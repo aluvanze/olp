@@ -202,26 +202,45 @@ router.post('/teachers', authorize('headteacher', 'superadmin'), async (req, res
 });
 
 // Allocate course to teacher (Headteacher/Superadmin)
+// This endpoint supports both simple assignment and term-specific assignment
 router.post('/allocate-course', authorize('headteacher', 'superadmin'), async (req, res) => {
+  const client = await pool.connect();
   try {
-    const { teacher_id, course_id, notes } = req.body;
+    await client.query('BEGIN');
+    
+    const { teacher_id, course_id, term_number, academic_year, notes } = req.body;
     
     if (!teacher_id || !course_id) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ message: 'Teacher ID and Course ID are required' });
     }
     
     // Verify teacher exists and is a teacher
-    const teacherCheck = await pool.query(
+    const teacherCheck = await client.query(
       'SELECT id, role FROM users WHERE id = $1 AND role = $2',
       [teacher_id, 'teacher']
     );
     
     if (teacherCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Teacher not found' });
     }
     
-    // Update course teacher
-    const courseResult = await pool.query(
+    // Get course details before update
+    const courseCheck = await client.query(
+      'SELECT id, course_name, course_code, grade_id, academic_year, learning_area_id, is_active FROM courses WHERE id = $1',
+      [course_id]
+    );
+    
+    if (courseCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Course not found' });
+    }
+    
+    const course = courseCheck.rows[0];
+    
+    // Update course teacher (for backward compatibility)
+    const courseResult = await client.query(
       `UPDATE courses 
        SET teacher_id = $1, updated_at = CURRENT_TIMESTAMP
        WHERE id = $2
@@ -229,12 +248,27 @@ router.post('/allocate-course', authorize('headteacher', 'superadmin'), async (r
       [teacher_id, course_id]
     );
     
-    if (courseResult.rows.length === 0) {
-      return res.status(404).json({ message: 'Course not found' });
+    // If term_number and academic_year are provided, create term-specific assignment
+    if (term_number && academic_year) {
+      // Validate term number
+      if (term_number < 1 || term_number > 3) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'Term number must be between 1 and 3' });
+      }
+      
+      // Create or update teacher_course_assignments record
+      await client.query(
+        `INSERT INTO teacher_course_assignments 
+         (course_id, teacher_id, term_number, academic_year, assigned_by, is_active)
+         VALUES ($1, $2, $3, $4, $5, true)
+         ON CONFLICT (course_id, teacher_id, term_number, academic_year) 
+         DO UPDATE SET is_active = true, assigned_by = EXCLUDED.assigned_by, assigned_at = CURRENT_TIMESTAMP`,
+        [course_id, teacher_id, term_number, academic_year, req.user.id]
+      );
     }
     
-    // Record allocation
-    await pool.query(
+    // Record allocation in teacher_allocations table (for tracking)
+    await client.query(
       `INSERT INTO teacher_allocations (teacher_id, course_id, allocated_by, notes)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (teacher_id, course_id) 
@@ -242,10 +276,50 @@ router.post('/allocate-course', authorize('headteacher', 'superadmin'), async (r
       [teacher_id, course_id, req.user.id, notes || null]
     );
     
-    res.json({ message: 'Course allocated successfully', course: courseResult.rows[0] });
+    await client.query('COMMIT');
+    
+    // Get grade info if available
+    let gradeInfo = null;
+    if (course.grade_id) {
+      const gradeResult = await pool.query(
+        'SELECT id, grade_number, name FROM grade_levels WHERE id = $1',
+        [course.grade_id]
+      );
+      if (gradeResult.rows.length > 0) {
+        gradeInfo = gradeResult.rows[0];
+      }
+    }
+    
+    // Get learning area info if available
+    let learningAreaInfo = null;
+    if (course.learning_area_id) {
+      const laResult = await pool.query(
+        'SELECT id, name, code FROM learning_areas WHERE id = $1',
+        [course.learning_area_id]
+      );
+      if (laResult.rows.length > 0) {
+        learningAreaInfo = laResult.rows[0];
+      }
+    }
+    
+    res.json({ 
+      message: term_number && academic_year 
+        ? `Course allocated successfully for Term ${term_number} ${academic_year}`
+        : 'Course allocated successfully',
+      course: courseResult.rows[0],
+      term_assignment: term_number && academic_year ? { term_number, academic_year } : null,
+      learning_area: learningAreaInfo,
+      grade: gradeInfo,
+      note: !course.learning_area_id 
+        ? 'Warning: Course is not linked to a learning area. Please link it to a learning area for full functionality.'
+        : null
+    });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Allocate course error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error', error: error.message });
+  } finally {
+    client.release();
   }
 });
 

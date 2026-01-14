@@ -8,7 +8,8 @@
     "dev": "nodemon server.js",
     "migrate": "node migrations/runMigrations.js",
     "seed": "node migrations/seedData.js",
-    "seed-subjects": "node seed-subjects.js"
+    "seed-subjects": "node seed-subjects.js",
+    "populate-substrands": "node scripts/run_substrands_migration.js"
   },
   "keywords": [
     "lms",

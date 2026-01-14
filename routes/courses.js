@@ -12,15 +12,34 @@ router.get('/', async (req, res) => {
     const { term, academic_year } = req.query;
     
     let query = `
-      SELECT c.*, u.first_name as teacher_first_name, u.last_name as teacher_last_name,
+      SELECT c.*, 
+             u.first_name as teacher_first_name, 
+             u.last_name as teacher_last_name,
+             la.id as learning_area_id,
+             la.name as learning_area_name,
+             la.code as learning_area_code,
              COUNT(DISTINCT ce.student_id) as enrolled_students
       FROM courses c
       LEFT JOIN users u ON c.teacher_id = u.id
+      LEFT JOIN learning_areas la ON c.learning_area_id = la.id
       LEFT JOIN course_enrollments ce ON c.id = ce.course_id AND ce.status = 'active'
       WHERE c.is_active = true
     `;
     const params = [];
     let paramCount = 1;
+    
+    // Teachers only see courses assigned to them (regardless of grade)
+    // This must come BEFORE grade filter so teachers see all their courses
+    if (req.user.role === 'teacher') {
+      query += ` AND c.teacher_id = $${paramCount}`;
+      params.push(req.user.id);
+      paramCount++;
+    } else if (req.user.grade_id && req.user.role !== 'headteacher' && req.user.role !== 'superadmin' && req.user.role !== 'deputy_headteacher' && req.user.role !== 'finance') {
+      // Filter by grade for non-teachers (students, parents, etc.) but not for admins
+      query += ` AND c.grade_id = $${paramCount}`;
+      params.push(req.user.grade_id);
+      paramCount++;
+    }
     
     // Filter by academic year if provided
     if (academic_year) {
@@ -48,7 +67,7 @@ router.get('/', async (req, res) => {
       paramCount++;
     }
     
-    query += ' GROUP BY c.id, u.first_name, u.last_name ORDER BY c.course_name';
+    query += ' GROUP BY c.id, u.first_name, u.last_name, la.id, la.name, la.code ORDER BY c.course_name';
     
     const result = await pool.query(query, params);
     res.json(result.rows);
@@ -108,27 +127,47 @@ router.get('/terms', async (req, res) => {
     
     // Get course counts for each term
     for (const termData of mappedTerms) {
-      let courseCountQuery = `
-        SELECT COUNT(*) as count 
-        FROM courses 
-        WHERE academic_year = $1 AND is_active = true
-      `;
-      const params = [termData.academic_year];
+      let courseCountQuery;
+      const params = [];
       
-      // Teachers only see their own courses
+      // Teachers see courses from teacher_course_assignments OR direct assignment
       if (req.user.role === 'teacher') {
-        courseCountQuery += ' AND teacher_id = $2';
-        params.push(req.user.id);
+        courseCountQuery = `
+          SELECT COUNT(DISTINCT c.id) as count 
+          FROM courses c
+          LEFT JOIN teacher_course_assignments tca ON c.id = tca.course_id AND tca.teacher_id = $1 AND tca.is_active = true
+          WHERE c.is_active = true
+            AND (
+              (tca.id IS NOT NULL AND tca.term_number = $2 AND tca.academic_year = $3)
+              OR
+              (c.teacher_id = $1)
+            )
+        `;
+        params.push(req.user.id, termData.term, termData.academic_year);
       }
       // Students only see enrolled courses
       else if (req.user.role === 'student') {
-        courseCountQuery += ` AND id IN (
-          SELECT course_id FROM course_enrollments 
-          WHERE student_id = $2 AND status = 'active'
-        )`;
-        params.push(req.user.id);
+        courseCountQuery = `
+          SELECT COUNT(*) as count 
+          FROM courses c
+          WHERE c.academic_year = $1 
+            AND c.is_active = true
+            AND c.id IN (
+              SELECT course_id FROM course_enrollments 
+              WHERE student_id = $2 AND status = 'active'
+            )
+        `;
+        params.push(termData.academic_year, req.user.id);
       }
       // Headteachers, admins see all courses
+      else {
+        courseCountQuery = `
+          SELECT COUNT(*) as count 
+          FROM courses 
+          WHERE academic_year = $1 AND is_active = true
+        `;
+        params.push(termData.academic_year);
+      }
       
       const courseCount = await pool.query(courseCountQuery, params);
       termData.course_count = parseInt(courseCount.rows[0].count);
@@ -244,31 +283,70 @@ router.get('/term/:term/:academicYear', async (req, res) => {
   try {
     const { term, academicYear } = req.params;
     
+    // For teachers, check both teacher_course_assignments (term-specific) and courses.teacher_id (general)
+    if (req.user.role === 'teacher') {
+      const query = `
+        SELECT DISTINCT c.*, 
+               u.first_name as teacher_first_name, 
+               u.last_name as teacher_last_name,
+               la.id as learning_area_id,
+               la.name as learning_area_name,
+               la.code as learning_area_code,
+               COUNT(DISTINCT ce.student_id) as enrolled_students
+        FROM courses c
+        LEFT JOIN users u ON c.teacher_id = u.id
+        LEFT JOIN learning_areas la ON c.learning_area_id = la.id
+        LEFT JOIN course_enrollments ce ON c.id = ce.course_id AND ce.status = 'active'
+        LEFT JOIN teacher_course_assignments tca ON c.id = tca.course_id AND tca.teacher_id = $1 AND tca.is_active = true
+        WHERE c.is_active = true
+          AND (
+            -- Course assigned via teacher_course_assignments for this term
+            (tca.id IS NOT NULL AND tca.term_number = $2 AND tca.academic_year = $3)
+            OR
+            -- Course directly assigned to teacher (backward compatibility)
+            (c.teacher_id = $1 AND (tca.id IS NULL OR tca.term_number != $2 OR tca.academic_year != $3))
+          )
+        GROUP BY c.id, u.first_name, u.last_name, la.id, la.name, la.code
+        ORDER BY c.course_name
+      `;
+      
+      const result = await pool.query(query, [req.user.id, parseInt(term), academicYear]);
+      return res.json(result.rows);
+    }
+    
+    // For non-teachers, use standard query
     let query = `
-      SELECT c.*, u.first_name as teacher_first_name, u.last_name as teacher_last_name,
+      SELECT c.*, 
+             u.first_name as teacher_first_name, 
+             u.last_name as teacher_last_name,
+             la.id as learning_area_id,
+             la.name as learning_area_name,
+             la.code as learning_area_code,
              COUNT(DISTINCT ce.student_id) as enrolled_students
       FROM courses c
       LEFT JOIN users u ON c.teacher_id = u.id
+      LEFT JOIN learning_areas la ON c.learning_area_id = la.id
       LEFT JOIN course_enrollments ce ON c.id = ce.course_id AND ce.status = 'active'
-      WHERE c.is_active = true AND c.academic_year = $1
+      WHERE c.is_active = true
     `;
-    const params = [academicYear];
-    let paramCount = 2;
+    const params = [];
+    let paramCount = 1;
     
-    // Teachers only see their own courses
-    if (req.user.role === 'teacher') {
-      query += ` AND c.teacher_id = $${paramCount}`;
-      params.push(req.user.id);
+    // Filter by grade for non-teachers
+    if (req.user.grade_id) {
+      query += ` AND c.grade_id = $${paramCount}`;
+      params.push(req.user.grade_id);
       paramCount++;
     }
+    
     // Students only see enrolled courses
-    else if (req.user.role === 'student') {
+    if (req.user.role === 'student') {
       query += ` AND c.id IN (SELECT course_id FROM course_enrollments WHERE student_id = $${paramCount} AND status = 'active')`;
       params.push(req.user.id);
       paramCount++;
     }
     
-    query += ' GROUP BY c.id, u.first_name, u.last_name ORDER BY c.course_name';
+    query += ' GROUP BY c.id, u.first_name, u.last_name, la.id, la.name, la.code ORDER BY c.course_name';
     
     const result = await pool.query(query, params);
     res.json(result.rows);
@@ -279,12 +357,15 @@ router.get('/term/:term/:academicYear', async (req, res) => {
 });
 
 // Get course by ID with detailed info
+// Get course by ID with learning area strands
 router.get('/:id', async (req, res) => {
   try {
     const courseResult = await pool.query(
-      `SELECT c.*, u.first_name as teacher_first_name, u.last_name as teacher_last_name
+      `SELECT c.*, u.first_name as teacher_first_name, u.last_name as teacher_last_name,
+              la.strands, la.name as learning_area_name, la.code as learning_area_code
        FROM courses c
        LEFT JOIN users u ON c.teacher_id = u.id
+       LEFT JOIN learning_areas la ON c.learning_area_id = la.id
        WHERE c.id = $1`,
       [req.params.id]
     );
@@ -294,6 +375,15 @@ router.get('/:id', async (req, res) => {
     }
     
     const course = courseResult.rows[0];
+    
+    // Parse strands if they exist
+    if (course.strands && typeof course.strands === 'string') {
+      try {
+        course.strands = JSON.parse(course.strands);
+      } catch (e) {
+        course.strands = null;
+      }
+    }
     
     // Check access permissions
     if (req.user.role === 'student') {
