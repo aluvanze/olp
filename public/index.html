@@ -10,11 +10,16 @@
     <div id="root">
         <div class="login-container">
             <div class="login-left-panel">
-                <div class="login-branding">
-                    <h1 class="brand-title">Grade 10 OLP System</h1>
-                    <h2 class="brand-subtitle">Online Learner Progress Monitor</h2>
-                    <p class="brand-tagline">Unlocking Academic Gates For Future Excellence</p>
-                    <p class="brand-description">Competency-Based Curriculum (CBC) Senior School Management Platform for Grades 10-12. Designed for Kenya's education system.</p>
+                <div class="login-content-wrapper">
+                    <div class="student-photo-container">
+                        <img src="student-photo.jpg" alt="Student" class="student-photo" id="studentPhoto" loading="eager" fetchpriority="high">
+                    </div>
+                    <div class="login-branding">
+                        <h1 class="brand-title">Grade 10 OLP System</h1>
+                        <h2 class="brand-subtitle">Online Learner Progress Monitor</h2>
+                        <p class="brand-tagline">Unlocking Academic Gates For Future Excellence</p>
+                        <p class="brand-description">Competency-Based Curriculum (CBC) Senior School Management Platform for Grades 10-12. Designed for Kenya's education system.</p>
+                    </div>
                 </div>
             </div>
             <div class="login-right-panel">
@@ -65,6 +70,50 @@
             if (token) {
                 authToken = token;
                 checkAuth();
+            }
+            
+            // Handle student photo loading as background image
+            const leftPanel = document.querySelector('.login-left-panel');
+            if (leftPanel) {
+                // Try multiple possible image names and formats
+                const imageNames = [
+                    'student-photo.jpg', 
+                    'student-photo.png', 
+                    'student-photo.jpeg', 
+                    'student.jpg', 
+                    'student.png',
+                    'student.jpeg',
+                    'login-student.jpg',
+                    'login-student.png'
+                ];
+                let imageIndex = 0;
+                
+                const tryLoadBackgroundImage = () => {
+                    if (imageIndex < imageNames.length) {
+                        const img = new Image();
+                        img.onload = () => {
+                            // Update the ::before pseudo-element background via CSS variable
+                            const style = document.createElement('style');
+                            style.textContent = `
+                                .login-left-panel::before {
+                                    background-image: url('${imageNames[imageIndex]}') !important;
+                                    opacity: 1 !important;
+                                }
+                            `;
+                            document.head.appendChild(style);
+                            leftPanel.classList.add('has-photo');
+                        };
+                        img.onerror = () => {
+                            imageIndex++;
+                            tryLoadBackgroundImage();
+                        };
+                        img.src = imageNames[imageIndex];
+                    } else {
+                        console.log('Student photo not found. Please add student-photo.jpg to the public folder.');
+                    }
+                };
+                
+                tryLoadBackgroundImage();
             }
         });
 
@@ -122,24 +171,56 @@
             }
         });
 
+        // Helper function to get icon for navigation item
+        function getNavIcon(viewName) {
+            const icons = {
+                'dashboard': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>',
+                'messages': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
+                'register-student': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
+                'admin-dashboard': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>',
+                'manage-terms': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>',
+                'users': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
+                'children': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
+                'grades': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>',
+                'attendance': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>',
+                'courses': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>'
+            };
+            return icons[viewName] || '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
+        }
+
+        // Helper function to create sidebar button with icon
+        function createSidebarButton(viewName, label, isActive = false) {
+            return `
+                <button onclick="loadView('${viewName}')" class="sidebar-nav-btn ${isActive ? 'active' : ''}">
+                    <span class="sidebar-btn-icon">${getNavIcon(viewName)}</span>
+                    <span class="sidebar-btn-label">${label}</span>
+                </button>
+            `;
+        }
+
         function showDashboard() {
             const root = document.getElementById('root');
             const role = currentUser.role;
             
-            // Role-specific navigation
+            // Role-specific navigation (desktop)
             let navButtons = '';
+            let sidebarButtons = '';
             
             if (role === 'student') {
                 navButtons = `
                     <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
+                sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) + createSidebarButton('messages', 'Messages');
             } else if (role === 'teacher') {
                 navButtons = `
                     <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
                     <button onclick="loadView('register-student')" class="nav-btn">Register Student</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
+                sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) + 
+                                createSidebarButton('register-student', 'Register Student') + 
+                                createSidebarButton('messages', 'Messages');
             } else if (role === 'headteacher' || role === 'deputy_headteacher' || role === 'superadmin' || role === 'finance') {
                 navButtons = `
                     <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
@@ -149,6 +230,12 @@
                     ${role === 'superadmin' ? `<button onclick="loadView('users')" class="nav-btn">User Management</button>` : ''}
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
+                sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) + 
+                                (role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher' ? createSidebarButton('admin-dashboard', 'System Overview') : '') +
+                                createSidebarButton('register-student', 'Register Student') + 
+                                (role === 'superadmin' || role === 'headteacher' ? createSidebarButton('manage-terms', 'Manage Terms') : '') +
+                                (role === 'superadmin' ? createSidebarButton('users', 'User Management') : '') +
+                                createSidebarButton('messages', 'Messages');
             } else if (role === 'parent') {
                 navButtons = `
                     <button onclick="loadView('children')" class="nav-btn">My Children</button>
@@ -156,18 +243,68 @@
                     <button onclick="loadView('attendance')" class="nav-btn">Attendance</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
+                sidebarButtons = createSidebarButton('children', 'My Children') + 
+                                createSidebarButton('grades', 'Grades') + 
+                                createSidebarButton('attendance', 'Attendance') + 
+                                createSidebarButton('messages', 'Messages');
             } else {
                 navButtons = `
                     <button onclick="loadView('courses')" class="nav-btn">Courses</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
+                sidebarButtons = createSidebarButton('courses', 'Courses') + createSidebarButton('messages', 'Messages');
             }
             
             root.innerHTML = `
                 <div class="dashboard">
+                    <!-- Mobile Sidebar Overlay -->
+                    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+                    
+                    <!-- Mobile Sidebar -->
+                    <aside class="mobile-sidebar" id="mobileSidebar">
+                        <div class="sidebar-header">
+                            <div class="sidebar-logo">
+                                <span class="logo-text">Grade 10 OLP</span>
+                            </div>
+                            <button class="sidebar-close-btn" onclick="toggleSidebar(); event.stopPropagation();" aria-label="Close sidebar">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="sidebar-user-info">
+                            <div class="user-avatar">${currentUser.first_name.charAt(0)}${currentUser.last_name.charAt(0)}</div>
+                            <div class="user-details">
+                                <div class="user-name">${currentUser.first_name} ${currentUser.last_name}</div>
+                                <div class="user-role">${formatRoleName(role)}</div>
+                            </div>
+                        </div>
+                        <nav class="sidebar-nav">
+                            ${sidebarButtons}
+                        </nav>
+                        <div class="sidebar-footer">
+                            <a href="#" class="sidebar-footer-link" onclick="loadView('profile'); toggleSidebar(); return false;">
+                                <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M8 8C10.2091 8 12 6.20914 12 4C12 1.79086 10.2091 0 8 0C5.79086 0 4 1.79086 4 4C4 6.20914 5.79086 8 8 8Z" fill="currentColor"/><path d="M0 14C0 11.2386 2.23858 9 5 9H11C13.7614 9 16 11.2386 16 14V16H0V14Z" fill="currentColor"/></svg>
+                                <span>My Profile</span>
+                            </a>
+                            <a href="#" class="sidebar-footer-link" onclick="logout(); toggleSidebar(); return false;">
+                                <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M6 14H3C2.46957 14 1.96086 13.7893 1.58579 13.4142C1.21071 13.0391 1 12.5304 1 12V4C1 3.46957 1.21071 2.96086 1.58579 2.58579C1.96086 2.21071 2.46957 2 3 2H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 11L15 8L11 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 8H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span>Sign Out</span>
+                            </a>
+                        </div>
+                    </aside>
+                    
                     <header class="dashboard-header">
                         <div class="header-content">
                             <div class="header-left">
+                                <button class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Open menu">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                                    </svg>
+                                </button>
                                 <div class="system-logo-small">
                                     <span class="logo-text">Grade 10 OLP</span>
                             </div>
@@ -215,21 +352,35 @@
                         </div>
                     </header>
                     <main class="dashboard-content" id="dashboardContent">
-                        <div class="welcome-message">
-                            <h2>Welcome, ${currentUser.first_name}!</h2>
-                            <p>Select an option from the navigation menu to get started.</p>
-                        </div>
+                        <div class="loading">Loading dashboard...</div>
                     </main>
                 </div>
             `;
+            
+            // Automatically load the dashboard content
+            loadView('dashboard');
         }
 
         async function loadView(viewName) {
             const content = document.getElementById('dashboardContent');
             content.innerHTML = '<div class="loading">Loading...</div>';
 
-            // Update active navigation button
+            // Close sidebar on mobile when navigating
+            const sidebar = document.getElementById('mobileSidebar');
+            if (sidebar && sidebar.classList.contains('active')) {
+                toggleSidebar();
+            }
+
+            // Update active navigation button (desktop)
             document.querySelectorAll('.main-nav .nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(`'${viewName}'`)) {
+                    btn.classList.add('active');
+                }
+            });
+
+            // Update active navigation button (mobile sidebar)
+            document.querySelectorAll('.sidebar-nav .sidebar-nav-btn').forEach(btn => {
                 btn.classList.remove('active');
                 if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(`'${viewName}'`)) {
                     btn.classList.add('active');
@@ -3513,6 +3664,58 @@
                 dropdown.classList.toggle('show');
             }
         }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('mobileSidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (sidebar && overlay) {
+                const isActive = sidebar.classList.contains('active');
+                
+                if (isActive) {
+                    // Closing sidebar
+                    sidebar.classList.remove('active');
+                    overlay.classList.remove('active');
+                    document.body.style.overflow = '';
+                    // Force reflow to ensure transition completes
+                    setTimeout(() => {
+                        if (!sidebar.classList.contains('active')) {
+                            sidebar.style.visibility = 'hidden';
+                            sidebar.style.pointerEvents = 'none';
+                        }
+                    }, 300);
+                } else {
+                    // Opening sidebar
+                    sidebar.style.visibility = 'visible';
+                    sidebar.style.pointerEvents = 'auto';
+                    sidebar.classList.add('active');
+                    overlay.classList.add('active');
+                    document.body.style.overflow = 'hidden';
+                }
+            }
+        }
+
+        // Close sidebar when clicking outside
+        document.addEventListener('click', (e) => {
+            const sidebar = document.getElementById('mobileSidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            const menuBtn = document.querySelector('.mobile-menu-btn');
+            
+            if (sidebar && overlay && sidebar.classList.contains('active')) {
+                if (overlay.contains(e.target) && !sidebar.contains(e.target) && !menuBtn?.contains(e.target)) {
+                    toggleSidebar();
+                }
+            }
+        });
+
+        // Close sidebar on ESC key press
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' || e.keyCode === 27) {
+                const sidebar = document.getElementById('mobileSidebar');
+                if (sidebar && sidebar.classList.contains('active')) {
+                    toggleSidebar();
+                }
+            }
+        });
 
         // Close user menu when clicking outside
         document.addEventListener('click', (e) => {
