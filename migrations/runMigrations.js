@@ -11,7 +11,7 @@ async function runMigrations() {
     // Read and execute migration files in order
     const migrationDir = path.join(__dirname);
     const files = fs.readdirSync(migrationDir)
-      .filter(file => file.endsWith('.sql'))
+      .filter(file => file.endsWith('.sql') && !file.includes('backup'))
       .sort();
     
     console.log('Running migrations...');

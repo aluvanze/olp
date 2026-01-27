@@ -5,6 +5,55 @@ const { authenticate, authorize } = require('../middleware/auth');
 const router = express.Router();
 router.use(authenticate);
 
+// Get all learning areas with their substrands (for admin management)
+router.get('/learning-areas', 
+  authorize('teacher', 'headteacher', 'deputy_headteacher', 'superadmin'),
+  async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT id, name, code, strands, description, created_at, updated_at
+         FROM learning_areas
+         ORDER BY name`
+      );
+      
+      const learningAreas = result.rows.map(la => {
+        let strands = [];
+        if (la.strands) {
+          if (typeof la.strands === 'string') {
+            try {
+              strands = JSON.parse(la.strands);
+            } catch (e) {
+              strands = [];
+            }
+          } else {
+            strands = la.strands;
+          }
+        }
+        
+        // Count total substrands
+        let totalSubstrands = 0;
+        strands.forEach(strand => {
+          if (strand.sub_strands && Array.isArray(strand.sub_strands)) {
+            totalSubstrands += strand.sub_strands.length;
+          }
+        });
+        
+        return {
+          ...la,
+          strands,
+          total_strands: strands.length,
+          total_substrands: totalSubstrands
+        };
+      });
+      
+      res.json(learningAreas);
+    } catch (error) {
+      console.error('Get all learning areas error:', error);
+      res.status(500).json({ message: 'Server error' });
+    }
+  }
+);
+
 // Get sub-strands for a learning area (by course ID or learning area ID)
 router.get('/learning-area/:id', async (req, res) => {
   try {

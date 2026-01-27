@@ -33,7 +33,7 @@ app.use(helmet({
       scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "http://localhost:3000", "https://cdn.jsdelivr.net"],
+      connectSrc: ["'self'", "http://localhost:3000", "https://cdn.jsdelivr.net", process.env.FRONTEND_URL].filter(Boolean),
     },
   },
 }));
