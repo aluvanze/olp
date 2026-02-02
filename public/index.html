@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Grade 10 OLP System - Online Learner Progress Monitor</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles-premium-enhancements.css">
 </head>
 <body>
     <div id="root">
@@ -12,8 +13,8 @@
             <div class="login-left-panel">
                 <div class="login-content-wrapper">
                     <div class="student-photo-container">
-                        <img src="student-photo.jpg" alt="Student" class="student-photo" id="studentPhoto" loading="eager" fetchpriority="high">
-                    </div>
+                        <img src="student-photo.jpeg" alt="Student" class="student-photo" id="studentPhoto" loading="eager" fetchpriority="high">
+                </div>
                     <div class="login-branding">
                         <h1 class="brand-title">Grade 10 OLP System</h1>
                         <h2 class="brand-subtitle">Online Learner Progress Monitor</h2>
@@ -30,14 +31,14 @@
                 <form id="loginForm">
                     <div class="form-group">
                             <label for="username">
-                                <span class="input-icon">✉️</span>
+                                <span class="input-icon">${getIcon('mail', 18)}</span>
                                 Email Address
                             </label>
                             <input type="text" id="username" name="username" placeholder="your.email@school.com" required>
                     </div>
                     <div class="form-group">
                             <label for="password">
-                                <span class="input-icon">🔒</span>
+                                <span class="input-icon">${getIcon('lock', 18)}</span>
                                 Password
                             </label>
                             <input type="password" id="password" name="password" placeholder="Enter your password" required>
@@ -61,7 +62,7 @@
     </div>
 
     <script>
-        const API_BASE_URL = 'http://localhost:3000/api';
+        const API_BASE_URL = 'http://localhost:3001/api';
         let currentUser = null;
         let authToken = null;
         // Check if user is already logged in
@@ -77,12 +78,12 @@
             if (leftPanel) {
                 // Try multiple possible image names and formats
                 const imageNames = [
+                    'student-photo.jpeg',  // Check .jpeg first since it exists
                     'student-photo.jpg', 
                     'student-photo.png', 
-                    'student-photo.jpeg', 
+                    'student.jpeg',
                     'student.jpg', 
                     'student.png',
-                    'student.jpeg',
                     'login-student.jpg',
                     'login-student.png'
                 ];
@@ -171,21 +172,53 @@
             }
         });
 
-        // Helper function to get icon for navigation item
-        function getNavIcon(viewName) {
+        // Comprehensive Icon System - Replaces all emojis with SVG icons
+        function getIcon(iconName, size = 24) {
             const icons = {
-                'dashboard': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>',
-                'messages': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
-                'register-student': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
-                'admin-dashboard': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>',
-                'manage-terms': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>',
-                'users': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
-                'children': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
-                'grades': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>',
-                'attendance': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>',
-                'courses': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>'
+                // Navigation icons
+                'dashboard': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>`,
+                'messages': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`,
+                'register-student': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`,
+                'admin-dashboard': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>`,
+                'manage-terms': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`,
+                'users': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`,
+                'children': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`,
+                'grades': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`,
+                'attendance': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>`,
+                'courses': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`,
+                // Content icons
+                'users-group': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`,
+                'book': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`,
+                'clipboard': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`,
+                'target': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>`,
+                'user': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`,
+                'graduation-cap': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>`,
+                'calendar': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`,
+                'mail': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>`,
+                'lock': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`,
+                'check': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+                'x': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+                'empty': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`
             };
-            return icons[viewName] || '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
+            return icons[iconName] || icons['empty'];
+        }
+
+        // Helper function to get icon for navigation item (backward compatibility)
+        function getNavIcon(viewName) {
+            const iconMap = {
+                'dashboard': 'dashboard',
+                'messages': 'messages',
+                'register-student': 'register-student',
+                'admin-dashboard': 'admin-dashboard',
+                'manage-terms': 'manage-terms',
+                'users': 'users',
+                'children': 'children',
+                'grades': 'grades',
+                'attendance': 'attendance',
+                'courses': 'courses',
+                'result-slips': 'clipboard'
+            };
+            return getIcon(iconMap[viewName] || 'empty', 22);
         }
 
         // Helper function to create sidebar button with icon
@@ -209,9 +242,12 @@
             if (role === 'student') {
                 navButtons = `
                     <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
+                    <button onclick="loadView('result-slips')" class="nav-btn">Result Slips</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
-                sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) + createSidebarButton('messages', 'Messages');
+                sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) + 
+                                createSidebarButton('result-slips', 'Result Slips') + 
+                                createSidebarButton('messages', 'Messages');
             } else if (role === 'teacher') {
                 navButtons = `
                     <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
@@ -263,7 +299,7 @@
                     <!-- Mobile Sidebar -->
                     <aside class="mobile-sidebar" id="mobileSidebar">
                         <div class="sidebar-header">
-                            <div class="sidebar-logo">
+                            <div class="sidebar-logo" onclick="loadView('dashboard'); toggleSidebar();" style="cursor: pointer;" role="button" tabindex="0" onkeypress="if(event.key==='Enter') {loadView('dashboard'); toggleSidebar();}">
                                 <span class="logo-text">Grade 10 OLP</span>
                             </div>
                             <button class="sidebar-close-btn" onclick="toggleSidebar(); event.stopPropagation();" aria-label="Close sidebar">
@@ -305,13 +341,13 @@
                                         <line x1="3" y1="18" x2="21" y2="18"></line>
                                     </svg>
                                 </button>
-                                <div class="system-logo-small">
+                                <div class="system-logo-small" onclick="loadView('dashboard')" style="cursor: pointer;" role="button" tabindex="0" onkeypress="if(event.key==='Enter') loadView('dashboard')">
                                     <span class="logo-text">Grade 10 OLP</span>
                             </div>
                                 <nav class="main-nav">
                         ${navButtons}
                     </nav>
-                            </div>
+                        </div>
                             <div class="header-right">
                                 <div class="user-profile-menu" id="userProfileMenu">
                                     <button class="user-profile-btn" onclick="toggleUserMenu()">
@@ -471,6 +507,14 @@
                     case 'children':
                         await loadChildren();
                         break;
+                    
+                    // Result Slips (Student, Parent, Teacher)
+                    case 'result-slips':
+                        await loadResultSlips();
+                        break;
+                    case 'result-slip':
+                        await loadResultSlip();
+                        break;
                 }
             } catch (error) {
                 content.innerHTML = `<div class="error">Error loading ${viewName}: ${error.message}</div>`;
@@ -616,7 +660,7 @@
                     <div class="course-stats-bar">
                         ${enrolledStudents.length > 0 ? `
                             <div class="course-stat-item">
-                                <span class="stat-icon">👥</span>
+                                <span class="stat-icon">${getIcon('users-group', 24)}</span>
                                 <div class="stat-info">
                                     <span class="stat-value">${enrolledStudents.length}</span>
                                     <span class="stat-label">Enrolled Students</span>
@@ -624,14 +668,14 @@
                             </div>
                         ` : ''}
                         <div class="course-stat-item">
-                            <span class="stat-icon">📚</span>
+                            <span class="stat-icon">${getIcon('book', 24)}</span>
                             <div class="stat-info">
                                 <span class="stat-value">${modules.length}</span>
                                 <span class="stat-label">Learning Modules</span>
                             </div>
                         </div>
                         <div class="course-stat-item">
-                            <span class="stat-icon">📝</span>
+                            <span class="stat-icon">${getIcon('clipboard', 24)}</span>
                             <div class="stat-info">
                                 <span class="stat-value">${assignments.length}</span>
                                 <span class="stat-label">Assignments</span>
@@ -690,7 +734,7 @@
                         <div class="modules-list">
                         ${modules.length === 0 ? `
                             <div class="empty-state">
-                                <div class="empty-state-icon">📖</div>
+                                <div class="empty-state-icon">${getIcon('book', 48)}</div>
                                 <h4>No Learning Modules</h4>
                                 <p>${isReadOnly ? 'No learning modules have been added to this course yet.' : 'Add a module to get started.'}</p>
                             </div>
@@ -740,7 +784,7 @@
                         <div class="assignments-list">
                                 ${data.assignments.length === 0 ? `
                                     <div class="empty-state">
-                                        <div class="empty-state-icon">📝</div>
+                                        <div class="empty-state-icon">${getIcon('clipboard', 48)}</div>
                                         <h4>No Assignments</h4>
                                         <p>${data.isReadOnly ? 'No assignments have been created for this course yet.' : 'Create an assignment to get started.'}</p>
                                     </div>
@@ -790,7 +834,7 @@
                             ` : ''}
                             ${data.attendance.length === 0 ? `
                                 <div class="empty-state">
-                                    <div class="empty-state-icon">✓</div>
+                                    <div class="empty-state-icon">${getIcon('check', 48)}</div>
                                     <h4>No Attendance Records</h4>
                                     <p>${data.isReadOnly ? 'No attendance has been marked for this course yet.' : 'Mark attendance to track student presence.'}</p>
                                 </div>
@@ -844,7 +888,7 @@
                             <div class="students-list">
                                 ${data.enrolledStudents.length === 0 ? `
                                     <div class="empty-state">
-                                        <div class="empty-state-icon">👥</div>
+                                        <div class="empty-state-icon">${getIcon('users-group', 48)}</div>
                                         <h4>No Enrolled Students</h4>
                                         <p>No students are currently enrolled in this course.</p>
                                     </div>
@@ -1090,27 +1134,32 @@
             const content = document.getElementById('dashboardContent');
             content.innerHTML = `
                 <div class="view-header">
-                    <h2>Messages</h2>
-                    <button onclick="showComposeMessage()" class="btn-primary">Compose</button>
+                    <div class="view-header-content" style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <h1 class="view-title">Messages</h1>
+                            <p class="view-subtitle">View and manage your messages</p>
                 </div>
-                <div class="messages-list">
+                        <button onclick="showComposeMessage()" class="btn-primary" style="margin-top: 0;">Compose</button>
+                    </div>
+                </div>
+                <div class="messages-list premium-messages-grid">
                         ${messages.length === 0 ? `
                             <div class="empty-state">
-                                <div class="empty-state-icon">✉️</div>
+                                <div class="empty-state-icon">${getIcon('mail', 48)}</div>
                                 <h3>No Messages</h3>
                                 <p>You don't have any messages yet.</p>
                             </div>
                         ` : messages.map(msg => `
-                            <div class="message-card ${msg.is_read ? '' : 'unread'}" onclick="viewMessage(${msg.id})">
+                            <div class="message-card premium-message-card ${msg.is_read ? '' : 'unread'}" onclick="viewMessage(${msg.id})" role="button" tabindex="0" onkeypress="if(event.key==='Enter') viewMessage(${msg.id})">
                                 <div class="message-card-header">
-                                    <h4>${msg.subject || '(No Subject)'}</h4>
-                                    ${!msg.is_read ? `<span class="unread-badge">New</span>` : ''}
+                                    <h4 class="message-subject">${msg.subject || '(No Subject)'}</h4>
+                                    ${!msg.is_read ? `<span class="unread-badge premium-badge">New</span>` : ''}
                                 </div>
                                 <p class="message-from"><strong>From:</strong> ${msg.sender_first_name || ''} ${msg.sender_last_name || ''}</p>
                                 <p class="message-preview">${msg.message_body ? (msg.message_body.length > 150 ? msg.message_body.substring(0, 150) + '...' : msg.message_body) : '(No content)'}</p>
                                 <div class="message-card-footer">
                                     <span class="message-date">${msg.created_at ? new Date(msg.created_at).toLocaleDateString() : ''}</span>
-                                    <button onclick="event.stopPropagation(); viewMessage(${msg.id})" class="btn-view">Read</button>
+                                    <button onclick="event.stopPropagation(); viewMessage(${msg.id})" class="btn-view premium-btn-view">Read</button>
                                 </div>
                         </div>
                     `).join('')}
@@ -1254,35 +1303,115 @@
                 // Get terms - per TERM_BASED_NAVIGATION.md, dashboard shows term selection
                 const terms = await apiCall(`/courses/terms?academic_year=${currentYear}`);
                 
+                // Get messages count for dashboard overview
+                let messagesCount = 0;
+                let unreadMessages = 0;
+                try {
+                    const messages = await apiCall('/email/inbox');
+                    messagesCount = messages.length;
+                    unreadMessages = messages.filter(m => !m.is_read).length;
+                } catch (e) {
+                    // Messages endpoint might not be available for all roles
+                    console.log('Could not load messages:', e);
+                }
+                
+                // Calculate quick overview metrics
+                const totalTerms = terms.length;
+                const totalCourses = terms.reduce((sum, term) => sum + (term.course_count || 0), 0);
+                const activeTerms = terms.filter(t => {
+                    if (!t.dateRange) return false;
+                    const today = new Date();
+                    const [start, end] = t.dateRange.split(' - ').map(d => new Date(d));
+                    return today >= start && today <= end;
+                }).length;
+                
                 content.innerHTML = `
                     <div class="view-header">
-                        <h2>${roleName} Dashboard - ${currentYear}</h2>
-                        <p class="view-subtitle">Welcome back, ${currentUser.first_name || 'User'}. Select a term to view courses and manage academic activities.</p>
+                        <div class="view-header-content">
+                            <h1 class="view-title">${roleName} Dashboard</h1>
+                            <p class="view-subtitle">Welcome back, ${currentUser.first_name || 'User'}. ${currentYear} academic year overview.</p>
+                        </div>
                     </div>
+                    
+                    <div class="quick-overview">
+                        <div class="quick-overview-item">
+                            <div class="quick-overview-icon">${getIcon('calendar', 24)}</div>
+                            <div class="quick-overview-content">
+                                <div class="quick-overview-value">${totalTerms}</div>
+                                <div class="quick-overview-label">Academic Terms</div>
+                            </div>
+                        </div>
+                        <div class="quick-overview-item">
+                            <div class="quick-overview-icon">${getIcon('book', 24)}</div>
+                            <div class="quick-overview-content">
+                                <div class="quick-overview-value">${totalCourses}</div>
+                                <div class="quick-overview-label">Total Courses</div>
+                            </div>
+                        </div>
+                        ${activeTerms > 0 ? `
+                        <div class="quick-overview-item">
+                            <div class="quick-overview-icon">${getIcon('check', 24)}</div>
+                            <div class="quick-overview-content">
+                                <div class="quick-overview-value">${activeTerms}</div>
+                                <div class="quick-overview-label">Active Term${activeTerms > 1 ? 's' : ''}</div>
+                            </div>
+                        </div>
+                        ` : ''}
+                        ${messagesCount > 0 ? `
+                        <div class="quick-overview-item" onclick="loadView('messages')" style="cursor: pointer;" role="button" tabindex="0" onkeypress="if(event.key==='Enter') loadView('messages')">
+                            <div class="quick-overview-icon">${getIcon('mail', 24)}</div>
+                            <div class="quick-overview-content">
+                                <div class="quick-overview-value">${messagesCount}</div>
+                                <div class="quick-overview-label">Messages${unreadMessages > 0 ? ` <span style="color: #2563EB; font-weight: 600;">(${unreadMessages} new)</span>` : ''}</div>
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
+                    
+                    ${(role === 'student' || role === 'parent' || role === 'teacher') ? `
+                    <div class="section-header" style="margin-top: var(--spacing-2xl); margin-bottom: var(--spacing-lg);">
+                        <h2 class="section-title">Academic Reports</h2>
+                        <p class="section-description">View your result slips and academic performance</p>
+                    </div>
+                    <div class="dashboard-actions premium-actions-grid" style="margin-bottom: var(--spacing-2xl);">
+                        <div class="action-card premium-action-card" onclick="loadView('result-slips')" role="button" tabindex="0" onkeypress="if(event.key==='Enter') loadView('result-slips')">
+                            <div class="action-icon">${getIcon('clipboard', 32)}</div>
+                            <h4>Result Slips</h4>
+                            <p>View your academic performance reports</p>
+                        </div>
+                    </div>
+                    ` : ''}
+                    
                     <div class="terms-section">
-                        <h3 class="section-title">Academic Terms</h3>
+                        <div class="section-header">
+                            <h2 class="section-title">Academic Terms</h2>
+                            <p class="section-description">Select a term to view courses and manage academic activities</p>
+                    </div>
                     <div class="terms-grid">
                         ${terms.length === 0 ? `
                                 <div class="welcome-message academic-welcome">
-                                    <div class="welcome-icon">📅</div>
+                                    <div class="welcome-icon">${getIcon('calendar', 48)}</div>
                                     <h3>No Terms Available</h3>
                                     <p>${(role === 'headteacher' || role === 'superadmin') ? 'Please create terms first to organize the academic year.' : 'Contact administrator to set up academic terms.'}</p>
                                     ${(role === 'headteacher' || role === 'superadmin') ? '<button onclick="loadView(\'manage-terms\')" class="btn-primary">Manage Terms</button>' : ''}
                             </div>
                         ` : terms.map(term => `
-                                <div class="term-card academic-term-card">
-                                    <div class="term-card-header">
-                                        <div class="term-icon">📚</div>
-                                <h3>${term.name}</h3>
-                                    </div>
-                                    <p class="term-date-range">${term.dateRange || 'Date range not set'}</p>
-                                    <div class="term-stats">
-                                        <div class="term-stat-item">
-                                            <span class="term-stat-label">Courses:</span>
-                                            <span class="term-stat-value">${term.course_count || 0}</span>
+                                <div class="term-card" onclick="selectTerm(${term.term}, '${term.academic_year}')" role="button" tabindex="0" onkeypress="if(event.key==='Enter') selectTerm(${term.term}, '${term.academic_year}')">
+                                    <div class="term-card-content">
+                                        <div class="term-card-header">
+                                            <h3 class="term-name">${term.name}</h3>
+                                        </div>
+                                        <p class="term-date-range">${term.dateRange || 'Date range not set'}</p>
+                                        <div class="term-stats">
+                                            <div class="term-stat-item">
+                                                <span class="term-stat-value">${term.course_count || 0}</span>
+                                                <span class="term-stat-label">Courses</span>
+                                            </div>
                                         </div>
                                     </div>
-                                    <button onclick="selectTerm(${term.term}, '${term.academic_year}')" class="btn-primary term-select-btn">Select Term</button>
+                                    <div class="term-card-action">
+                                        <button onclick="event.stopPropagation(); selectTerm(${term.term}, '${term.academic_year}')" class="term-select-btn">Select Term</button>
+                                    </div>
                             </div>
                         `).join('')}
                         </div>
@@ -1390,16 +1519,39 @@
                     </div>
                 </div>
 
+                <!-- Fluid Search Bar -->
+                <div class="course-search-container">
+                    <div class="course-search-wrapper">
+                        <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M9 17C13.4183 17 17 13.4183 17 9C17 4.58172 13.4183 1 9 1C4.58172 1 1 4.58172 1 9C1 13.4183 4.58172 17 9 17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M19 19L14.65 14.65" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <input 
+                            type="text" 
+                            id="courseSearchInput" 
+                            class="course-search-input" 
+                            placeholder="Search courses by name or code..." 
+                            autocomplete="off"
+                        />
+                        <button class="search-clear-btn" id="searchClearBtn" style="display: none;" onclick="clearCourseSearch()">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="search-results-count" id="searchResultsCount" style="display: none;"></div>
+                </div>
+
                 <!-- Main Content: Learning Area Cards -->
                 <div class="learning-areas-section">
                     ${courses.length === 0 ? `
                         <div class="empty-state">
-                            <div class="empty-state-icon">📚</div>
+                                <div class="empty-state-icon">${getIcon('book', 48)}</div>
                             <h3>No Learning Areas Available</h3>
                             <p>${canCreateCourse ? 'Create a new learning area to get started.' : 'No learning areas have been set up for this term yet.'}</p>
                         </div>
                     ` : `
-                        <div class="learning-areas-grid">
+                        <div class="learning-areas-grid" id="coursesGrid">
                             ${courses.map(course => `
                                 <div class="learning-area-card" onclick="${canManageCourse ? `viewCourseDetails(${course.id})` : `viewCourse(${course.id})`}">
                                     <div class="learning-area-card-header">
@@ -1410,7 +1562,7 @@
                                     <div class="learning-area-footer">
                                         ${['teacher', 'headteacher', 'superadmin'].includes(role) ? `
                                             <div class="learning-area-badge">
-                                                <span class="badge-icon">👥</span>
+                                                <span class="badge-icon">${getIcon('users-group', 16)}</span>
                                                 <span class="badge-text">${course.enrolled_students || 0} Students</span>
                                             </div>
                                         ` : ''}
@@ -1427,6 +1579,106 @@
                     `}
                 </div>
             `;
+            
+            // Initialize search functionality
+            initializeCourseSearch(courses);
+        }
+        
+        // Course Search Functionality
+        let allCoursesData = [];
+        
+        function initializeCourseSearch(courses) {
+            allCoursesData = courses;
+            const searchInput = document.getElementById('courseSearchInput');
+            const searchClearBtn = document.getElementById('searchClearBtn');
+            const resultsCount = document.getElementById('searchResultsCount');
+            const coursesGrid = document.getElementById('coursesGrid');
+            
+            if (!searchInput) return;
+            
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.trim().toLowerCase();
+                
+                if (query.length > 0) {
+                    searchClearBtn.style.display = 'flex';
+                    const filtered = allCoursesData.filter(course => {
+                        const name = (course.course_name || '').toLowerCase();
+                        const code = (course.course_code || '').toLowerCase();
+                        return name.includes(query) || code.includes(query);
+                    });
+                    
+                    filterCoursesDisplay(filtered);
+                    resultsCount.textContent = `${filtered.length} course${filtered.length !== 1 ? 's' : ''} found`;
+                    resultsCount.style.display = 'block';
+                } else {
+                    searchClearBtn.style.display = 'none';
+                    resultsCount.style.display = 'none';
+                    filterCoursesDisplay(allCoursesData);
+                }
+            });
+            
+            searchInput.addEventListener('focus', () => {
+                searchInput.parentElement.classList.add('focused');
+            });
+            
+            searchInput.addEventListener('blur', () => {
+                searchInput.parentElement.classList.remove('focused');
+            });
+        }
+        
+        function filterCoursesDisplay(filteredCourses) {
+            const coursesGrid = document.getElementById('coursesGrid');
+            if (!coursesGrid) return;
+            
+            const role = currentUser.role;
+            const canManageCourse = ['teacher', 'headteacher', 'superadmin', 'deputy_headteacher'].includes(role);
+            
+            if (filteredCourses.length === 0) {
+                coursesGrid.innerHTML = `
+                    <div class="search-no-results">
+                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style="opacity: 0.3; margin-bottom: 16px;">
+                            <path d="M24 44C35.0457 44 44 35.0457 44 24C44 12.9543 35.0457 4 24 4C12.9543 4 4 12.9543 4 24C4 35.0457 12.9543 44 24 44Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M30 18L18 30M18 18L30 30" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        <h3>No courses found</h3>
+                        <p>Try adjusting your search terms</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            coursesGrid.innerHTML = filteredCourses.map(course => `
+                <div class="learning-area-card" onclick="${canManageCourse ? `viewCourseDetails(${course.id})` : `viewCourse(${course.id})`}">
+                    <div class="learning-area-card-header">
+                        <h3 class="learning-area-name">${course.course_name}</h3>
+                        <span class="learning-area-code">${course.course_code || ''}</span>
+                    </div>
+                    ${course.description ? `<p class="learning-area-description">${course.description}</p>` : ''}
+                    <div class="learning-area-footer">
+                        ${['teacher', 'headteacher', 'superadmin'].includes(role) ? `
+                            <div class="learning-area-badge">
+                                <span class="badge-icon">👥</span>
+                                <span class="badge-text">${course.enrolled_students || 0} Students</span>
+                            </div>
+                        ` : ''}
+                        <button class="learning-area-action-btn" onclick="event.stopPropagation(); ${canManageCourse ? `viewCourseDetails(${course.id})` : `viewCourse(${course.id})`}">
+                            Open Course
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-left: 8px;">
+                                <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function clearCourseSearch() {
+            const searchInput = document.getElementById('courseSearchInput');
+            if (searchInput) {
+                searchInput.value = '';
+                searchInput.dispatchEvent(new Event('input'));
+                searchInput.focus();
+            }
         }
 
         // View course details with modules, attendance, assignments (teachers and admins)
@@ -2057,7 +2309,7 @@
                         <div class="terms-content-section">
                             ${terms.length === 0 ? `
                                 <div class="terms-empty-state">
-                                    <div class="terms-empty-icon">📅</div>
+                                    <div class="terms-empty-icon">${getIcon('calendar', 48)}</div>
                                     <h3>No Terms Configured</h3>
                                     <p>Create academic terms to organize the school year. Each term represents a distinct period of instruction.</p>
                                     <button onclick="showCreateTermForm()" class="btn-primary">Create First Term</button>
@@ -2355,7 +2607,7 @@
             toast.className = `toast-notification toast-${type}`;
             toast.innerHTML = `
                 <div class="toast-icon">
-                    ${type === 'success' ? '✓' : '✕'}
+                    ${type === 'success' ? getIcon('check', 20) : getIcon('x', 20)}
                 </div>
                 <div class="toast-message">${message}</div>
             `;
@@ -2393,20 +2645,28 @@
             
             content.innerHTML = `
                 <div class="view-header">
+                    <div class="view-header-content">
                     <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
-                    <h2>Manage Student Course Enrollment - Term ${currentTerm} ${currentAcademicYear}</h2>
+                        <h1 class="view-title">Register Student</h1>
+                        <p class="view-subtitle">Manage student course enrollment for Term ${currentTerm} ${currentAcademicYear}</p>
+                    </div>
                 </div>
                 
-                <div class="student-search-section">
-                    <h3>Search Student by Admission Number</h3>
+                <div class="student-search-section premium-form-section">
+                    <div class="section-header">
+                        <h2 class="section-title">Search Student</h2>
+                        <p class="section-description">Find a student by admission number to manage their course enrollment</p>
+                    </div>
+                    <div class="premium-search-form">
                     <div class="form-group">
                         <label>Admission Number *</label>
-                        <div>
-                            <input type="text" id="admission-number-search" placeholder="Enter admission number">
-                            <button onclick="searchStudentByAdmission()" class="btn-primary">Search</button>
+                            <div class="search-input-group">
+                                <input type="text" id="admission-number-search" class="premium-input" placeholder="Enter admission number" autocomplete="off">
+                                <button onclick="searchStudentByAdmission()" class="btn-primary premium-search-btn">Search</button>
                         </div>
                     </div>
-                    <div id="student-search-results"></div>
+                    </div>
+                    <div id="student-search-results" class="search-results-container"></div>
                 </div>
                 
             `;
@@ -3073,13 +3333,15 @@
                 
             content.innerHTML = `
                 <div class="view-header">
-                        <h2>📊 System Overview</h2>
-                        <p style="color: var(--text-secondary); margin-top: 0.5rem;">Monitor overall system health and statistics</p>
+                    <div class="view-header-content">
+                        <h1 class="view-title">System Overview</h1>
+                        <p class="view-subtitle">Monitor overall system health and statistics</p>
+                </div>
                 </div>
                     
-                <div class="stats-grid">
+                <div class="stats-grid premium-stats-grid">
                     <div class="stat-card">
-                            <div class="stat-icon" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">👥</div>
+                            <div class="stat-icon" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">${getIcon('users-group', 24)}</div>
                         <h3>Users</h3>
                             <div class="stat-value">${totalUsers}</div>
                             <div class="stat-details">
@@ -3099,7 +3361,7 @@
                         </div>
                         
                     <div class="stat-card">
-                            <div class="stat-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">📚</div>
+                            <div class="stat-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">${getIcon('book', 24)}</div>
                         <h3>Courses</h3>
                             <div class="stat-value">${stats.courses?.total_courses || 0}</div>
                             <div class="stat-details">
@@ -3115,7 +3377,7 @@
                         </div>
                         
                     <div class="stat-card">
-                            <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">📝</div>
+                            <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">${getIcon('clipboard', 24)}</div>
                         <h3>Assignments</h3>
                             <div class="stat-value">${stats.assignments?.total_assignments || 0}</div>
                             <div class="stat-details">
@@ -3127,7 +3389,7 @@
                         </div>
                         
                     <div class="stat-card">
-                            <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">🎯</div>
+                            <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">${getIcon('target', 24)}</div>
                         <h3>Grades</h3>
                             <div class="stat-value">${parseFloat(stats.grades?.average_percentage || 0).toFixed(1)}%</div>
                             <div class="stat-details">
@@ -3143,26 +3405,30 @@
                         </div>
                     </div>
                     
-                    <div class="dashboard-actions" style="margin-top: 2rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+                    <div class="section-header" style="margin-top: var(--spacing-3xl); margin-bottom: var(--spacing-xl);">
+                        <h2 class="section-title">Quick Actions</h2>
+                        <p class="section-description">Access key management functions</p>
+                    </div>
+                    <div class="dashboard-actions premium-actions-grid">
                         ${currentUser.role === 'superadmin' ? `
-                        <div class="action-card" onclick="loadView('users')" style="cursor: pointer;">
-                            <div class="action-icon">👤</div>
+                        <div class="action-card premium-action-card" onclick="loadView('users')" role="button" tabindex="0" onkeypress="if(event.key==='Enter') loadView('users')">
+                            <div class="action-icon">${getIcon('user', 32)}</div>
                             <h4>Manage Users</h4>
                             <p>View and manage all system users</p>
                         </div>
                         ` : ''}
-                        <div class="action-card" onclick="loadView('all-courses')" style="cursor: pointer;">
-                            <div class="action-icon">📖</div>
+                        <div class="action-card premium-action-card" onclick="loadView('all-courses')" role="button" tabindex="0" onkeypress="if(event.key==='Enter') loadView('all-courses')">
+                            <div class="action-icon">${getIcon('book', 32)}</div>
                             <h4>All Courses</h4>
                             <p>View and manage all courses</p>
                         </div>
-                        <div class="action-card" onclick="loadView('teachers-overview')" style="cursor: pointer;">
-                            <div class="action-icon">🎓</div>
+                        <div class="action-card premium-action-card" onclick="loadView('teachers-overview')" role="button" tabindex="0" onkeypress="if(event.key==='Enter') loadView('teachers-overview')">
+                            <div class="action-icon">${getIcon('graduation-cap', 32)}</div>
                             <h4>Teachers Overview</h4>
                             <p>View teacher statistics and classes</p>
                         </div>
-                        <div class="action-card" onclick="loadView('manage-terms')" style="cursor: pointer;">
-                            <div class="action-icon">📅</div>
+                        <div class="action-card premium-action-card" onclick="loadView('manage-terms')" role="button" tabindex="0" onkeypress="if(event.key==='Enter') loadView('manage-terms')">
+                            <div class="action-icon">${getIcon('calendar', 32)}</div>
                             <h4>Manage Terms</h4>
                             <p>Configure academic terms and periods</p>
                         </div>
@@ -3827,6 +4093,377 @@
             } catch (error) {
                 const content = document.getElementById('dashboardContent');
                 content.innerHTML = `<div class="error">Error loading profile settings: ${error.message}</div>`;
+            }
+        }
+
+        // Result Slips Functions
+        async function loadResultSlips() {
+            try {
+                const content = document.getElementById('dashboardContent');
+                const role = currentUser.role;
+                const currentYear = new Date().getFullYear();
+                
+                // Get learner ID based on role
+                let learnerId = null;
+                if (role === 'student') {
+                    // Get learner profile for current user
+                    const learnerProfile = await apiCall(`/student-registration/students?user_id=${currentUser.id}`);
+                    if (learnerProfile.length > 0) {
+                        learnerId = learnerProfile[0].id;
+                    }
+                } else if (role === 'parent') {
+                    // Get from URL params or first child
+                    const urlParams = new URLSearchParams(window.location.search);
+                    learnerId = urlParams.get('learnerId');
+                    if (!learnerId) {
+                        const children = await apiCall(`/users/parent/${currentUser.id}/students`);
+                        if (children.length > 0) {
+                            learnerId = children[0].learner_id || children[0].id;
+                        }
+                    }
+                } else if (role === 'teacher') {
+                    // Get from URL params
+                    const urlParams = new URLSearchParams(window.location.search);
+                    learnerId = urlParams.get('learnerId');
+                }
+                
+                if (!learnerId) {
+                    content.innerHTML = `
+                        <div class="view-header">
+                            <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                            <h1 class="view-title">Result Slips</h1>
+                        </div>
+                        <div class="empty-state">
+                            <div class="empty-state-icon">${getIcon('clipboard', 48)}</div>
+                            <h3>No Learner Profile Found</h3>
+                            <p>Your learner profile has not been set up yet. Please contact your school administrator to:</p>
+                            <ul style="text-align: left; max-width: 500px; margin: var(--spacing-lg) auto;">
+                                <li>Create your learner profile</li>
+                                <li>Enroll you in learning areas</li>
+                                <li>Set up your academic pathway</li>
+                            </ul>
+                            <p style="margin-top: var(--spacing-lg);">Once your profile is set up, result slips will appear here after assessments are completed and synthesized.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Get all result slips
+                const resultSlips = await apiCall(`/assessments/result-slips/${learnerId}`);
+                
+                // Get available terms for filter
+                let availableTerms = [];
+                try {
+                    const terms = await apiCall(`/courses/terms?academic_year=${currentYear}`);
+                    availableTerms = terms.map(t => ({
+                        term: t.term,
+                        academic_year: t.academic_year,
+                        name: t.name
+                    }));
+                } catch (e) {
+                    console.log('Could not load terms:', e);
+                }
+                
+                // Get URL params for filter
+                const urlParams = new URLSearchParams(window.location.search);
+                const selectedTerm = urlParams.get('term');
+                const selectedYear = urlParams.get('year');
+                
+                // Filter result slips if term/year selected
+                let filteredSlips = resultSlips;
+                if (selectedTerm && selectedYear) {
+                    filteredSlips = resultSlips.filter(slip => 
+                        slip.term === parseInt(selectedTerm) && slip.academic_year === selectedYear
+                    );
+                }
+                
+                // Group by academic year
+                const groupedByYear = {};
+                filteredSlips.forEach(slip => {
+                    if (!groupedByYear[slip.academic_year]) {
+                        groupedByYear[slip.academic_year] = [];
+                    }
+                    groupedByYear[slip.academic_year].push(slip);
+                });
+                
+                content.innerHTML = `
+                    <div class="view-header">
+                        <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                        <div style="flex: 1;">
+                            <h1 class="view-title">Result Slips</h1>
+                            <p class="view-subtitle">View academic performance reports</p>
+                        </div>
+                    </div>
+                    
+                    <div class="result-slips-filters premium-form-section" style="margin-bottom: var(--spacing-xl);">
+                        <div class="section-header" style="margin-bottom: var(--spacing-md);">
+                            <h3 class="section-title">Filter Results</h3>
+                        </div>
+                        <div class="filter-controls" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md);">
+                            <div class="form-group">
+                                <label>Academic Year</label>
+                                <select id="yearFilter" class="premium-input" onchange="filterResultSlips()">
+                                    <option value="">All Years</option>
+                                    ${Object.keys(groupedByYear).sort().reverse().map(year => `
+                                        <option value="${year}" ${selectedYear === year ? 'selected' : ''}>${year}</option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Term</label>
+                                <select id="termFilter" class="premium-input" onchange="filterResultSlips()">
+                                    <option value="">All Terms</option>
+                                    ${availableTerms.map(t => `
+                                        <option value="${t.term}" data-year="${t.academic_year}" ${selectedTerm === String(t.term) && selectedYear === t.academic_year ? 'selected' : ''}>
+                                            ${t.name} (${t.academic_year})
+                                        </option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                            ${(selectedTerm || selectedYear) ? `
+                            <div class="form-group" style="display: flex; align-items: flex-end;">
+                                <button onclick="clearResultSlipFilters()" class="btn-secondary" style="width: 100%;">Clear Filters</button>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                    
+                    ${filteredSlips.length === 0 ? `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">${getIcon('clipboard', 48)}</div>
+                            <h3>${selectedTerm || selectedYear ? 'No Result Slips Found' : 'No Result Slips Available'}</h3>
+                            ${selectedTerm || selectedYear ? `
+                                <p>No result slips found for the selected filter. Try selecting a different term or year.</p>
+                                <button onclick="clearResultSlipFilters()" class="btn-primary" style="margin-top: var(--spacing-lg);">View All Result Slips</button>
+                            ` : `
+                                <p>Result slips will appear here once they are synthesized at the end of each term.</p>
+                                <div style="background: var(--bg-tertiary); padding: var(--spacing-xl); border-radius: 12px; margin-top: var(--spacing-xl); max-width: 600px; margin-left: auto; margin-right: auto; text-align: left;">
+                                    <h4 style="margin-top: 0; color: var(--text-primary);">How Result Slips Work:</h4>
+                                    <ol style="margin: var(--spacing-md) 0; padding-left: var(--spacing-lg);">
+                                        <li style="margin-bottom: var(--spacing-sm);">Teachers enter formative and summative assessments throughout the term</li>
+                                        <li style="margin-bottom: var(--spacing-sm);">At the end of each term, the system automatically synthesizes all assessments</li>
+                                        <li style="margin-bottom: var(--spacing-sm);">Result slips are generated showing your performance across all learning areas</li>
+                                        <li>You can view and print your result slips from this page</li>
+                                    </ol>
+                                    <p style="margin-top: var(--spacing-lg); margin-bottom: 0; color: var(--text-secondary);">
+                                        <strong>Note:</strong> If you believe result slips should be available, please contact your teacher or school administrator.
+                                    </p>
+                                </div>
+                            `}
+                        </div>
+                    ` : `
+                        ${Object.keys(groupedByYear).sort().reverse().map(year => `
+                            <div class="result-slips-year-section" style="margin-bottom: var(--spacing-2xl);">
+                                <h2 class="section-title" style="margin-bottom: var(--spacing-lg);">Academic Year ${year}</h2>
+                                <div class="result-slips-list">
+                                    ${groupedByYear[year].sort((a, b) => b.term - a.term).map(slip => `
+                                        <div class="result-slip-card premium-action-card" onclick="loadView('result-slip?learnerId=${learnerId}&term=${slip.term}&year=${slip.academic_year}')" role="button" tabindex="0" onkeypress="if(event.key==='Enter') loadView('result-slip?learnerId=${learnerId}&term=${slip.term}&year=${slip.academic_year}')">
+                                            <div class="result-slip-card-header">
+                                                <h3>Term ${slip.term} - ${slip.academic_year}</h3>
+                                                <span class="result-slip-date">${new Date(slip.synthesized_at).toLocaleDateString()}</span>
+                                            </div>
+                                            <p class="result-slip-subtitle">Click to view detailed result slip</p>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `).join('')}
+                    `}
+                `;
+            } catch (error) {
+                const content = document.getElementById('dashboardContent');
+                content.innerHTML = `
+                    <div class="view-header">
+                        <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                        <h1 class="view-title">Result Slips</h1>
+                    </div>
+                    <div class="error">
+                        <h3>Error Loading Result Slips</h3>
+                        <p>${error.message}</p>
+                        <p style="margin-top: var(--spacing-md);">Please try again or contact your administrator if the problem persists.</p>
+                    </div>
+                `;
+            }
+        }
+
+        function filterResultSlips() {
+            const yearFilter = document.getElementById('yearFilter')?.value;
+            const termFilter = document.getElementById('termFilter')?.value;
+            const termSelect = document.getElementById('termFilter');
+            const termYear = termSelect?.selectedOptions[0]?.dataset?.year;
+            
+            let url = 'result-slips?';
+            const params = [];
+            
+            if (yearFilter) {
+                params.push(`year=${yearFilter}`);
+            }
+            
+            if (termFilter && termYear) {
+                params.push(`term=${termFilter}`);
+                if (!yearFilter) {
+                    params.push(`year=${termYear}`);
+                }
+            }
+            
+            if (params.length > 0) {
+                url += params.join('&');
+            } else {
+                url = 'result-slips';
+            }
+            
+            loadView(url);
+        }
+
+        function clearResultSlipFilters() {
+            loadView('result-slips');
+        }
+
+        async function loadResultSlip() {
+            try {
+                const content = document.getElementById('dashboardContent');
+                const urlParams = new URLSearchParams(window.location.search);
+                const learnerId = urlParams.get('learnerId');
+                const term = urlParams.get('term');
+                const year = urlParams.get('year');
+                
+                if (!learnerId || !term || !year) {
+                    content.innerHTML = `<div class="error">Missing required parameters</div>`;
+                    return;
+                }
+                
+                const resultSlip = await apiCall(`/assessments/result-slip/${learnerId}/${term}/${year}`);
+                const learner = resultSlip.learner;
+                const details = resultSlip.details || [];
+                
+                // Format dates
+                const formatDate = (dateStr) => {
+                    if (!dateStr) return '';
+                    const date = new Date(dateStr);
+                    const day = date.getDate();
+                    const suffix = day === 1 || day === 21 || day === 31 ? 'st' : 
+                                  day === 2 || day === 22 ? 'nd' : 
+                                  day === 3 || day === 23 ? 'rd' : 'th';
+                    const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                                   'July', 'August', 'September', 'October', 'November', 'December'];
+                    return `${day}${suffix} ${months[date.getMonth()]} ${date.getFullYear()}`;
+                };
+                
+                const startDate = resultSlip.term_dates?.start_date ? formatDate(resultSlip.term_dates.start_date) : '';
+                const endDate = resultSlip.term_dates?.end_date ? formatDate(resultSlip.term_dates.end_date) : '';
+                
+                // Calculate AGP (Average Grade Point) - using final scores
+                const calculateAGP = (scores) => {
+                    if (scores.length === 0) return null;
+                    const total = scores.reduce((sum, score) => sum + (parseFloat(score) || 0), 0);
+                    return (total / scores.length).toFixed(2);
+                };
+                
+                const finalScores = details.map(d => d.final_score).filter(s => s !== null);
+                const agp = calculateAGP(finalScores);
+                const agpGrade = agp ? (agp >= 80 ? 'A' : agp >= 70 ? 'B' : agp >= 60 ? 'C' : agp >= 50 ? 'D' : 'E') : '-';
+                const agpNumeric = agp ? Math.round(agp) : '-';
+                
+                content.innerHTML = `
+                    <div class="result-slip-container">
+                        <div class="result-slip-header">
+                            <div class="result-slip-school-info">
+                                <div class="result-slip-logo">${getIcon('graduation-cap', 40)}</div>
+                                <div class="result-slip-school-details">
+                                    <h2 class="result-slip-school-name">${learner.school_name || 'SCHOOL NAME'}</h2>
+                                    ${learner.school_address ? `<p class="result-slip-school-address">${learner.school_address}</p>` : ''}
+                                </div>
+                            </div>
+                            <h1 class="result-slip-title">OLP. MONITOR REPORT : SENIOR SCHOOL GRADES</h1>
+                        </div>
+                        
+                        <div class="result-slip-student-info">
+                            <div class="result-slip-info-row">
+                                <span class="result-slip-label">Learner's name:</span>
+                                <span class="result-slip-value">${learner.first_name} ${learner.last_name}</span>
+                            </div>
+                            <div class="result-slip-info-row">
+                                <span class="result-slip-label">Grade:</span>
+                                <span class="result-slip-value">${learner.grade_level || 'N/A'}</span>
+                            </div>
+                            ${startDate && endDate ? `
+                            <div class="result-slip-info-row">
+                                <span class="result-slip-label">Recording Period:</span>
+                                <span class="result-slip-value">${startDate} to: ${endDate}</span>
+                            </div>
+                            ` : ''}
+                        </div>
+                        
+                        <div class="result-slip-table-container">
+                            <table class="result-slip-table">
+                                <thead>
+                                    <tr>
+                                        <th>Learning Area</th>
+                                        <th>Formative Score</th>
+                                        <th>Summative 1</th>
+                                        <th>Summative 2</th>
+                                        <th>Summative 3</th>
+                                        <th>Final Score</th>
+                                        <th>Final Grade</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${details.map(detail => {
+                                        const summative = detail.summative_assessments || {};
+                                        const opener = summative.opener;
+                                        const mid = summative.mid;
+                                        const end = summative.end;
+                                        
+                                        return `
+                                            <tr>
+                                                <td class="learning-area-name">${detail.learning_area_name}</td>
+                                                <td>${detail.average_formative_score ? parseFloat(detail.average_formative_score).toFixed(1) : '-'}</td>
+                                                <td>${opener ? parseFloat(opener.percentage).toFixed(0) : '-'}</td>
+                                                <td>${mid ? parseFloat(mid.percentage).toFixed(0) : '-'}</td>
+                                                <td>${end ? parseFloat(end.percentage).toFixed(0) : '-'}</td>
+                                                <td class="final-score">${detail.final_score ? parseFloat(detail.final_score).toFixed(1) : '-'}</td>
+                                                <td class="final-grade">${detail.final_grade || '-'}</td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                    <tr class="agp-row">
+                                        <td colspan="4"><strong>AGP</strong></td>
+                                        <td><strong>${agpNumeric}</strong></td>
+                                        <td><strong>AGP: (${agpGrade})</strong></td>
+                                        <td></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <div class="result-slip-footer">
+                            ${learner.pathway_name ? `
+                            <div class="result-slip-footer-row">
+                                <span class="result-slip-label">Pathway:</span>
+                                <span class="result-slip-value">${learner.pathway_name}</span>
+                            </div>
+                            ` : ''}
+                            ${learner.teacher_first_name ? `
+                            <div class="result-slip-footer-row">
+                                <span class="result-slip-label">Classteacher:</span>
+                                <span class="result-slip-value">${learner.teacher_first_name} ${learner.teacher_last_name}</span>
+                            </div>
+                            ` : ''}
+                            <div class="result-slip-footer-row">
+                                <span class="result-slip-label">Comments:</span>
+                                <span class="result-slip-value">${resultSlip.comments || 'No comments available.'}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="result-slip-actions">
+                            <button onclick="window.print()" class="btn-primary">Print Result Slip</button>
+                            <button onclick="loadView('result-slips?learnerId=${learnerId}')" class="btn-secondary">Back to Result Slips</button>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                const content = document.getElementById('dashboardContent');
+                content.innerHTML = `<div class="error">Error loading result slip: ${error.message}</div>`;
             }
         }
 
