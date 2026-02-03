@@ -198,6 +198,8 @@
                 'lock': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`,
                 'check': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
                 'x': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+                'dollar': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>`,
+                'messages': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`,
                 'empty': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`
             };
             return icons[iconName] || icons['empty'];
@@ -241,32 +243,34 @@
             
             if (role === 'student') {
                 navButtons = `
-                    <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
+                    <button onclick="loadView('dashboard')" class="nav-btn active">Home</button>
                     <button onclick="loadView('result-slips')" class="nav-btn">Result Slips</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
-                sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) + 
+                sidebarButtons = createSidebarButton('dashboard', 'Home', true) + 
                                 createSidebarButton('result-slips', 'Result Slips') + 
                                 createSidebarButton('messages', 'Messages');
             } else if (role === 'teacher') {
                 navButtons = `
-                    <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
+                    <button onclick="loadView('dashboard')" class="nav-btn active">Home</button>
                     <button onclick="loadView('register-student')" class="nav-btn">Register Student</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
-                sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) + 
+                sidebarButtons = createSidebarButton('dashboard', 'Home', true) + 
                                 createSidebarButton('register-student', 'Register Student') + 
                                 createSidebarButton('messages', 'Messages');
             } else if (role === 'headteacher' || role === 'deputy_headteacher' || role === 'superadmin' || role === 'finance') {
                 navButtons = `
-                    <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
+                    <button onclick="loadView('dashboard')" class="nav-btn active">Home</button>
+                    ${role === 'finance' ? `<button onclick="loadView('finance-dashboard')" class="nav-btn">Finance Dashboard</button>` : ''}
                     ${role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher' ? `<button onclick="loadView('admin-dashboard')" class="nav-btn">System Overview</button>` : ''}
                     <button onclick="loadView('register-student')" class="nav-btn">Register Student</button>
                     ${role === 'superadmin' || role === 'headteacher' ? `<button onclick="loadView('manage-terms')" class="nav-btn">Manage Terms</button>` : ''}
                     ${role === 'superadmin' ? `<button onclick="loadView('users')" class="nav-btn">User Management</button>` : ''}
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
-                sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) + 
+                sidebarButtons = createSidebarButton('dashboard', 'Home', true) + 
+                                (role === 'finance' ? createSidebarButton('finance-dashboard', 'Finance Dashboard') : '') +
                                 (role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher' ? createSidebarButton('admin-dashboard', 'System Overview') : '') +
                                 createSidebarButton('register-student', 'Register Student') + 
                                 (role === 'superadmin' || role === 'headteacher' ? createSidebarButton('manage-terms', 'Manage Terms') : '') +
@@ -274,14 +278,12 @@
                                 createSidebarButton('messages', 'Messages');
             } else if (role === 'parent') {
                 navButtons = `
-                    <button onclick="loadView('children')" class="nav-btn">My Children</button>
-                    <button onclick="loadView('grades')" class="nav-btn">Grades</button>
-                    <button onclick="loadView('attendance')" class="nav-btn">Attendance</button>
+                    <button onclick="loadView('dashboard')" class="nav-btn active">Home</button>
+                    <button onclick="loadView('parent-dashboard')" class="nav-btn">Parent Dashboard</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
-                sidebarButtons = createSidebarButton('children', 'My Children') + 
-                                createSidebarButton('grades', 'Grades') + 
-                                createSidebarButton('attendance', 'Attendance') + 
+                sidebarButtons = createSidebarButton('dashboard', 'Home', true) + 
+                                createSidebarButton('parent-dashboard', 'Parent Dashboard') + 
                                 createSidebarButton('messages', 'Messages');
             } else {
                 navButtons = `
@@ -297,7 +299,7 @@
                     <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
                     
                     <!-- Mobile Sidebar -->
-                    <aside class="mobile-sidebar" id="mobileSidebar">
+                    <aside class="mobile-sidebar" id="mobileSidebar" style="visibility: hidden; pointer-events: none;">
                         <div class="sidebar-header">
                             <div class="sidebar-logo" onclick="loadView('dashboard'); toggleSidebar();" style="cursor: pointer;" role="button" tabindex="0" onkeypress="if(event.key==='Enter') {loadView('dashboard'); toggleSidebar();}">
                                 <span class="logo-text">Grade 10 OLP</span>
@@ -392,6 +394,17 @@
                     </main>
                 </div>
             `;
+            
+            // Ensure sidebar is closed by default when dashboard loads
+            const sidebar = document.getElementById('mobileSidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (sidebar && overlay) {
+                sidebar.classList.remove('active');
+                overlay.classList.remove('active');
+                sidebar.style.visibility = 'hidden';
+                sidebar.style.pointerEvents = 'none';
+                document.body.style.overflow = '';
+            }
             
             // Automatically load the dashboard content
             loadView('dashboard');
@@ -504,6 +517,9 @@
                         break;
                     
                     // Parent views
+                    case 'parent-dashboard':
+                        await loadParentDashboard();
+                        break;
                     case 'children':
                         await loadChildren();
                         break;
@@ -514,6 +530,11 @@
                         break;
                     case 'result-slip':
                         await loadResultSlip();
+                        break;
+                    
+                    // Finance Dashboard
+                    case 'finance-dashboard':
+                        await loadFinanceDashboard();
                         break;
                 }
             } catch (error) {
@@ -1328,7 +1349,7 @@
                 content.innerHTML = `
                     <div class="view-header">
                         <div class="view-header-content">
-                            <h1 class="view-title">${roleName} Dashboard</h1>
+                            <h1 class="view-title">Dashboard</h1>
                             <p class="view-subtitle">Welcome back, ${currentUser.first_name || 'User'}. ${currentYear} academic year overview.</p>
                         </div>
                     </div>
@@ -3447,6 +3468,710 @@
             }
         }
 
+        // Finance: Load Finance Administrator Dashboard
+        // Per documentation: Payment Recording, Inventory Management (Books), Capitation
+        async function loadFinanceDashboard() {
+            const content = document.getElementById('dashboardContent');
+            const currentYear = new Date().getFullYear();
+            
+            try {
+                // Get current term and academic year
+                const terms = await apiCall(`/courses/terms?academic_year=${currentYear}`);
+                const currentTerm = terms.find(t => {
+                    if (!t.dateRange) return false;
+                    const today = new Date();
+                    const [start, end] = t.dateRange.split(' - ').map(d => new Date(d));
+                    return today >= start && today <= end;
+                });
+                
+                const selectedTerm = currentTerm ? currentTerm.term_number : (terms.length > 0 ? terms[0].term_number : 1);
+                const selectedYear = currentYear;
+                
+                // Get dashboard stats
+                let stats = { payments: {}, books: {}, capitation: {} };
+                try {
+                    stats = await apiCall(`/finance/dashboard/stats?term=${selectedTerm}&academic_year=${selectedYear}`);
+                } catch (e) {
+                    console.log('Could not load finance stats:', e);
+                }
+                
+                // Get learners for payment recording
+                let learners = [];
+                try {
+                    const learnersData = await apiCall('/student-registration/all');
+                    learners = learnersData || [];
+                } catch (e) {
+                    console.log('Could not load learners:', e);
+                }
+                
+                content.innerHTML = `
+                    <div class="view-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: var(--spacing-lg);">
+                        <div class="view-header-content">
+                            <h1 class="view-title">Finance Administrator Dashboard</h1>
+                            <p class="view-subtitle">Manage school finances and inventory</p>
+                        </div>
+                        <div class="finance-term-selector-container">
+                            <div class="finance-term-selector-wrapper">
+                                <label for="finance-term-selector">Term:</label>
+                                <select id="finance-term-selector" onchange="updateFinanceTerm()">
+                                    <option value="1" ${selectedTerm == 1 ? 'selected' : ''}>Term 1</option>
+                                    <option value="2" ${selectedTerm == 2 ? 'selected' : ''}>Term 2</option>
+                                    <option value="3" ${selectedTerm == 3 ? 'selected' : ''}>Term 3</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Quick Stats Overview -->
+                    <div class="quick-overview" style="margin-bottom: var(--spacing-3xl);">
+                        <div class="quick-overview-item">
+                            <div class="quick-overview-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">${getIcon('dollar', 24)}</div>
+                            <div class="quick-overview-content">
+                                <div class="quick-overview-value">KES ${parseFloat(stats.payments?.total_amount || 0).toLocaleString()}</div>
+                                <div class="quick-overview-label">Total Payments</div>
+                            </div>
+                        </div>
+                        <div class="quick-overview-item">
+                            <div class="quick-overview-icon" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">${getIcon('book', 24)}</div>
+                            <div class="quick-overview-content">
+                                <div class="quick-overview-value">${stats.books?.total_books || 0}</div>
+                                <div class="quick-overview-label">Total Books</div>
+                            </div>
+                        </div>
+                        <div class="quick-overview-item">
+                            <div class="quick-overview-icon" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">${getIcon('clipboard', 24)}</div>
+                            <div class="quick-overview-content">
+                                <div class="quick-overview-value">KES ${parseFloat(stats.capitation?.total_received || 0).toLocaleString()}</div>
+                                <div class="quick-overview-label">Capitation Funds</div>
+                            </div>
+                        </div>
+                        <div class="quick-overview-item">
+                            <div class="quick-overview-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">${getIcon('check', 24)}</div>
+                            <div class="quick-overview-content">
+                                <div class="quick-overview-value">${stats.payments?.verified_count || 0}</div>
+                                <div class="quick-overview-label">Verified Transactions</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Tab Navigation -->
+                    <div class="finance-tabs" style="margin-bottom: var(--spacing-xl);">
+                        <button class="finance-tab active" onclick="switchFinanceTab('payments')" id="tab-payments">
+                            ${getIcon('dollar', 18)} Payment Recording
+                        </button>
+                        <button class="finance-tab" onclick="switchFinanceTab('inventory')" id="tab-inventory">
+                            ${getIcon('book', 18)} Inventory Management
+                        </button>
+                        <button class="finance-tab" onclick="switchFinanceTab('capitation')" id="tab-capitation">
+                            ${getIcon('clipboard', 18)} Capitation
+                        </button>
+                    </div>
+                    
+                    <!-- Payment Recording Section -->
+                    <div id="finance-section-payments" class="finance-section active">
+                        <div class="section-header">
+                            <h2 class="section-title">Payment Recording</h2>
+                            <p class="section-description">Record fee payments and reconcile M-Pesa transactions</p>
+                        </div>
+                        
+                        <div class="premium-card" style="margin-bottom: var(--spacing-xl);">
+                            <h3 style="margin-bottom: var(--spacing-lg); font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold);">Record New Payment</h3>
+                            <form id="recordPaymentForm" onsubmit="recordPayment(event)">
+                                <div class="form-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-lg);">
+                                    <div class="form-group">
+                                        <label for="payment-learner">Student <span style="color: var(--error);">*</span></label>
+                                        <select id="payment-learner" name="learner_id" required style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base);">
+                                            <option value="">Select Student</option>
+                                            ${learners.map(l => `<option value="${l.learner_id || l.id}">${l.admission_number || ''} - ${l.first_name || ''} ${l.last_name || ''}</option>`).join('')}
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="payment-amount">Amount (KES) <span style="color: var(--error);">*</span></label>
+                                        <input type="number" id="payment-amount" name="amount" step="0.01" min="0" required placeholder="0.00" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base);">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="payment-method">Payment Method</label>
+                                        <select id="payment-method" name="payment_method" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base);">
+                                            <option value="cash">Cash</option>
+                                            <option value="mpesa">M-Pesa</option>
+                                            <option value="bank">Bank Transfer</option>
+                                            <option value="cheque">Cheque</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="payment-date">Transaction Date</label>
+                                        <input type="date" id="payment-date" name="transaction_date" value="${new Date().toISOString().split('T')[0]}" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base);">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="mpesa-code">M-Pesa Confirmation Code</label>
+                                        <input type="text" id="mpesa-code" name="mpesa_confirmation_code" placeholder="Enter M-Pesa confirmation code" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base);">
+                                        <small style="color: var(--text-secondary); font-size: var(--font-size-sm); margin-top: var(--spacing-xs); display: block;">Enter M-Pesa confirmation code for reconciliation</small>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="payment-reference">Reference Number</label>
+                                        <input type="text" id="payment-reference" name="reference_number" placeholder="Optional reference number" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base);">
+                                    </div>
+                                    <div class="form-group" style="grid-column: 1 / -1;">
+                                        <label for="payment-notes">Notes</label>
+                                        <textarea id="payment-notes" name="notes" rows="3" placeholder="Additional notes (optional)" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base); resize: vertical;"></textarea>
+                                    </div>
+                                </div>
+                                <div style="margin-top: var(--spacing-lg);">
+                                    <button type="submit" class="btn-primary" style="padding: var(--spacing-sm) var(--spacing-xl);">
+                                        ${getIcon('check', 18)} Record Payment
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                        
+                        <div class="section-header" style="margin-top: var(--spacing-3xl);">
+                            <h2 class="section-title">Recent Transactions</h2>
+                            <div style="display: flex; gap: var(--spacing-md); align-items: center;">
+                                <select id="payment-term-filter" onchange="loadPaymentTransactions()" style="padding: var(--spacing-xs) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; display: none;">
+                                    ${terms.map(t => `<option value="${t.term_number}" ${t.term_number == selectedTerm ? 'selected' : ''}>Term ${t.term_number}</option>`).join('')}
+                                </select>
+                                <input type="number" id="payment-year-filter" value="${selectedYear}" onchange="loadPaymentTransactions()" style="padding: var(--spacing-xs) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; width: 100px;">
+                            </div>
+                        </div>
+                        <div id="payment-transactions-list" class="premium-card">
+                            <div class="loading">Loading transactions...</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Inventory Management Section -->
+                    <div id="finance-section-inventory" class="finance-section" style="display: none;">
+                        <div class="section-header">
+                            <h2 class="section-title">Inventory Management - Books</h2>
+                            <p class="section-description">Track received books, update stock levels, and manage issuance/return cycle</p>
+                        </div>
+                        
+                        <div class="premium-card" style="margin-bottom: var(--spacing-xl);">
+                            <h3 style="margin-bottom: var(--spacing-lg); font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold);">Add/Update Book</h3>
+                            <form id="bookForm" onsubmit="saveBook(event)">
+                                <div class="form-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-lg);">
+                                    <input type="hidden" id="book-id" name="id">
+                                    <div class="form-group">
+                                        <label for="book-title">Book Title <span style="color: var(--error);">*</span></label>
+                                        <input type="text" id="book-title" name="title" required placeholder="Enter book title" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base);">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="book-isbn">ISBN</label>
+                                        <input type="text" id="book-isbn" name="isbn" placeholder="ISBN number" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base);">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="book-total">Total Copies <span style="color: var(--error);">*</span></label>
+                                        <input type="number" id="book-total" name="total_copies" min="0" required value="0" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base);">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="book-available">Available Copies <span style="color: var(--error);">*</span></label>
+                                        <input type="number" id="book-available" name="available_copies" min="0" required value="0" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base);">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="book-publisher">Publisher</label>
+                                        <input type="text" id="book-publisher" name="publisher" placeholder="Publisher name" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base);">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="book-edition">Edition</label>
+                                        <input type="text" id="book-edition" name="edition" placeholder="Edition" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base);">
+                                    </div>
+                                </div>
+                                <div style="margin-top: var(--spacing-lg); display: flex; gap: var(--spacing-md);">
+                                    <button type="submit" class="btn-primary">
+                                        ${getIcon('check', 18)} Save Book
+                                    </button>
+                                    <button type="button" class="btn-secondary" onclick="resetBookForm()">
+                                        ${getIcon('x', 18)} Clear
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                        
+                        <div class="section-header" style="margin-top: var(--spacing-3xl);">
+                            <h2 class="section-title">Book Inventory</h2>
+                        </div>
+                        <div id="books-inventory-list" class="premium-card">
+                            <div class="loading">Loading books...</div>
+                        </div>
+                        
+                        <div class="section-header" style="margin-top: var(--spacing-3xl);">
+                            <h2 class="section-title">Book Issuances</h2>
+                            <div style="display: flex; gap: var(--spacing-md); align-items: center;">
+                                <select id="issuance-term-filter" onchange="loadBookIssuances()" style="padding: var(--spacing-xs) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; display: none;">
+                                    ${terms.map(t => `<option value="${t.term_number}" ${t.term_number == selectedTerm ? 'selected' : ''}>Term ${t.term_number}</option>`).join('')}
+                                </select>
+                                <input type="number" id="issuance-year-filter" value="${selectedYear}" onchange="loadBookIssuances()" style="padding: var(--spacing-xs) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; width: 100px;">
+                            </div>
+                        </div>
+                        <div id="book-issuances-list" class="premium-card">
+                            <div class="loading">Loading issuances...</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Capitation Section -->
+                    <div id="finance-section-capitation" class="finance-section" style="display: none;">
+                        <div class="section-header">
+                            <h2 class="section-title">Capitation Funds</h2>
+                            <p class="section-description">Track government capitation funds received and allocated</p>
+                        </div>
+                        
+                        <div class="premium-card" style="margin-bottom: var(--spacing-xl);">
+                            <h3 style="margin-bottom: var(--spacing-lg); font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold);">Record Capitation Funds</h3>
+                            <form id="capitationForm" onsubmit="recordCapitation(event)">
+                                <div class="form-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-lg);">
+                                    <div class="form-group">
+                                        <label for="capitation-term">Term <span style="color: var(--error);">*</span></label>
+                                        <select id="capitation-term" name="term" required style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base);">
+                                            <option value="">Select Term</option>
+                                            <option value="1">Term 1</option>
+                                            <option value="2">Term 2</option>
+                                            <option value="3">Term 3</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="capitation-year">Academic Year <span style="color: var(--error);">*</span></label>
+                                        <input type="text" id="capitation-year" name="academic_year" required value="${selectedYear}" placeholder="e.g., 2024" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base);">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="capitation-amount">Amount Received (KES) <span style="color: var(--error);">*</span></label>
+                                        <input type="number" id="capitation-amount" name="amount_received" step="0.01" min="0" required placeholder="0.00" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base);">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="capitation-date">Received Date</label>
+                                        <input type="date" id="capitation-date" name="received_date" value="${new Date().toISOString().split('T')[0]}" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base);">
+                                    </div>
+                                    <div class="form-group" style="grid-column: 1 / -1;">
+                                        <label for="capitation-allocation">Allocation Details (JSON)</label>
+                                        <textarea id="capitation-allocation" name="allocation_details" rows="4" placeholder='{"purpose": "Infrastructure", "amount": 50000}' style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base); resize: vertical; font-family: monospace;"></textarea>
+                                        <small style="color: var(--text-secondary); font-size: var(--font-size-sm); margin-top: var(--spacing-xs); display: block;">Enter allocation details in JSON format</small>
+                                    </div>
+                                    <div class="form-group" style="grid-column: 1 / -1;">
+                                        <label for="capitation-notes">Notes</label>
+                                        <textarea id="capitation-notes" name="notes" rows="3" placeholder="Additional notes (optional)" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; font-size: var(--font-size-base); resize: vertical;"></textarea>
+                                    </div>
+                                </div>
+                                <div style="margin-top: var(--spacing-lg);">
+                                    <button type="submit" class="btn-primary">
+                                        ${getIcon('check', 18)} Record Capitation
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                        
+                        <div class="section-header" style="margin-top: var(--spacing-3xl);">
+                            <h2 class="section-title">Capitation Records</h2>
+                            <div style="display: flex; gap: var(--spacing-md); align-items: center;">
+                                <select id="capitation-term-filter" onchange="loadCapitationRecords()" style="padding: var(--spacing-xs) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px;">
+                                    <option value="">All Terms</option>
+                                    <option value="1">Term 1</option>
+                                    <option value="2">Term 2</option>
+                                    <option value="3">Term 3</option>
+                                </select>
+                                <input type="text" id="capitation-year-filter" value="${selectedYear}" onchange="loadCapitationRecords()" placeholder="Academic Year" style="padding: var(--spacing-xs) var(--spacing-md); border: 1px solid var(--border-light); border-radius: 4px; width: 100px;">
+                            </div>
+                        </div>
+                        <div id="capitation-records-list" class="premium-card">
+                            <div class="loading">Loading capitation records...</div>
+                        </div>
+                    </div>
+                `;
+                
+                // Store selected term and year globally for finance dashboard
+                window.financeSelectedTerm = selectedTerm;
+                window.financeSelectedYear = selectedYear;
+                
+                // Load initial data
+                loadPaymentTransactions();
+                loadBooksInventory();
+                loadBookIssuances();
+                loadCapitationRecords();
+                loadFinanceStats();
+                
+            } catch (error) {
+                content.innerHTML = `
+                    <div class="view-header">
+                        <h2>Finance Dashboard</h2>
+                    </div>
+                    <div class="error">
+                        Error loading finance dashboard: ${error.message}
+                    </div>
+                `;
+                console.error('Load finance dashboard error:', error);
+            }
+        }
+
+        // Finance Dashboard Helper Functions
+        function updateFinanceTerm() {
+            const termSelector = document.getElementById('finance-term-selector');
+            if (!termSelector) return;
+            
+            const selectedTerm = parseInt(termSelector.value);
+            window.financeSelectedTerm = selectedTerm;
+            
+            // Update hidden filters
+            const paymentFilter = document.getElementById('payment-term-filter');
+            const issuanceFilter = document.getElementById('issuance-term-filter');
+            if (paymentFilter) paymentFilter.value = selectedTerm;
+            if (issuanceFilter) issuanceFilter.value = selectedTerm;
+            
+            // Reload all data with new term
+            loadFinanceStats();
+            loadPaymentTransactions();
+            loadBookIssuances();
+            loadCapitationRecords();
+        }
+        
+        async function loadFinanceStats() {
+            const term = window.financeSelectedTerm || 1;
+            const year = window.financeSelectedYear || new Date().getFullYear();
+            
+            try {
+                const stats = await apiCall(`/finance/dashboard/stats?term=${term}&academic_year=${year}`);
+                
+                // Update quick overview cards
+                const totalPayments = document.querySelector('.quick-overview-item:nth-child(1) .quick-overview-value');
+                const totalBooks = document.querySelector('.quick-overview-item:nth-child(2) .quick-overview-value');
+                const capitationFunds = document.querySelector('.quick-overview-item:nth-child(3) .quick-overview-value');
+                const verifiedTransactions = document.querySelector('.quick-overview-item:nth-child(4) .quick-overview-value');
+                
+                if (totalPayments) totalPayments.textContent = `KES ${parseFloat(stats.payments?.total_amount || 0).toLocaleString()}`;
+                if (totalBooks) totalBooks.textContent = stats.books?.total_books || 0;
+                if (capitationFunds) capitationFunds.textContent = `KES ${parseFloat(stats.capitation?.total_received || 0).toLocaleString()}`;
+                if (verifiedTransactions) verifiedTransactions.textContent = stats.payments?.verified_count || 0;
+            } catch (error) {
+                console.error('Error loading finance stats:', error);
+            }
+        }
+        
+        function switchFinanceTab(tabName) {
+            // Hide all sections
+            document.querySelectorAll('.finance-section').forEach(section => {
+                section.style.display = 'none';
+            });
+            // Remove active class from all tabs
+            document.querySelectorAll('.finance-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            // Show selected section
+            document.getElementById(`finance-section-${tabName}`).style.display = 'block';
+            // Add active class to selected tab
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+        }
+
+        async function recordPayment(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = {
+                learner_id: parseInt(formData.get('learner_id')),
+                transaction_type: 'fee_payment',
+                amount: parseFloat(formData.get('amount')),
+                payment_method: formData.get('payment_method') || null,
+                mpesa_confirmation_code: formData.get('mpesa_confirmation_code') || null,
+                reference_number: formData.get('reference_number') || null,
+                transaction_date: formData.get('transaction_date') || new Date().toISOString().split('T')[0],
+                notes: formData.get('notes') || null
+            };
+            
+            try {
+                await apiCall('/finance/transactions', {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+                alert('Payment recorded successfully!');
+                e.target.reset();
+                loadPaymentTransactions();
+            } catch (error) {
+                alert('Error recording payment: ' + error.message);
+            }
+        }
+
+        async function loadPaymentTransactions() {
+            const term = window.financeSelectedTerm || document.getElementById('payment-term-filter')?.value || 1;
+            const year = window.financeSelectedYear || document.getElementById('payment-year-filter')?.value || new Date().getFullYear();
+            const listEl = document.getElementById('payment-transactions-list');
+            
+            if (!listEl) return;
+            
+            try {
+                const transactions = await apiCall(`/finance/transactions?term=${term}&academic_year=${year}`);
+                
+                if (transactions.length === 0) {
+                    listEl.innerHTML = '<div class="empty-state"><p>No transactions found for this period.</p></div>';
+                    return;
+                }
+                
+                listEl.innerHTML = `
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border-light);">
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Date</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Student</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Amount</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Method</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">M-Pesa Code</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${transactions.map(t => `
+                                <tr style="border-bottom: 1px solid var(--border-light);">
+                                    <td style="padding: var(--spacing-md);">${new Date(t.transaction_date).toLocaleDateString()}</td>
+                                    <td style="padding: var(--spacing-md);">${t.admission_number || ''} - ${t.first_name || ''} ${t.last_name || ''}</td>
+                                    <td style="padding: var(--spacing-md); font-weight: var(--font-weight-semibold);">KES ${parseFloat(t.amount).toLocaleString()}</td>
+                                    <td style="padding: var(--spacing-md); text-transform: capitalize;">${t.payment_method || 'N/A'}</td>
+                                    <td style="padding: var(--spacing-md); font-family: monospace;">${t.mpesa_confirmation_code || '-'}</td>
+                                    <td style="padding: var(--spacing-md);">
+                                        <span style="padding: var(--spacing-xs) var(--spacing-sm); border-radius: 4px; font-size: var(--font-size-sm); background: ${t.verified ? '#d1fae5' : '#fee2e2'}; color: ${t.verified ? '#065f46' : '#991b1b'};">
+                                            ${t.verified ? 'Verified' : 'Pending'}
+                                        </span>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                listEl.innerHTML = `<div class="error">Error loading transactions: ${error.message}</div>`;
+            }
+        }
+
+        async function saveBook(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const bookId = formData.get('id');
+            const data = {
+                id: bookId ? parseInt(bookId) : null,
+                title: formData.get('title'),
+                isbn: formData.get('isbn') || null,
+                total_copies: parseInt(formData.get('total_copies')) || 0,
+                available_copies: parseInt(formData.get('available_copies')) || 0,
+                publisher: formData.get('publisher') || null,
+                edition: formData.get('edition') || null
+            };
+            
+            try {
+                await apiCall('/finance/inventory/books', {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+                alert(bookId ? 'Book updated successfully!' : 'Book added successfully!');
+                e.target.reset();
+                document.getElementById('book-id').value = '';
+                loadBooksInventory();
+            } catch (error) {
+                alert('Error saving book: ' + error.message);
+            }
+        }
+
+        function resetBookForm() {
+            document.getElementById('bookForm').reset();
+            document.getElementById('book-id').value = '';
+        }
+
+        async function loadBooksInventory() {
+            const listEl = document.getElementById('books-inventory-list');
+            if (!listEl) return;
+            
+            try {
+                const books = await apiCall('/finance/inventory/books');
+                
+                if (books.length === 0) {
+                    listEl.innerHTML = '<div class="empty-state"><p>No books in inventory. Add books to get started.</p></div>';
+                    return;
+                }
+                
+                listEl.innerHTML = `
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border-light);">
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Title</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">ISBN</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Total Copies</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Available</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Issued</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${books.map(book => {
+                                const issued = (book.total_copies || 0) - (book.available_copies || 0);
+                                return `
+                                <tr style="border-bottom: 1px solid var(--border-light);">
+                                    <td style="padding: var(--spacing-md);">${book.title || ''}</td>
+                                    <td style="padding: var(--spacing-md); font-family: monospace;">${book.isbn || '-'}</td>
+                                    <td style="padding: var(--spacing-md);">${book.total_copies || 0}</td>
+                                    <td style="padding: var(--spacing-md); color: ${(book.available_copies || 0) > 0 ? 'var(--success)' : 'var(--error)'}; font-weight: var(--font-weight-semibold);">${book.available_copies || 0}</td>
+                                    <td style="padding: var(--spacing-md);">${issued}</td>
+                                    <td style="padding: var(--spacing-md);">
+                                        <button onclick="editBook(${book.id})" class="btn-secondary" style="padding: var(--spacing-xs) var(--spacing-md); margin-right: var(--spacing-xs);">Edit</button>
+                                    </td>
+                                </tr>
+                            `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                listEl.innerHTML = `<div class="error">Error loading books: ${error.message}</div>`;
+            }
+        }
+
+        async function editBook(bookId) {
+            try {
+                const books = await apiCall('/finance/inventory/books');
+                const book = books.find(b => b.id === bookId);
+                if (book) {
+                    document.getElementById('book-id').value = book.id;
+                    document.getElementById('book-title').value = book.title || '';
+                    document.getElementById('book-isbn').value = book.isbn || '';
+                    document.getElementById('book-total').value = book.total_copies || 0;
+                    document.getElementById('book-available').value = book.available_copies || 0;
+                    document.getElementById('book-publisher').value = book.publisher || '';
+                    document.getElementById('book-edition').value = book.edition || '';
+                    // Switch to inventory tab
+                    switchFinanceTab('inventory');
+                    // Scroll to form
+                    document.getElementById('bookForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            } catch (error) {
+                alert('Error loading book: ' + error.message);
+            }
+        }
+
+        async function loadBookIssuances() {
+            const term = window.financeSelectedTerm || document.getElementById('issuance-term-filter')?.value || 1;
+            const year = window.financeSelectedYear || document.getElementById('issuance-year-filter')?.value || new Date().getFullYear();
+            const listEl = document.getElementById('book-issuances-list');
+            
+            if (!listEl) return;
+            
+            try {
+                const issuances = await apiCall(`/finance/inventory/issuances?term=${term}&academic_year=${year}`);
+                
+                if (issuances.length === 0) {
+                    listEl.innerHTML = '<div class="empty-state"><p>No book issuances found for this period.</p></div>';
+                    return;
+                }
+                
+                listEl.innerHTML = `
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border-light);">
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Date</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Book</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Student</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${issuances.map(i => `
+                                <tr style="border-bottom: 1px solid var(--border-light);">
+                                    <td style="padding: var(--spacing-md);">${new Date(i.issue_date).toLocaleDateString()}</td>
+                                    <td style="padding: var(--spacing-md);">${i.book_title || ''}</td>
+                                    <td style="padding: var(--spacing-md);">${i.admission_number || ''} - ${i.first_name || ''} ${i.last_name || ''}</td>
+                                    <td style="padding: var(--spacing-md);">
+                                        <span style="padding: var(--spacing-xs) var(--spacing-sm); border-radius: 4px; font-size: var(--font-size-sm); background: ${i.returned ? '#d1fae5' : '#fef3c7'}; color: ${i.returned ? '#065f46' : '#92400e'};">
+                                            ${i.returned ? 'Returned' : 'Issued'}
+                                        </span>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                listEl.innerHTML = `<div class="error">Error loading issuances: ${error.message}</div>`;
+            }
+        }
+
+        async function recordCapitation(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            let allocationDetails = null;
+            
+            try {
+                const allocationText = formData.get('allocation_details');
+                if (allocationText && allocationText.trim()) {
+                    allocationDetails = JSON.parse(allocationText);
+                }
+            } catch (e) {
+                alert('Invalid JSON format in allocation details. Please check your input.');
+                return;
+            }
+            
+            const data = {
+                term: parseInt(formData.get('term')),
+                academic_year: formData.get('academic_year'),
+                amount_received: parseFloat(formData.get('amount_received')),
+                received_date: formData.get('received_date') || new Date().toISOString().split('T')[0],
+                allocation_details: allocationDetails,
+                notes: formData.get('notes') || null
+            };
+            
+            try {
+                await apiCall('/finance/capitation', {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+                alert('Capitation funds recorded successfully!');
+                e.target.reset();
+                document.getElementById('capitation-year').value = new Date().getFullYear();
+                loadCapitationRecords();
+            } catch (error) {
+                alert('Error recording capitation: ' + error.message);
+            }
+        }
+
+        async function loadCapitationRecords() {
+            const term = window.financeSelectedTerm || document.getElementById('capitation-term-filter')?.value || '';
+            const year = window.financeSelectedYear || document.getElementById('capitation-year-filter')?.value || new Date().getFullYear();
+            const listEl = document.getElementById('capitation-records-list');
+            
+            if (!listEl) return;
+            
+            try {
+                let url = `/finance/capitation?academic_year=${year}`;
+                if (term) url += `&term=${term}`;
+                
+                const records = await apiCall(url);
+                
+                if (records.length === 0) {
+                    listEl.innerHTML = '<div class="empty-state"><p>No capitation records found for this period.</p></div>';
+                    return;
+                }
+                
+                listEl.innerHTML = `
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border-light);">
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Term</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Academic Year</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Amount</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Received Date</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Allocation</th>
+                                <th style="padding: var(--spacing-md); text-align: left; font-weight: var(--font-weight-semibold);">Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${records.map(r => `
+                                <tr style="border-bottom: 1px solid var(--border-light);">
+                                    <td style="padding: var(--spacing-md);">Term ${r.term}</td>
+                                    <td style="padding: var(--spacing-md);">${r.academic_year}</td>
+                                    <td style="padding: var(--spacing-md); font-weight: var(--font-weight-semibold);">KES ${parseFloat(r.amount_received).toLocaleString()}</td>
+                                    <td style="padding: var(--spacing-md);">${new Date(r.received_date).toLocaleDateString()}</td>
+                                    <td style="padding: var(--spacing-md);">
+                                        ${r.allocation_details ? `<pre style="margin: 0; font-size: var(--font-size-sm); white-space: pre-wrap;">${JSON.stringify(r.allocation_details, null, 2)}</pre>` : '-'}
+                                    </td>
+                                    <td style="padding: var(--spacing-md);">${r.notes || '-'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                listEl.innerHTML = `<div class="error">Error loading capitation records: ${error.message}</div>`;
+            }
+        }
+
         // Admin: Load teachers overview
         async function loadTeachersOverview() {
             const teachers = await apiCall('/admin/teachers/overview');
@@ -3837,6 +4562,797 @@
             // TODO: Implement add user form
         }
 
+        // Parent: Load Comprehensive Parent Dashboard
+        async function loadParentDashboard() {
+            const content = document.getElementById('dashboardContent');
+            
+            try {
+                // Get all children
+                let children = [];
+                try {
+                    children = await apiCall(`/users/parent/${currentUser.id}/students`);
+                } catch (e) {
+                    console.log('Could not load children:', e);
+                }
+                
+                // Default to first child if available
+                const selectedChildId = children.length > 0 ? children[0].id : null;
+                window.parentSelectedChildId = selectedChildId;
+                
+                if (children.length === 0) {
+                    content.innerHTML = `
+                        <div class="view-header">
+                            <h1 class="view-title" style="font-size: 2rem; font-weight: 700;">Parent Dashboard</h1>
+                            <p class="view-subtitle">No children linked to your account. Please contact the school administration.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Get current year
+                const currentYear = new Date().getFullYear();
+                
+                content.innerHTML = `
+                    <div class="parent-dashboard-container">
+                        <!-- Header -->
+                    <div class="view-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: var(--spacing-lg);">
+                        <div class="view-header-content">
+                            <h1 class="view-title" style="font-size: 2rem; font-weight: 700; margin-bottom: var(--spacing-sm);">Parent Dashboard</h1>
+                            <p class="view-subtitle" style="font-size: 1.1rem;">Transparent oversight of your child's academic and financial status</p>
+                        </div>
+                        <div class="parent-term-selector-container">
+                            <div class="parent-term-selector-wrapper">
+                                <label for="parent-term-selector">Term:</label>
+                                <select id="parent-term-selector" onchange="updateParentTerm()">
+                                    <option value="">All Terms</option>
+                                    <option value="1">Term 1</option>
+                                    <option value="2">Term 2</option>
+                                    <option value="3">Term 3</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                        
+                        <!-- Multi-Child Tabs -->
+                        ${children.length > 1 ? `
+                        <div class="parent-child-tabs" style="margin-bottom: var(--spacing-xl); display: flex; gap: var(--spacing-sm); overflow-x: auto; padding: var(--spacing-sm) 0; border-bottom: 3px solid var(--border-light);">
+                            ${children.map((child, index) => `
+                                <button class="parent-child-tab ${index === 0 ? 'active' : ''}" onclick="switchParentChild(${child.id})" data-child-id="${child.id}" style="padding: var(--spacing-md) var(--spacing-lg); font-size: 1.1rem; font-weight: 600; white-space: nowrap; border: none; background: none; border-bottom: 3px solid transparent; cursor: pointer; transition: all 0.2s;">
+                                    ${getIcon('user', 24)} ${child.first_name} ${child.last_name}
+                                </button>
+                            `).join('')}
+                        </div>
+                        ` : ''}
+                        
+                        <!-- Main Content Tabs -->
+                        <div class="parent-main-tabs" style="margin-bottom: var(--spacing-xl);">
+                            <button class="parent-main-tab active" onclick="switchParentSection('academic')" id="parent-tab-academic" style="font-size: 1.1rem; font-weight: 600;">
+                                ${getIcon('book', 28)} Academic Progress
+                            </button>
+                            <button class="parent-main-tab" onclick="switchParentSection('financial')" id="parent-tab-financial" style="font-size: 1.1rem; font-weight: 600;">
+                                ${getIcon('dollar', 28)} Financial Management
+                            </button>
+                            <button class="parent-main-tab" onclick="switchParentSection('communication')" id="parent-tab-communication" style="font-size: 1.1rem; font-weight: 600;">
+                                ${getIcon('messages', 28)} Communication
+                            </button>
+                            <button class="parent-main-tab" onclick="switchParentSection('calendar')" id="parent-tab-calendar" style="font-size: 1.1rem; font-weight: 600;">
+                                ${getIcon('calendar', 28)} School Calendar
+                            </button>
+                        </div>
+                        
+                        <!-- Academic Progress Section -->
+                        <div id="parent-section-academic" class="parent-section active">
+                            <div class="section-header" style="margin-bottom: var(--spacing-xl);">
+                                <h2 class="section-title" style="font-size: 1.75rem; font-weight: 700;">Academic Progress</h2>
+                            </div>
+                            
+                            <!-- Result Slips -->
+                            <div class="parent-card" style="margin-bottom: var(--spacing-xl);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-lg); flex-wrap: wrap; gap: var(--spacing-md);">
+                                    <h3 style="font-size: 1.4rem; font-weight: 700; display: flex; align-items: center; gap: var(--spacing-md); margin: 0;">
+                                        ${getIcon('clipboard', 32)} Result Slips
+                                    </h3>
+                                    <div style="display: flex; gap: var(--spacing-sm);">
+                                        <button onclick="downloadReport('result-slips', 'pdf')" class="btn-secondary" style="padding: var(--spacing-sm) var(--spacing-md); font-size: 1rem; font-weight: 600;">
+                                            ${getIcon('clipboard', 18)} PDF
+                                        </button>
+                                        <button onclick="downloadReport('result-slips', 'csv')" class="btn-secondary" style="padding: var(--spacing-sm) var(--spacing-md); font-size: 1rem; font-weight: 600;">
+                                            ${getIcon('clipboard', 18)} CSV
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="parent-result-slips" class="loading" style="padding: var(--spacing-2xl); text-align: center; font-size: 1.1rem;">Loading result slips...</div>
+                            </div>
+                            
+                            <!-- Assignments -->
+                            <div class="parent-card">
+                                <h3 style="font-size: 1.4rem; font-weight: 700; margin-bottom: var(--spacing-lg); display: flex; align-items: center; gap: var(--spacing-md);">
+                                    ${getIcon('target', 32)} Assignments
+                                </h3>
+                                <div id="parent-assignments" class="loading" style="padding: var(--spacing-2xl); text-align: center; font-size: 1.1rem;">Loading assignments...</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Financial Management Section -->
+                        <div id="parent-section-financial" class="parent-section" style="display: none;">
+                            <div class="section-header" style="margin-bottom: var(--spacing-xl);">
+                                <h2 class="section-title" style="font-size: 1.75rem; font-weight: 700;">Financial Management</h2>
+                            </div>
+                            
+                            <!-- Fee Payment History with Progress Bar -->
+                            <div class="parent-card" style="margin-bottom: var(--spacing-xl);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-lg); flex-wrap: wrap; gap: var(--spacing-md);">
+                                    <h3 style="font-size: 1.4rem; font-weight: 700; display: flex; align-items: center; gap: var(--spacing-md); margin: 0;">
+                                        ${getIcon('dollar', 32)} Fee Payment History
+                                    </h3>
+                                    <div style="display: flex; gap: var(--spacing-sm);">
+                                        <button onclick="downloadReport('fee-balance', 'pdf')" class="btn-secondary" style="padding: var(--spacing-sm) var(--spacing-md); font-size: 1rem; font-weight: 600;">
+                                            ${getIcon('dollar', 18)} Balance PDF
+                                        </button>
+                                        <button onclick="downloadReport('fee-payments', 'pdf')" class="btn-secondary" style="padding: var(--spacing-sm) var(--spacing-md); font-size: 1rem; font-weight: 600;">
+                                            ${getIcon('dollar', 18)} Receipts PDF
+                                        </button>
+                                        <button onclick="downloadReport('fee-payments', 'csv')" class="btn-secondary" style="padding: var(--spacing-sm) var(--spacing-md); font-size: 1rem; font-weight: 600;">
+                                            ${getIcon('dollar', 18)} CSV
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="parent-fee-progress" style="margin-bottom: var(--spacing-xl);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md);">
+                                        <span style="font-size: 1.2rem; font-weight: 600;">Total Fees Paid</span>
+                                        <span id="fee-percentage" style="font-size: 1.5rem; font-weight: 700; color: var(--primary-blue);">0%</span>
+                                    </div>
+                                    <div style="width: 100%; height: 30px; background: var(--bg-tertiary); border-radius: 15px; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
+                                        <div id="fee-progress-bar" style="height: 100%; background: linear-gradient(90deg, #10b981 0%, #059669 100%); width: 0%; transition: width 0.5s ease; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.9rem;"></div>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; margin-top: var(--spacing-sm); font-size: 1rem; color: var(--text-secondary);">
+                                        <span id="fee-paid-amount">KES 0</span>
+                                        <span id="fee-total-amount">KES 0</span>
+                                    </div>
+                                </div>
+                                <div id="parent-payment-history" class="loading" style="padding: var(--spacing-2xl); text-align: center; font-size: 1.1rem;">Loading payment history...</div>
+                            </div>
+                            
+                            <!-- Bursary Application -->
+                            <div class="parent-card">
+                                <h3 style="font-size: 1.4rem; font-weight: 700; margin-bottom: var(--spacing-lg); display: flex; align-items: center; gap: var(--spacing-md);">
+                                    ${getIcon('clipboard', 32)} Bursary Application
+                                </h3>
+                                <form id="bursary-form" onsubmit="submitBursaryApplication(event)" style="display: grid; gap: var(--spacing-lg);">
+                                    <div class="form-group">
+                                        <label style="font-size: 1.1rem; font-weight: 600; margin-bottom: var(--spacing-sm); display: block;">Child <span style="color: var(--error);">*</span></label>
+                                        <select id="bursary-child" required style="width: 100%; padding: var(--spacing-md); font-size: 1.1rem; border: 2px solid var(--border-light); border-radius: 8px;">
+                                            ${children.map(c => `<option value="${c.id}">${c.first_name} ${c.last_name}</option>`).join('')}
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label style="font-size: 1.1rem; font-weight: 600; margin-bottom: var(--spacing-sm); display: block;">Application Type <span style="color: var(--error);">*</span></label>
+                                        <select id="bursary-type" required style="width: 100%; padding: var(--spacing-md); font-size: 1.1rem; border: 2px solid var(--border-light); border-radius: 8px;">
+                                            <option value="">Select Type</option>
+                                            <option value="full">Full Bursary</option>
+                                            <option value="partial">Partial Bursary</option>
+                                            <option value="emergency">Emergency Fund</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label style="font-size: 1.1rem; font-weight: 600; margin-bottom: var(--spacing-sm); display: block;">Reason/Justification <span style="color: var(--error);">*</span></label>
+                                        <textarea id="bursary-reason" required rows="5" style="width: 100%; padding: var(--spacing-md); font-size: 1.1rem; border: 2px solid var(--border-light); border-radius: 8px; resize: vertical;" placeholder="Please provide a detailed explanation for the bursary application..."></textarea>
+                                    </div>
+                                    <div class="form-group">
+                                        <label style="font-size: 1.1rem; font-weight: 600; margin-bottom: var(--spacing-sm); display: block;">Supporting Documents <span style="color: var(--error);">*</span></label>
+                                        <input type="file" id="bursary-documents" multiple accept=".pdf,.jpg,.jpeg,.png" required style="width: 100%; padding: var(--spacing-md); font-size: 1.1rem; border: 2px solid var(--border-light); border-radius: 8px;">
+                                        <small style="display: block; margin-top: var(--spacing-xs); color: var(--text-secondary); font-size: 1rem;">Upload scanned, stamped supporting documents (PDF, JPG, PNG). Maximum 5 files.</small>
+                                    </div>
+                                    <button type="submit" class="btn-primary" style="padding: var(--spacing-md) var(--spacing-xl); font-size: 1.2rem; font-weight: 700; width: 100%;">
+                                        ${getIcon('check', 24)} Submit Bursary Application
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        
+                        <!-- Communication & Feedback Section -->
+                        <div id="parent-section-communication" class="parent-section" style="display: none;">
+                            <div class="section-header" style="margin-bottom: var(--spacing-xl);">
+                                <h2 class="section-title" style="font-size: 1.75rem; font-weight: 700;">Communication & Feedback</h2>
+                            </div>
+                            
+                            <!-- Messages -->
+                            <div class="parent-card" style="margin-bottom: var(--spacing-xl);">
+                                <h3 style="font-size: 1.4rem; font-weight: 700; margin-bottom: var(--spacing-lg); display: flex; align-items: center; gap: var(--spacing-md);">
+                                    ${getIcon('messages', 32)} Messages
+                                </h3>
+                                <div id="parent-messages" class="loading" style="padding: var(--spacing-2xl); text-align: center; font-size: 1.1rem;">Loading messages...</div>
+                            </div>
+                            
+                            <!-- Teacher Ratings -->
+                            <div class="parent-card">
+                                <h3 style="font-size: 1.4rem; font-weight: 700; margin-bottom: var(--spacing-lg); display: flex; align-items: center; gap: var(--spacing-md);">
+                                    ${getIcon('graduation-cap', 32)} Rate Teachers
+                                </h3>
+                                <div id="parent-teachers-rating" class="loading" style="padding: var(--spacing-2xl); text-align: center; font-size: 1.1rem;">Loading teachers...</div>
+                            </div>
+                        </div>
+                        
+                        <!-- School Calendar Section -->
+                        <div id="parent-section-calendar" class="parent-section" style="display: none;">
+                            <div class="section-header" style="margin-bottom: var(--spacing-xl); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--spacing-md);">
+                                <h2 class="section-title" style="font-size: 1.75rem; font-weight: 700; margin: 0;">School Calendar</h2>
+                                <div style="display: flex; gap: var(--spacing-sm);">
+                                    <select id="calendar-filter" onchange="loadParentCalendar()" style="padding: var(--spacing-sm) var(--spacing-md); border: 2px solid var(--border-light); border-radius: 8px; font-size: 1rem; font-weight: 600;">
+                                        <option value="all">All Events</option>
+                                        <option value="major">Major Events</option>
+                                        <option value="minor">Quizzes & Assignments</option>
+                                    </select>
+                                    <button onclick="downloadReport('calendar', 'pdf')" class="btn-secondary" style="padding: var(--spacing-sm) var(--spacing-md); font-size: 1rem; font-weight: 600;">
+                                        ${getIcon('calendar', 18)} PDF
+                                    </button>
+                                    <button onclick="downloadReport('calendar', 'csv')" class="btn-secondary" style="padding: var(--spacing-sm) var(--spacing-md); font-size: 1rem; font-weight: 600;">
+                                        ${getIcon('calendar', 18)} CSV
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="parent-card">
+                                <div id="parent-calendar" class="loading" style="padding: var(--spacing-2xl); text-align: center; font-size: 1.1rem;">Loading calendar events...</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Store selected term and year globally for parent dashboard
+                window.parentSelectedTerm = '';
+                window.parentSelectedYear = currentYear;
+                
+                // Load initial data
+                loadParentAcademicData();
+                loadParentFinancialData();
+                loadParentCommunicationData();
+                loadParentCalendar();
+                
+            } catch (error) {
+                content.innerHTML = `
+                    <div class="view-header">
+                        <h2>Parent Dashboard</h2>
+                    </div>
+                    <div class="error" style="font-size: 1.2rem; padding: var(--spacing-xl);">
+                        Error loading dashboard: ${error.message}
+                    </div>
+                `;
+                console.error('Load parent dashboard error:', error);
+            }
+        }
+        
+        // Parent Dashboard Helper Functions
+        function switchParentChild(childId) {
+            window.parentSelectedChildId = childId;
+            
+            // Update active tab
+            document.querySelectorAll('.parent-child-tab').forEach(tab => {
+                tab.classList.remove('active');
+                if (parseInt(tab.dataset.childId) === childId) {
+                    tab.classList.add('active');
+                }
+            });
+            
+            // Reload all data for selected child
+            loadParentAcademicData();
+            loadParentFinancialData();
+            loadParentCommunicationData();
+        }
+        
+        function switchParentSection(sectionName) {
+            // Hide all sections
+            document.querySelectorAll('.parent-section').forEach(section => {
+                section.style.display = 'none';
+            });
+            // Remove active class from all tabs
+            document.querySelectorAll('.parent-main-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            // Show selected section
+            document.getElementById(`parent-section-${sectionName}`).style.display = 'block';
+            // Add active class to selected tab
+            document.getElementById(`parent-tab-${sectionName}`).classList.add('active');
+        }
+        
+        function updateParentTerm() {
+            const termSelector = document.getElementById('parent-term-selector');
+            if (!termSelector) return;
+            
+            window.parentSelectedTerm = termSelector.value;
+            
+            // Reload all data with new term
+            loadParentAcademicData();
+            loadParentFinancialData();
+        }
+        
+        async function loadParentAcademicData() {
+            const childId = window.parentSelectedChildId;
+            if (!childId) return;
+            
+            // Load result slips
+            try {
+                const year = window.parentSelectedYear || new Date().getFullYear();
+                let url = `/assessments/result-slips?learner_id=${childId}&academic_year=${year}`;
+                if (window.parentSelectedTerm) {
+                    url += `&term=${window.parentSelectedTerm}`;
+                }
+                const resultSlips = await apiCall(url);
+                const resultSlipsEl = document.getElementById('parent-result-slips');
+                
+                if (resultSlips.length === 0) {
+                    resultSlipsEl.innerHTML = '<div class="empty-state" style="padding: var(--spacing-xl); text-align: center; font-size: 1.1rem; color: var(--text-secondary);">No result slips available yet.</div>';
+                } else {
+                    resultSlipsEl.innerHTML = `
+                        <div style="display: grid; gap: var(--spacing-lg);">
+                            ${resultSlips.map(slip => `
+                                <div style="padding: var(--spacing-lg); border: 2px solid var(--border-light); border-radius: 12px; background: var(--bg-secondary);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md); flex-wrap: wrap; gap: var(--spacing-sm);">
+                                        <h4 style="font-size: 1.3rem; font-weight: 700; margin: 0;">Term ${slip.term} - ${slip.academic_year}</h4>
+                                        <button onclick="loadView('result-slip')" class="btn-primary" style="padding: var(--spacing-sm) var(--spacing-lg); font-size: 1.1rem; font-weight: 600;">
+                                            ${getIcon('clipboard', 20)} View Details
+                                        </button>
+                                    </div>
+                                    <p style="font-size: 1rem; color: var(--text-secondary); margin: 0;">Click to view full result slip</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('parent-result-slips').innerHTML = `<div class="error" style="padding: var(--spacing-md); color: var(--error); font-size: 1.1rem;">Error loading result slips: ${error.message}</div>`;
+            }
+            
+            // Load assignments
+            try {
+                const assignments = await apiCall(`/assignments/student/${childId}`);
+                const assignmentsEl = document.getElementById('parent-assignments');
+                
+                if (assignments.length === 0) {
+                    assignmentsEl.innerHTML = '<div class="empty-state" style="padding: var(--spacing-xl); text-align: center; font-size: 1.1rem; color: var(--text-secondary);">No assignments found.</div>';
+                } else {
+                    const upcoming = assignments.filter(a => new Date(a.due_date) >= new Date()).slice(0, 5);
+                    const past = assignments.filter(a => new Date(a.due_date) < new Date()).slice(0, 5);
+                    
+                    assignmentsEl.innerHTML = `
+                        ${upcoming.length > 0 ? `
+                        <div style="margin-bottom: var(--spacing-xl);">
+                            <h4 style="font-size: 1.2rem; font-weight: 700; margin-bottom: var(--spacing-md); color: var(--primary-blue);">Upcoming Assignments</h4>
+                            <div style="display: grid; gap: var(--spacing-md);">
+                                ${upcoming.map(a => `
+                                    <div style="padding: var(--spacing-md); border-left: 4px solid var(--primary-blue); background: var(--bg-tertiary); border-radius: 8px;">
+                                        <h5 style="font-size: 1.1rem; font-weight: 700; margin: 0 0 var(--spacing-xs) 0;">${a.title || 'Assignment'}</h5>
+                                        <p style="font-size: 1rem; color: var(--text-secondary); margin: 0;">Due: ${new Date(a.due_date).toLocaleDateString()}</p>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        ` : ''}
+                        ${past.length > 0 ? `
+                        <div>
+                            <h4 style="font-size: 1.2rem; font-weight: 700; margin-bottom: var(--spacing-md); color: var(--text-secondary);">Past Assignments</h4>
+                            <div style="display: grid; gap: var(--spacing-md);">
+                                ${past.map(a => `
+                                    <div style="padding: var(--spacing-md); border-left: 4px solid var(--border-medium); background: var(--bg-tertiary); border-radius: 8px;">
+                                        <h5 style="font-size: 1.1rem; font-weight: 700; margin: 0 0 var(--spacing-xs) 0;">${a.title || 'Assignment'}</h5>
+                                        <p style="font-size: 1rem; color: var(--text-secondary); margin: 0;">Due: ${new Date(a.due_date).toLocaleDateString()}</p>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        ` : ''}
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('parent-assignments').innerHTML = `<div class="error" style="padding: var(--spacing-md); color: var(--error); font-size: 1.1rem;">Error loading assignments: ${error.message}</div>`;
+            }
+        }
+        
+        async function loadParentFinancialData() {
+            const childId = window.parentSelectedChildId;
+            if (!childId) return;
+            
+            try {
+                const year = window.parentSelectedYear || new Date().getFullYear();
+                let url = `/finance/transactions?learner_id=${childId}`;
+                if (window.parentSelectedTerm) {
+                    url += `&term=${window.parentSelectedTerm}&academic_year=${year}`;
+                }
+                const transactions = await apiCall(url);
+                
+                // Calculate fee totals (assuming fee_payment type)
+                const feePayments = transactions.filter(t => t.transaction_type === 'fee_payment');
+                const totalPaid = feePayments.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+                
+                // Estimate total fees (this would ideally come from backend)
+                const estimatedTotalFees = 50000; // This should come from backend
+                const percentage = estimatedTotalFees > 0 ? Math.min(100, (totalPaid / estimatedTotalFees) * 100) : 0;
+                
+                // Update progress bar
+                const progressBar = document.getElementById('fee-progress-bar');
+                const percentageEl = document.getElementById('fee-percentage');
+                const paidAmountEl = document.getElementById('fee-paid-amount');
+                const totalAmountEl = document.getElementById('fee-total-amount');
+                
+                if (progressBar) {
+                    progressBar.style.width = `${percentage}%`;
+                    progressBar.textContent = percentage >= 10 ? `${Math.round(percentage)}%` : '';
+                }
+                if (percentageEl) percentageEl.textContent = `${Math.round(percentage)}%`;
+                if (paidAmountEl) paidAmountEl.textContent = `KES ${totalPaid.toLocaleString()}`;
+                if (totalAmountEl) totalAmountEl.textContent = `KES ${estimatedTotalFees.toLocaleString()}`;
+                
+                // Display payment history
+                const historyEl = document.getElementById('parent-payment-history');
+                if (feePayments.length === 0) {
+                    historyEl.innerHTML = '<div class="empty-state" style="padding: var(--spacing-xl); text-align: center; font-size: 1.1rem; color: var(--text-secondary);">No payment history found.</div>';
+                } else {
+                    historyEl.innerHTML = `
+                        <div style="display: grid; gap: var(--spacing-md);">
+                            ${feePayments.map(t => `
+                                <div style="padding: var(--spacing-md); border: 2px solid var(--border-light); border-radius: 8px; background: var(--bg-secondary);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--spacing-sm);">
+                                        <div>
+                                            <p style="font-size: 1.2rem; font-weight: 700; margin: 0; color: var(--success);">KES ${parseFloat(t.amount).toLocaleString()}</p>
+                                            <p style="font-size: 1rem; color: var(--text-secondary); margin: var(--spacing-xs) 0 0 0;">${new Date(t.transaction_date).toLocaleDateString()}</p>
+                                        </div>
+                                        <span style="padding: var(--spacing-xs) var(--spacing-md); background: ${t.verified ? '#d1fae5' : '#fef3c7'}; color: ${t.verified ? '#065f46' : '#92400e'}; border-radius: 20px; font-size: 1rem; font-weight: 600;">
+                                            ${t.verified ? 'Verified' : 'Pending'}
+                                        </span>
+                                    </div>
+                                    ${t.mpesa_confirmation_code ? `<p style="font-size: 0.9rem; color: var(--text-secondary); margin: var(--spacing-xs) 0 0 0; font-family: monospace;">M-Pesa: ${t.mpesa_confirmation_code}</p>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('parent-payment-history').innerHTML = `<div class="error" style="padding: var(--spacing-md); color: var(--error); font-size: 1.1rem;">Error loading payment history: ${error.message}</div>`;
+            }
+        }
+        
+        async function loadParentCommunicationData() {
+            const childId = window.parentSelectedChildId;
+            if (!childId) return;
+            
+            // Load messages
+            try {
+                const messages = await apiCall('/email/inbox');
+                const messagesEl = document.getElementById('parent-messages');
+                
+                if (messages.length === 0) {
+                    messagesEl.innerHTML = '<div class="empty-state" style="padding: var(--spacing-xl); text-align: center; font-size: 1.1rem; color: var(--text-secondary);">No messages found.</div>';
+                } else {
+                    messagesEl.innerHTML = `
+                        <div style="display: grid; gap: var(--spacing-md);">
+                            ${messages.slice(0, 10).map(m => `
+                                <div style="padding: var(--spacing-lg); border: 2px solid var(--border-light); border-radius: 12px; background: ${m.is_read ? 'var(--bg-secondary)' : 'rgba(37, 99, 235, 0.05)'}; border-left: 4px solid ${m.is_read ? 'transparent' : 'var(--primary-blue)'};">
+                                    <h4 style="font-size: 1.2rem; font-weight: 700; margin: 0 0 var(--spacing-xs) 0;">${m.subject || 'No Subject'}</h4>
+                                    <p style="font-size: 1rem; color: var(--text-secondary); margin: 0 0 var(--spacing-sm) 0;">${m.body?.substring(0, 100) || 'No content'}...</p>
+                                    <p style="font-size: 0.9rem; color: var(--text-tertiary); margin: 0;">From: ${m.sender_name || 'School'} • ${new Date(m.created_at).toLocaleDateString()}</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('parent-messages').innerHTML = `<div class="error" style="padding: var(--spacing-md); color: var(--error); font-size: 1.1rem;">Error loading messages: ${error.message}</div>`;
+            }
+            
+            // Load teachers for rating
+            try {
+                const teachers = await apiCall(`/courses/student/${childId}/teachers`);
+                const teachersEl = document.getElementById('parent-teachers-rating');
+                
+                if (teachers.length === 0) {
+                    teachersEl.innerHTML = '<div class="empty-state" style="padding: var(--spacing-xl); text-align: center; font-size: 1.1rem; color: var(--text-secondary);">No teachers found.</div>';
+                } else {
+                    teachersEl.innerHTML = `
+                        <div style="display: grid; gap: var(--spacing-lg);">
+                            ${teachers.map(teacher => `
+                                <div style="padding: var(--spacing-lg); border: 2px solid var(--border-light); border-radius: 12px; background: var(--bg-secondary);">
+                                    <h4 style="font-size: 1.2rem; font-weight: 700; margin: 0 0 var(--spacing-md) 0;">${teacher.first_name} ${teacher.last_name}</h4>
+                                    <p style="font-size: 1rem; color: var(--text-secondary); margin: 0 0 var(--spacing-md) 0;">${teacher.course_name || 'Teacher'}</p>
+                                    <div style="display: flex; gap: var(--spacing-sm); align-items: center;">
+                                        <span style="font-size: 1rem; font-weight: 600;">Rating:</span>
+                                        <div class="teacher-rating" data-teacher-id="${teacher.id}" style="display: flex; gap: var(--spacing-xs);">
+                                            ${[1,2,3,4,5].map(i => `
+                                                <button onclick="rateTeacher(${teacher.id}, ${i})" class="rating-star" data-rating="${i}" style="font-size: 2rem; background: none; border: none; cursor: pointer; color: var(--border-medium); transition: color 0.2s;">★</button>
+                                            `).join('')}
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('parent-teachers-rating').innerHTML = `<div class="error" style="padding: var(--spacing-md); color: var(--error); font-size: 1.1rem;">Error loading teachers: ${error.message}</div>`;
+            }
+        }
+        
+        async function loadParentCalendar() {
+            try {
+                const filter = document.getElementById('calendar-filter')?.value || 'all';
+                const eventsEl = document.getElementById('parent-calendar');
+                
+                // Get calendar events from terms, assignments, and school events
+                const childId = window.parentSelectedChildId;
+                let events = [];
+                
+                // Get terms (major events)
+                try {
+                    const year = window.parentSelectedYear || new Date().getFullYear();
+                    const terms = await apiCall(`/courses/terms?academic_year=${year}`);
+                    terms.forEach(term => {
+                        if (term.start_date) {
+                            events.push({
+                                type: 'major',
+                                title: `Term ${term.term_number} Starts`,
+                                date: term.start_date,
+                                description: `Start of ${term.name || `Term ${term.term_number}`}`
+                            });
+                        }
+                        if (term.end_date) {
+                            events.push({
+                                type: 'major',
+                                title: `Term ${term.term_number} Ends`,
+                                date: term.end_date,
+                                description: `End of ${term.name || `Term ${term.term_number}`}`
+                            });
+                        }
+                    });
+                } catch (e) {
+                    console.log('Could not load terms:', e);
+                }
+                
+                // Get assignments (minor events)
+                if (childId) {
+                    try {
+                        const assignments = await apiCall(`/assignments/student/${childId}`);
+                        assignments.forEach(assignment => {
+                            if (assignment.due_date) {
+                                events.push({
+                                    type: 'minor',
+                                    title: assignment.title || 'Assignment Due',
+                                    date: assignment.due_date,
+                                    description: `Assignment deadline for ${assignment.course_name || 'course'}`,
+                                    course: assignment.course_name
+                                });
+                            }
+                        });
+                    } catch (e) {
+                        console.log('Could not load assignments:', e);
+                    }
+                }
+                
+                // Filter events
+                let filteredEvents = events;
+                if (filter === 'major') {
+                    filteredEvents = events.filter(e => e.type === 'major');
+                } else if (filter === 'minor') {
+                    filteredEvents = events.filter(e => e.type === 'minor');
+                }
+                
+                // Sort by date
+                filteredEvents.sort((a, b) => new Date(a.date) - new Date(b.date));
+                
+                if (filteredEvents.length === 0) {
+                    eventsEl.innerHTML = '<div class="empty-state" style="padding: var(--spacing-xl); text-align: center; font-size: 1.1rem; color: var(--text-secondary);">No calendar events found.</div>';
+                    return;
+                }
+                
+                eventsEl.innerHTML = `
+                    <div style="display: grid; gap: var(--spacing-md);">
+                        ${filteredEvents.map(event => `
+                            <div data-event="true" data-title="${event.title}" data-date="${event.date}" data-type="${event.type}" style="padding: var(--spacing-lg); border: 2px solid ${event.type === 'major' ? 'var(--primary-blue)' : 'var(--border-light)'}; border-left: 4px solid ${event.type === 'major' ? 'var(--primary-blue)' : 'var(--warning)'}; border-radius: 12px; background: var(--bg-secondary);">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: var(--spacing-sm);">
+                                    <div style="flex: 1;">
+                                        <h4 style="font-size: 1.2rem; font-weight: 700; margin: 0 0 var(--spacing-xs) 0; color: ${event.type === 'major' ? 'var(--primary-blue)' : 'var(--text-primary)'};">
+                                            ${event.title}
+                                        </h4>
+                                        <p style="font-size: 1rem; color: var(--text-secondary); margin: 0 0 var(--spacing-xs) 0;">${event.description}</p>
+                                        ${event.course ? `<p style="font-size: 0.9rem; color: var(--text-tertiary); margin: 0;">Course: ${event.course}</p>` : ''}
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <p style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0;">${new Date(event.date).toLocaleDateString()}</p>
+                                        <span style="padding: var(--spacing-xs) var(--spacing-sm); background: ${event.type === 'major' ? 'rgba(37, 99, 235, 0.1)' : 'rgba(251, 191, 36, 0.1)'}; color: ${event.type === 'major' ? 'var(--primary-blue)' : 'var(--warning)'}; border-radius: 12px; font-size: 0.85rem; font-weight: 600; display: inline-block; margin-top: var(--spacing-xs);">
+                                            ${event.type === 'major' ? 'Major Event' : 'Assignment'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('parent-calendar').innerHTML = `<div class="error" style="padding: var(--spacing-md); color: var(--error); font-size: 1.1rem;">Error loading calendar: ${error.message}</div>`;
+            }
+        }
+        
+        // Download Reports Function
+        async function downloadReport(type, format) {
+            const childId = window.parentSelectedChildId;
+            const term = window.parentSelectedTerm || '';
+            const year = window.parentSelectedYear || new Date().getFullYear();
+            
+            if (!childId) {
+                alert('Please select a child first.');
+                return;
+            }
+            
+            try {
+                let data = [];
+                let filename = '';
+                
+                if (type === 'result-slips') {
+                    let url = `/assessments/result-slips?learner_id=${childId}&academic_year=${year}`;
+                    if (term) url += `&term=${term}`;
+                    data = await apiCall(url);
+                    filename = `result-slips-${term || 'all'}-${year}`;
+                } else if (type === 'fee-balance' || type === 'fee-payments') {
+                    let url = `/finance/transactions?learner_id=${childId}`;
+                    if (term) url += `&term=${term}&academic_year=${year}`;
+                    data = await apiCall(url);
+                    filename = type === 'fee-balance' ? `fee-balance-${term || 'all'}-${year}` : `fee-payments-${term || 'all'}-${year}`;
+                } else if (type === 'calendar') {
+                    // Get calendar data
+                    const filter = document.getElementById('calendar-filter')?.value || 'all';
+                    // We'll generate this from the displayed calendar
+                    const calendarEl = document.getElementById('parent-calendar');
+                    const events = Array.from(calendarEl.querySelectorAll('[data-event]')).map(el => ({
+                        title: el.dataset.title,
+                        date: el.dataset.date,
+                        type: el.dataset.type
+                    }));
+                    data = events;
+                    filename = `school-calendar-${filter}-${year}`;
+                }
+                
+                if (format === 'csv') {
+                    downloadCSV(data, filename);
+                } else if (format === 'pdf') {
+                    downloadPDF(data, type, filename);
+                }
+            } catch (error) {
+                alert('Error generating report: ' + error.message);
+                console.error('Download report error:', error);
+            }
+        }
+        
+        function downloadCSV(data, filename) {
+            if (!data || data.length === 0) {
+                alert('No data available to download.');
+                return;
+            }
+            
+            // Convert data to CSV
+            const headers = Object.keys(data[0]);
+            const csvRows = [
+                headers.join(','),
+                ...data.map(row => headers.map(header => {
+                    const value = row[header];
+                    return typeof value === 'string' && value.includes(',') ? `"${value}"` : value;
+                }).join(','))
+            ];
+            
+            const csvContent = csvRows.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${filename}.csv`;
+            link.click();
+        }
+        
+        function downloadPDF(data, type, filename) {
+            // For PDF, we'll create a simple HTML table and use browser print
+            if (!data || data.length === 0) {
+                alert('No data available to download.');
+                return;
+            }
+            
+            const printWindow = window.open('', '_blank');
+            const headers = Object.keys(data[0]);
+            
+            let html = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>${filename}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; }
+                        h1 { color: #2563EB; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                        th { background-color: #2563EB; color: white; }
+                        tr:nth-child(even) { background-color: #f2f2f2; }
+                        @media print { body { padding: 0; } }
+                    </style>
+                </head>
+                <body>
+                    <h1>${filename.replace(/-/g, ' ').toUpperCase()}</h1>
+                    <p>Generated on: ${new Date().toLocaleString()}</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                ${headers.map(h => `<th>${h.replace(/_/g, ' ').toUpperCase()}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(row => `
+                                <tr>
+                                    ${headers.map(h => `<td>${row[h] || ''}</td>`).join('')}
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </body>
+                </html>
+            `;
+            
+            printWindow.document.write(html);
+            printWindow.document.close();
+            printWindow.print();
+        }
+        
+        function rateTeacher(teacherId, rating) {
+            // Update UI
+            const ratingEl = document.querySelector(`[data-teacher-id="${teacherId}"]`);
+            if (ratingEl) {
+                ratingEl.querySelectorAll('.rating-star').forEach((star, index) => {
+                    if (index < rating) {
+                        star.style.color = '#fbbf24';
+                    } else {
+                        star.style.color = 'var(--border-medium)';
+                    }
+                });
+            }
+            
+            // Submit rating (this would call an API)
+            try {
+                // await apiCall(`/ratings/teacher/${teacherId}`, {
+                //     method: 'POST',
+                //     body: JSON.stringify({ rating })
+                // });
+                alert(`Thank you! You rated this teacher ${rating} star${rating > 1 ? 's' : ''}.`);
+            } catch (error) {
+                console.error('Error rating teacher:', error);
+            }
+        }
+        
+        async function submitBursaryApplication(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const files = document.getElementById('bursary-documents').files;
+            
+            if (files.length === 0) {
+                alert('Please upload at least one supporting document.');
+                return;
+            }
+            
+            try {
+                // Create FormData for file upload
+                const uploadData = new FormData();
+                uploadData.append('child_id', formData.get('child_id') || document.getElementById('bursary-child').value);
+                uploadData.append('type', document.getElementById('bursary-type').value);
+                uploadData.append('reason', document.getElementById('bursary-reason').value);
+                
+                for (let i = 0; i < files.length; i++) {
+                    uploadData.append('documents', files[i]);
+                }
+                
+                // This would call the bursary API endpoint
+                // await apiCall('/bursary/apply', {
+                //     method: 'POST',
+                //     body: uploadData
+                // });
+                
+                alert('Bursary application submitted successfully! You will be notified of the decision.');
+                e.target.reset();
+            } catch (error) {
+                alert('Error submitting application: ' + error.message);
+            }
+        }
+
         // Parent: Load children
         async function loadChildren() {
             const children = await apiCall(`/users/parent/${currentUser.id}/students`);
@@ -3960,14 +5476,20 @@
             }
         }
 
-        // Close sidebar when clicking outside
+        // Close sidebar when clicking outside (only if sidebar is already open)
         document.addEventListener('click', (e) => {
             const sidebar = document.getElementById('mobileSidebar');
             const overlay = document.getElementById('sidebarOverlay');
             const menuBtn = document.querySelector('.mobile-menu-btn');
             
+            // Only close if sidebar is active and click is outside
             if (sidebar && overlay && sidebar.classList.contains('active')) {
-                if (overlay.contains(e.target) && !sidebar.contains(e.target) && !menuBtn?.contains(e.target)) {
+                // Don't close if clicking the menu button (it will toggle itself)
+                if (menuBtn && menuBtn.contains(e.target)) {
+                    return;
+                }
+                // Close if clicking outside sidebar
+                if (!sidebar.contains(e.target) && overlay.contains(e.target)) {
                     toggleSidebar();
                 }
             }

@@ -394,7 +394,55 @@ router.get('/result-slip/:learnerId/:term/:academicYear', async (req, res) => {
   }
 });
 
-// Get all result slips for a learner
+// Get all result slips for a learner (query parameter version for parent dashboard)
+router.get('/result-slips', async (req, res) => {
+  try {
+    const { learner_id, academic_year, term } = req.query;
+    
+    if (!learner_id) {
+      return res.status(400).json({ message: 'learner_id is required' });
+    }
+    
+    // Verify access
+    if (req.user.role === 'student') {
+      const learnerCheck = await pool.query('SELECT user_id FROM learner_profiles WHERE id = $1', [learner_id]);
+      if (learnerCheck.rows.length === 0 || learnerCheck.rows[0].user_id !== req.user.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    } else if (req.user.role === 'parent') {
+      const learnerCheck = await pool.query('SELECT parent_id FROM learner_profiles WHERE id = $1', [learner_id]);
+      if (learnerCheck.rows.length === 0 || learnerCheck.rows[0].parent_id !== req.user.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    }
+    
+    let query = `SELECT * FROM result_slips WHERE learner_id = $1`;
+    const params = [learner_id];
+    let paramCount = 2;
+    
+    if (academic_year) {
+      query += ` AND academic_year = $${paramCount}`;
+      params.push(academic_year);
+      paramCount++;
+    }
+    
+    if (term) {
+      query += ` AND term = $${paramCount}`;
+      params.push(term);
+      paramCount++;
+    }
+    
+    query += ` ORDER BY academic_year DESC, term DESC`;
+    
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get result slips error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get all result slips for a learner (path parameter version)
 router.get('/result-slips/:learnerId', async (req, res) => {
   try {
     const { learnerId } = req.params;
@@ -403,6 +451,11 @@ router.get('/result-slips/:learnerId', async (req, res) => {
     if (req.user.role === 'student') {
       const learnerCheck = await pool.query('SELECT user_id FROM learner_profiles WHERE id = $1', [learnerId]);
       if (learnerCheck.rows.length === 0 || learnerCheck.rows[0].user_id !== req.user.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    } else if (req.user.role === 'parent') {
+      const learnerCheck = await pool.query('SELECT parent_id FROM learner_profiles WHERE id = $1', [learnerId]);
+      if (learnerCheck.rows.length === 0 || learnerCheck.rows[0].parent_id !== req.user.id) {
         return res.status(403).json({ message: 'Access denied' });
       }
     }
