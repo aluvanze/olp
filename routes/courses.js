@@ -526,5 +526,47 @@ router.post('/:id/enroll', async (req, res) => {
   }
 });
 
+// Get teachers for a student (for parents)
+router.get('/student/:studentId/teachers', async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    
+    // Verify access
+    if (req.user.role === 'parent') {
+      const learnerCheck = await pool.query('SELECT parent_id FROM learner_profiles WHERE id = $1', [studentId]);
+      if (learnerCheck.rows.length === 0 || learnerCheck.rows[0].parent_id !== req.user.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    } else if (req.user.role === 'student') {
+      const learnerCheck = await pool.query('SELECT user_id FROM learner_profiles WHERE id = $1', [studentId]);
+      if (learnerCheck.rows.length === 0 || learnerCheck.rows[0].user_id !== req.user.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    }
+    
+    // Get all courses for this student and their teachers
+    const result = await pool.query(
+      `SELECT DISTINCT 
+         u.id, 
+         u.first_name, 
+         u.last_name, 
+         u.email,
+         c.course_name,
+         c.id as course_id
+       FROM courses c
+       INNER JOIN course_enrollments ce ON c.id = ce.course_id
+       INNER JOIN users u ON c.teacher_id = u.id
+       WHERE ce.student_id = $1 AND ce.status = 'active' AND c.is_active = true
+       ORDER BY u.last_name, u.first_name`,
+      [studentId]
+    );
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get student teachers error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;
 

@@ -6,7 +6,7 @@ const router = express.Router();
 router.use(authenticate);
 
 // Get financial transactions for a term
-router.get('/transactions', authorize('finance', 'headteacher', 'superadmin', 'deputy_headteacher'), async (req, res) => {
+router.get('/transactions', authorize('finance', 'headteacher', 'superadmin', 'deputy_headteacher', 'parent'), async (req, res) => {
   try {
     const { term, academic_year, learner_id } = req.query;
     
@@ -39,6 +39,24 @@ router.get('/transactions', authorize('finance', 'headteacher', 'superadmin', 'd
     if (learner_id) {
       query += ` AND ft.learner_id = $${paramCount}`;
       params.push(learner_id);
+      paramCount++;
+      
+      // Verify parent access to this learner
+      if (req.user.role === 'parent') {
+        const learnerCheck = await pool.query('SELECT parent_id FROM learner_profiles WHERE id = $1', [learner_id]);
+        if (learnerCheck.rows.length === 0 || learnerCheck.rows[0].parent_id !== req.user.id) {
+          return res.status(403).json({ message: 'Access denied to this learner\'s financial information' });
+        }
+      }
+    } else if (req.user.role === 'parent') {
+      // Parents can only see their own children's transactions
+      const childrenResult = await pool.query('SELECT id FROM learner_profiles WHERE parent_id = $1', [req.user.id]);
+      if (childrenResult.rows.length === 0) {
+        return res.json([]);
+      }
+      const childIds = childrenResult.rows.map(r => r.id);
+      query += ` AND ft.learner_id = ANY($${paramCount})`;
+      params.push(childIds);
       paramCount++;
     }
 

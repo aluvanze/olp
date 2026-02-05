@@ -22,7 +22,7 @@ const financeRoutes = require('./routes/finance');
 const { pool } = require('./config/database');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(helmet({
@@ -33,12 +33,16 @@ app.use(helmet({
       scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "http://localhost:3000", "https://cdn.jsdelivr.net"],
+      connectSrc: ["'self'", "http://localhost:3000", "http://localhost:3001", "https://cdn.jsdelivr.net"],
     },
   },
 }));
 app.use(cors({
+<<<<<<< HEAD
   origin: ['http://localhost:3000', 'http://localhost:3000', process.env.FRONTEND_URL].filter(Boolean),
+=======
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', process.env.FRONTEND_URL].filter(Boolean),
+>>>>>>> 6518a5c0b34ffe56e09e89db21a30ddb3da18c94
   credentials: true
 }));
 app.use(express.json());

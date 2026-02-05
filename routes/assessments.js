@@ -317,9 +317,9 @@ router.get('/result-slip/:learnerId/:term/:academicYear', async (req, res) => {
     
     const resultSlip = resultSlipResult.rows[0];
     
-    // Get result slip details with learning area names
+    // Get result slip details with learning area names and all summative assessments
     const detailsResult = await pool.query(
-      `SELECT rsd.*, la.name as learning_area_name, la.code as learning_area_code
+      `SELECT rsd.*, la.name as learning_area_name, la.code as learning_area_code, la.is_core
        FROM result_slip_details rsd
        INNER JOIN learning_areas la ON rsd.learning_area_id = la.id
        WHERE rsd.result_slip_id = $1
@@ -327,19 +327,65 @@ router.get('/result-slip/:learnerId/:term/:academicYear', async (req, res) => {
       [resultSlip.id]
     );
     
+    // Get all summative assessments for each learning area
+    for (const detail of detailsResult.rows) {
+      const summativeAssessments = await pool.query(
+        `SELECT sa.type, sa.name, sr.score, sr.percentage, sr.grade
+         FROM summative_results sr
+         INNER JOIN summative_assessments sa ON sr.assessment_id = sa.id
+         WHERE sr.learner_id = $1 AND sa.learning_area_id = $2 AND sa.term = $3 AND sa.academic_year = $4
+         ORDER BY 
+           CASE sa.type 
+             WHEN 'Opener' THEN 1 
+             WHEN 'Mid' THEN 2 
+             WHEN 'End' THEN 3 
+           END`,
+        [learnerId, detail.learning_area_id, term, academicYear]
+      );
+      
+      // Organize summative assessments by type
+      detail.summative_assessments = {
+        opener: summativeAssessments.rows.find(r => r.type === 'Opener') || null,
+        mid: summativeAssessments.rows.find(r => r.type === 'Mid') || null,
+        end: summativeAssessments.rows.find(r => r.type === 'End') || null
+      };
+    }
+    
     resultSlip.details = detailsResult.rows;
     
-    // Get learner info
+    // Get learner info with pathway, grade level, and class teacher
     const learnerResult = await pool.query(
-      `SELECT lp.*, u.first_name, u.last_name, u.email, s.name as school_name
+      `SELECT lp.*, u.first_name, u.last_name, u.email, 
+              s.name as school_name, s.address as school_address,
+              pw.name as pathway_name,
+              gl.level as grade_level,
+              ct.first_name as teacher_first_name, ct.last_name as teacher_last_name
        FROM learner_profiles lp
        INNER JOIN users u ON lp.user_id = u.id
        LEFT JOIN schools s ON lp.school_id = s.id
+       LEFT JOIN pathways pw ON lp.pathway_id = pw.id
+       LEFT JOIN grade_levels gl ON lp.grade_level_id = gl.id
+       LEFT JOIN users ct ON lp.class_teacher_id = ct.id
        WHERE lp.id = $1`,
       [learnerId]
     );
     
     resultSlip.learner = learnerResult.rows[0];
+    
+    // Get term date range for recording period
+    const termResult = await pool.query(
+      `SELECT start_date, end_date 
+       FROM terms 
+       WHERE term_number = $1 AND academic_year = $2`,
+      [term, academicYear]
+    );
+    
+    if (termResult.rows.length > 0) {
+      resultSlip.term_dates = {
+        start_date: termResult.rows[0].start_date,
+        end_date: termResult.rows[0].end_date
+      };
+    }
     
     res.json(resultSlip);
   } catch (error) {
@@ -348,7 +394,55 @@ router.get('/result-slip/:learnerId/:term/:academicYear', async (req, res) => {
   }
 });
 
-// Get all result slips for a learner
+// Get all result slips for a learner (query parameter version for parent dashboard)
+router.get('/result-slips', async (req, res) => {
+  try {
+    const { learner_id, academic_year, term } = req.query;
+    
+    if (!learner_id) {
+      return res.status(400).json({ message: 'learner_id is required' });
+    }
+    
+    // Verify access
+    if (req.user.role === 'student') {
+      const learnerCheck = await pool.query('SELECT user_id FROM learner_profiles WHERE id = $1', [learner_id]);
+      if (learnerCheck.rows.length === 0 || learnerCheck.rows[0].user_id !== req.user.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    } else if (req.user.role === 'parent') {
+      const learnerCheck = await pool.query('SELECT parent_id FROM learner_profiles WHERE id = $1', [learner_id]);
+      if (learnerCheck.rows.length === 0 || learnerCheck.rows[0].parent_id !== req.user.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    }
+    
+    let query = `SELECT * FROM result_slips WHERE learner_id = $1`;
+    const params = [learner_id];
+    let paramCount = 2;
+    
+    if (academic_year) {
+      query += ` AND academic_year = $${paramCount}`;
+      params.push(academic_year);
+      paramCount++;
+    }
+    
+    if (term) {
+      query += ` AND term = $${paramCount}`;
+      params.push(term);
+      paramCount++;
+    }
+    
+    query += ` ORDER BY academic_year DESC, term DESC`;
+    
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get result slips error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get all result slips for a learner (path parameter version)
 router.get('/result-slips/:learnerId', async (req, res) => {
   try {
     const { learnerId } = req.params;
@@ -357,6 +451,11 @@ router.get('/result-slips/:learnerId', async (req, res) => {
     if (req.user.role === 'student') {
       const learnerCheck = await pool.query('SELECT user_id FROM learner_profiles WHERE id = $1', [learnerId]);
       if (learnerCheck.rows.length === 0 || learnerCheck.rows[0].user_id !== req.user.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    } else if (req.user.role === 'parent') {
+      const learnerCheck = await pool.query('SELECT parent_id FROM learner_profiles WHERE id = $1', [learnerId]);
+      if (learnerCheck.rows.length === 0 || learnerCheck.rows[0].parent_id !== req.user.id) {
         return res.status(403).json({ message: 'Access denied' });
       }
     }

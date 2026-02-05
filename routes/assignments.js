@@ -62,6 +62,57 @@ router.get('/course/:courseId', async (req, res) => {
   }
 });
 
+// Get assignments for a student (for parents/students) - MUST come before /:id route
+router.get('/student/:studentId', async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    
+    // Verify access
+    if (req.user.role === 'student') {
+      const learnerCheck = await pool.query('SELECT user_id FROM learner_profiles WHERE id = $1', [studentId]);
+      if (learnerCheck.rows.length === 0 || learnerCheck.rows[0].user_id !== req.user.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    } else if (req.user.role === 'parent') {
+      const learnerCheck = await pool.query('SELECT parent_id FROM learner_profiles WHERE id = $1', [studentId]);
+      if (learnerCheck.rows.length === 0 || learnerCheck.rows[0].parent_id !== req.user.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    }
+    
+    // Get all courses for this student
+    const coursesResult = await pool.query(
+      `SELECT DISTINCT c.id, c.course_name
+       FROM courses c
+       INNER JOIN course_enrollments ce ON c.id = ce.course_id
+       WHERE ce.student_id = $1 AND ce.status = 'active'`,
+      [studentId]
+    );
+    
+    if (coursesResult.rows.length === 0) {
+      return res.json([]);
+    }
+    
+    const courseIds = coursesResult.rows.map(c => c.id);
+    
+    // Get all assignments for these courses
+    const result = await pool.query(
+      `SELECT a.*, c.course_name, u.first_name as created_by_first_name, u.last_name as created_by_last_name
+       FROM assignments a
+       INNER JOIN courses c ON a.course_id = c.id
+       LEFT JOIN users u ON a.created_by = u.id
+       WHERE a.course_id = ANY($1)
+       ORDER BY a.due_date DESC, a.created_at DESC`,
+      [courseIds]
+    );
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get student assignments error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Get assignment by ID
 router.get('/:id', async (req, res) => {
   try {
