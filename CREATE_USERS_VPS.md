@@ -219,3 +219,13 @@ systemctl start postgresql
 **Run the seed script on VPS and try login again!** 🚀
 
 
+
+
+
+
+
+
+
+
+
+

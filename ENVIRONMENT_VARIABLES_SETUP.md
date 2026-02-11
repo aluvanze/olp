@@ -230,3 +230,13 @@ psql -h 72.60.23.73 -U grade10_user -d grade10_lms -p 5432
 **The most critical one is JWT_SECRET - make sure it's set!** 🔑
 
 
+
+
+
+
+
+
+
+
+
+

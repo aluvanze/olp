@@ -414,3 +414,13 @@ cat .env | grep DB_
 **Congratulations!** 🎉 Your database is now on the VPS and your frontend can connect to it remotely!
 
 
+
+
+
+
+
+
+
+
+
+

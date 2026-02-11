@@ -31,14 +31,15 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-hashes'", "https://cdn.jsdelivr.net"],
       scriptSrcAttr: ["'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "http://localhost:3000", "http://localhost:3001", "https://cdn.jsdelivr.net", process.env.FRONTEND_URL].filter(Boolean),
     },
   },
 }));
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3000', process.env.FRONTEND_URL].filter(Boolean),
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', process.env.FRONTEND_URL].filter(Boolean),
   credentials: true
 }));
 app.use(express.json());

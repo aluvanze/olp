@@ -96,3 +96,13 @@ This will show you the exact database connection error!
 **Run `cat stderr.log` and share what you see!** 🔍
 
 
+
+
+
+
+
+
+
+
+
+

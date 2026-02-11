@@ -333,3 +333,13 @@ sudo systemctl status postgresql
 For the complete deployment guide including Nginx, PM2, SSL, and more, see `VPS_DEPLOYMENT_GUIDE.md`.
 
 
+
+
+
+
+
+
+
+
+
+

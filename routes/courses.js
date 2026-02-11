@@ -70,6 +70,45 @@ router.get('/', async (req, res) => {
     query += ' GROUP BY c.id, u.first_name, u.last_name, la.id, la.name, la.code ORDER BY c.course_name';
     
     const result = await pool.query(query, params);
+    
+    // If no courses found and user is admin/teacher, also check for learning areas
+    if (result.rows.length === 0 && ['teacher', 'headteacher', 'deputy_headteacher', 'superadmin'].includes(req.user.role)) {
+      let learningAreasQuery = `
+        SELECT 
+          la.id as id,
+          la.name as course_name,
+          la.code as course_code,
+          la.description,
+          la.id as learning_area_id,
+          la.name as learning_area_name,
+          la.code as learning_area_code,
+          0 as enrolled_students,
+          NULL as teacher_first_name,
+          NULL as teacher_last_name
+         FROM learning_areas la
+         WHERE (la.is_active = true OR la.is_active IS NULL)
+      `;
+      
+      const laParams = [];
+      if (academic_year) {
+        learningAreasQuery += ` AND NOT EXISTS (
+          SELECT 1 FROM courses c 
+          WHERE c.learning_area_id = la.id 
+          AND c.is_active = true
+          AND c.academic_year = $1
+        )`;
+        laParams.push(academic_year);
+      }
+      
+      learningAreasQuery += ' ORDER BY la.name';
+      
+      const learningAreasResult = await pool.query(learningAreasQuery, laParams);
+      
+      if (learningAreasResult.rows.length > 0) {
+        return res.json(learningAreasResult.rows);
+      }
+    }
+    
     res.json(result.rows);
   } catch (error) {
     console.error('Get courses error:', error);

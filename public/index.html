@@ -15,7 +15,7 @@
             <div class="login-left-panel">
                 <div class="login-content-wrapper">
                     <div class="student-photo-container">
-                        <img src="student-photo.jpg" alt="Student" class="student-photo" id="studentPhoto"
+                        <img src="student-photo.jpeg" alt="Student" class="student-photo" id="studentPhoto"
                             loading="eager" fetchpriority="high">
                     </div>
                     <div class="login-branding">
@@ -88,7 +88,7 @@
     </div>
 
     <script>
-        const API_BASE_URL = 'http://localhost:3001/api';
+        const API_BASE_URL = 'http://localhost:3000/api';
         let currentUser = null;
         let authToken = null;
         // Check if user is already logged in
@@ -219,8 +219,8 @@
         });
 
 
-        // Helper function to get icon for navigation item
-        function getNavIcon(viewName) {
+        // Helper function to get icon SVG
+        function getIcon(iconName, size = 24) {
             const icons = {
                 // Navigation icons
                 'dashboard': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>`,
@@ -550,6 +550,9 @@
                         break;
                     case 'register-student':
                         await loadRegisterStudent();
+                        break;
+                    case 'manage-substrands':
+                        await loadManageSubstrands();
                         break;
 
                     // Parent views
@@ -3904,7 +3907,7 @@
                                         </div>
                                     </div>
                                     
-                                    <button onclick="viewLearningAreaSubstrands(${la.id}, '${la.name.replace(/'/g, "\\'")}')" 
+                                    <button onclick="window.viewLearningAreaSubstrands(${la.id}, '${la.name.replace(/'/g, "\\'")}')" 
                                             class="btn-primary" 
                                             style="width: 100%; margin-top: 0.5rem;">
                                         Manage Sub-strands
@@ -3927,7 +3930,7 @@
             }
         }
         
-        async function viewLearningAreaSubstrands(learningAreaId, learningAreaName) {
+        window.viewLearningAreaSubstrands = async function(learningAreaId, learningAreaName) {
             try {
                 const substrandData = await apiCall(`/substrands/learning-area/${learningAreaId}`);
                 const { strands, learningArea } = substrandData;
@@ -3937,7 +3940,10 @@
                     <div class="view-header">
                         <button onclick="loadManageSubstrands()" class="btn-back">← Back to Learning Areas</button>
                         <h2>${learningAreaName} - Sub-strands</h2>
-                        <button onclick="showAddSubstrandToLearningArea(${learningAreaId}, '${learningAreaName.replace(/'/g, "\\'")}')" class="btn-primary">Add Sub-strand</button>
+                        <div style="display: flex; gap: 0.75rem;">
+                            <button onclick="(function(){ try { if(typeof window.showAddStrandToLearningArea === 'function') { window.showAddStrandToLearningArea(${learningAreaId}, '${learningAreaName.replace(/'/g, "\\'")}'); } else { console.error('showAddStrandToLearningArea not found on window'); alert('Error: Function not loaded. Please refresh the page.'); } } catch(err) { console.error('Button click error:', err); alert('Error: ' + err.message); } })();" class="btn-secondary">Add Strand</button>
+                            <button onclick="showAddSubstrandToLearningArea(${learningAreaId}, '${learningAreaName.replace(/'/g, "\\'")}')" class="btn-primary">Add Sub-strand</button>
+                        </div>
                     </div>
                     
                     <div style="margin-top: 2rem;">
@@ -3946,7 +3952,7 @@
                                 <div class="empty-state-icon">📚</div>
                                 <h4>No Strands Found</h4>
                                 <p>This learning area doesn't have any strands configured yet.</p>
-                                <button onclick="showAddSubstrandToLearningArea(${learningAreaId}, '${learningAreaName.replace(/'/g, "\\'")}')" class="btn-primary" style="margin-top: 1rem;">Add First Sub-strand</button>
+                                <button onclick="(function(){ try { if(typeof window.showAddStrandToLearningArea === 'function') { window.showAddStrandToLearningArea(${learningAreaId}, '${learningAreaName.replace(/'/g, "\\'")}'); } else { console.error('showAddStrandToLearningArea not found on window'); alert('Error: Function not loaded. Please refresh the page.'); } } catch(err) { console.error('Button click error:', err); alert('Error: ' + err.message); } })();" class="btn-primary" style="margin-top: 1rem;">Add First Strand</button>
                             </div>
                         ` : strands.map((strand, strandIndex) => {
                             const substrands = strand.sub_strands || [];
@@ -3957,10 +3963,16 @@
                                             <h3 style="margin: 0; color: #333;">${strand.strand_name || `Strand ${strandIndex + 1}`}</h3>
                                             ${strand.strand_code ? `<span style="color: #666; font-size: 0.9rem;">Code: ${strand.strand_code}</span>` : ''}
                                         </div>
-                                        <button onclick="showAddSubstrandToLearningArea(${learningAreaId}, '${learningAreaName.replace(/'/g, "\\'")}', '${strand.strand_code}')" 
-                                                class="btn-primary btn-small">
-                                            + Add Sub-strand
-                                        </button>
+                                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                            <button onclick="editStrand(${learningAreaId}, ${strand.strand_code ? `'${String(strand.strand_code).replace(/'/g, "\\'")}'` : 'null'}, '${learningAreaName.replace(/'/g, "\\'")}')" 
+                                                    class="btn-secondary btn-small">Edit</button>
+                                            <button onclick="deleteStrand(${learningAreaId}, ${strand.strand_code ? `'${String(strand.strand_code).replace(/'/g, "\\'")}'` : 'null'}, '${learningAreaName.replace(/'/g, "\\'")}')" 
+                                                    class="btn-danger btn-small">Delete</button>
+                                            <button onclick="showAddSubstrandToLearningArea(${learningAreaId}, '${learningAreaName.replace(/'/g, "\\'")}', '${strand.strand_code}')" 
+                                                    class="btn-primary btn-small">
+                                                + Add Sub-strand
+                                            </button>
+                                        </div>
                                     </div>
                                     
                                     <div class="substrands-list">
@@ -3987,9 +3999,9 @@
                                                         ` : ''}
                                                     </div>
                                                     <div style="display: flex; gap: 0.5rem;">
-                                                        <button onclick="editSubstrand(${learningAreaId}, '${strand.strand_code}', '${substrand.sub_strand_code}', '${learningAreaName.replace(/'/g, "\\'")}')" 
+                                                        <button onclick="editSubstrand(${learningAreaId}, ${strand.strand_code ? `'${String(strand.strand_code).replace(/'/g, "\\'")}'` : 'null'}, ${substrand.sub_strand_code ? `'${String(substrand.sub_strand_code).replace(/'/g, "\\'")}'` : 'null'}, '${learningAreaName.replace(/'/g, "\\'")}')" 
                                                                 class="btn-secondary btn-small">Edit</button>
-                                                        <button onclick="deleteSubstrand(${learningAreaId}, '${strand.strand_code}', '${substrand.sub_strand_code}', '${learningAreaName.replace(/'/g, "\\'")}')" 
+                                                        <button onclick="deleteSubstrand(${learningAreaId}, ${strand.strand_code ? `'${String(strand.strand_code).replace(/'/g, "\\'")}'` : 'null'}, ${substrand.sub_strand_code ? `'${String(substrand.sub_strand_code).replace(/'/g, "\\'")}'` : 'null'}, '${learningAreaName.replace(/'/g, "\\'")}')" 
                                                                 class="btn-danger btn-small">Delete</button>
                                                     </div>
                                                 </div>
@@ -4005,43 +4017,358 @@
                 console.error('Error loading learning area substrands:', error);
                 alert('Error: ' + (error.message || 'Failed to load sub-strands'));
             }
+        };
+        
+        // Make function globally accessible - define directly on window
+        window.showAddStrandToLearningArea = function(learningAreaId, learningAreaName) {
+            console.log('=== showAddStrandToLearningArea CALLED ===', { learningAreaId, learningAreaName, timestamp: new Date().toISOString() });
+            try {
+                if (!learningAreaId || !learningAreaName) {
+                    alert('Error: Missing learning area information');
+                    console.error('Missing parameters:', { learningAreaId, learningAreaName });
+                    return;
+                }
+                
+                // Remove any existing modal first
+                const existingModal = document.getElementById('add-strand-modal');
+                if (existingModal) {
+                    existingModal.remove();
+                }
+                
+                const modal = document.createElement('div');
+                modal.id = 'add-strand-modal';
+                modal.className = 'modal-overlay';
+                modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center;';
+                modal.onclick = function(e) {
+                    if (e.target === modal) {
+                        window.closeAddStrandModal();
+                    }
+                };
+                
+                const escapedName = String(learningAreaName).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                
+                modal.innerHTML = `
+                    <div class="modal-content" style="background: white; border-radius: 8px; padding: 0; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                        <div class="modal-header" style="padding: 1.5rem; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
+                            <h2 style="margin: 0;">Add New Strand - ${escapedName}</h2>
+                            <button onclick="window.closeAddStrandModal()" class="modal-close" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #666;">&times;</button>
+                        </div>
+                        <div class="modal-body" style="padding: 1.5rem;">
+                            <form id="add-strand-form" onsubmit="(function(e){ e.preventDefault(); e.stopPropagation(); try { if(typeof window.saveNewStrand === 'function') { window.saveNewStrand(e, ${learningAreaId}, '${escapedName}'); } else { console.error('saveNewStrand not found'); alert('Error: Save function not found. Please refresh.'); } } catch(err) { console.error('Form submit error:', err); alert('Error: ' + err.message); } return false; })(event);">
+                                <div class="form-group">
+                                    <label>Strand Code *</label>
+                                    <input type="text" name="strand_code" placeholder="e.g., S1, S2, STRAND1" required>
+                                    <small style="color: #666; font-size: 0.85rem;">Unique code to identify this strand</small>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>Strand Name *</label>
+                                    <input type="text" name="strand_name" placeholder="e.g., Number, Algebra, Geometry" required>
+                                    <small style="color: #666; font-size: 0.85rem;">Full name of the strand</small>
+                                </div>
+                                
+                                <div class="form-actions" style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem;">
+                                    <button type="button" onclick="window.closeAddStrandModal()" class="btn-secondary">Cancel</button>
+                                    <button type="submit" class="btn-primary">Add Strand</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(modal);
+                console.log('Modal added to DOM');
+            } catch (error) {
+                console.error('Error in showAddStrandToLearningArea:', error);
+                alert('Error opening add strand form: ' + error.message);
+            }
+        };
+        
+        // Also make it available without window prefix for convenience
+        function showAddStrandToLearningArea(learningAreaId, learningAreaName) {
+            return window.showAddStrandToLearningArea(learningAreaId, learningAreaName);
         }
         
-        function showAddSubstrandToLearningArea(learningAreaId, learningAreaName, preselectedStrandCode = null) {
-            // Reuse the existing createSubstrand function but pass learning area ID directly
-            // We need to get the strands first
+        window.closeAddStrandModal = function() {
+            const modal = document.getElementById('add-strand-modal');
+            if (modal) {
+                modal.remove();
+            }
+        };
+        
+        function closeAddStrandModal() {
+            return window.closeAddStrandModal();
+        }
+        
+        window.saveNewStrand = async function(e, learningAreaId, learningAreaName) {
+            console.log('=== saveNewStrand CALLED ===', { learningAreaId, learningAreaName, event: e });
+            e.preventDefault();
+            e.stopPropagation();
+            
+            try {
+                const form = e.target;
+                const formData = new FormData(form);
+                const strandCode = formData.get('strand_code')?.trim();
+                const strandName = formData.get('strand_name')?.trim();
+                
+                console.log('Form data:', { strandCode, strandName });
+                
+                if (!strandCode || !strandName) {
+                    alert('Please fill in all required fields');
+                    return;
+                }
+                
+                console.log('Calling API:', `/substrands/learning-area/${learningAreaId}/strand`);
+                console.log('Request body:', { strand_code: strandCode, strand_name: strandName });
+                
+                const response = await apiCall(`/substrands/learning-area/${learningAreaId}/strand`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        strand_code: strandCode,
+                        strand_name: strandName
+                    })
+                });
+                
+                console.log('API response:', response);
+                
+                window.closeAddStrandModal();
+                if (typeof showToast === 'function') {
+                    showToast('Strand added successfully!', 'success');
+                } else {
+                    alert('Strand added successfully!');
+                }
+                // Reload the view to show the new strand
+                if (window.viewLearningAreaSubstrands) {
+                    window.viewLearningAreaSubstrands(learningAreaId, learningAreaName);
+                } else {
+                    console.warn('viewLearningAreaSubstrands not found, reloading page');
+                    location.reload();
+                }
+            } catch (error) {
+                console.error('Error adding strand:', error);
+                console.error('Error details:', {
+                    message: error.message,
+                    status: error.status,
+                    response: error.response
+                });
+                alert('Error: ' + (error.message || 'Failed to add strand'));
+            }
+        };
+        
+        window.showAddSubstrandToLearningArea = function(learningAreaId, learningAreaName, preselectedStrandCode = null) {
+            // Get the strands first
             apiCall(`/substrands/learning-area/${learningAreaId}`)
                 .then(data => {
                     const { strands, learningArea } = data;
                     if (!strands || strands.length === 0) {
-                        alert('No strands found for this learning area. Please contact administrator to set up the curriculum structure.');
+                        alert('No strands found for this learning area. Please add a strand first.');
                         return;
                     }
                     
-                    // Find a course linked to this learning area to use for the form
-                    // For now, we'll use a dummy courseId (0) and handle it in the save function
-                    showCreateSubstrandForm(0, learningAreaId, strands, learningArea, preselectedStrandCode);
+                    // Show the create substrand form
+                    window.showCreateSubstrandForm(learningAreaId, strands, learningArea, preselectedStrandCode, learningAreaName);
                 })
                 .catch(error => {
                     console.error('Error loading strands:', error);
                     alert('Error: ' + (error.message || 'Failed to load strands'));
                 });
-        }
+        };
+        
+        window.showCreateSubstrandForm = function(learningAreaId, strands, learningArea, preselectedStrandCode = null, learningAreaName = '') {
+            const modal = document.createElement('div');
+            modal.id = 'add-substrand-modal';
+            modal.className = 'modal-overlay';
+            modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center;';
+            modal.onclick = function(e) {
+                if (e.target === modal) {
+                    closeAddSubstrandModal();
+                }
+            };
+            
+            const strandOptions = strands.map(s => 
+                `<option value="${s.strand_code}" ${preselectedStrandCode === s.strand_code ? 'selected' : ''}>${s.strand_name || s.strand_code}</option>`
+            ).join('');
+            
+            modal.innerHTML = `
+                <div class="modal-content" style="background: white; border-radius: 8px; padding: 0; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    <div class="modal-header" style="padding: 1.5rem; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
+                        <h2 style="margin: 0;">Add Sub-strand - ${learningAreaName}</h2>
+                        <button onclick="closeAddSubstrandModal()" class="modal-close" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #666;">&times;</button>
+                    </div>
+                    <div class="modal-body" style="padding: 1.5rem;">
+                        <form id="add-substrand-form" onsubmit="saveNewSubstrand(event, ${learningAreaId}, '${learningAreaName.replace(/'/g, "\\'")}')">
+                            <div class="form-group">
+                                <label>Strand *</label>
+                                <select name="strand_code" id="substrand-strand-select" required>
+                                    <option value="">Select a strand...</option>
+                                    ${strandOptions}
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Sub-strand Code *</label>
+                                <input type="text" name="sub_strand_code" placeholder="e.g., SS1, SS2, SUB1" required>
+                                <small style="color: #666; font-size: 0.85rem;">Unique code to identify this sub-strand</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Sub-strand Name *</label>
+                                <input type="text" name="sub_strand_name" placeholder="e.g., Whole Numbers, Fractions, Decimals" required>
+                                <small style="color: #666; font-size: 0.85rem;">Full name of the sub-strand</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Learning Indicators (Optional)</label>
+                                <div id="indicators-container">
+                                    <div class="indicator-item" style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                        <input type="text" class="indicator-code" placeholder="Code" style="width: 120px;">
+                                        <input type="text" class="indicator-name" placeholder="Indicator description" style="flex: 1;">
+                                        <button type="button" onclick="removeIndicatorItem(this)" class="btn-danger btn-small">Remove</button>
+                                    </div>
+                                </div>
+                                <button type="button" onclick="addIndicatorItem()" class="btn-secondary btn-small" style="margin-top: 0.5rem;">+ Add Indicator</button>
+                            </div>
+                            
+                            <div class="form-actions" style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem;">
+                                <button type="button" onclick="closeAddSubstrandModal()" class="btn-secondary">Cancel</button>
+                                <button type="submit" class="btn-primary">Add Sub-strand</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+        };
+        
+        window.closeAddSubstrandModal = function() {
+            const modal = document.getElementById('add-substrand-modal');
+            if (modal) {
+                modal.remove();
+            }
+        };
+        
+        window.addIndicatorItem = function() {
+            const container = document.getElementById('indicators-container');
+            const newItem = document.createElement('div');
+            newItem.className = 'indicator-item';
+            newItem.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 0.5rem;';
+            newItem.innerHTML = `
+                <input type="text" class="indicator-code" placeholder="Code" style="width: 120px;">
+                <input type="text" class="indicator-name" placeholder="Indicator description" style="flex: 1;">
+                <button type="button" onclick="removeIndicatorItem(this)" class="btn-danger btn-small">Remove</button>
+            `;
+            container.appendChild(newItem);
+        };
+        
+        window.removeIndicatorItem = function(button) {
+            button.closest('.indicator-item').remove();
+        };
+        
+        window.saveNewSubstrand = async function(e, learningAreaId, learningAreaName) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const strandCode = formData.get('strand_code');
+            const subStrandCode = formData.get('sub_strand_code').trim();
+            const subStrandName = formData.get('sub_strand_name').trim();
+            
+            if (!strandCode || !subStrandCode || !subStrandName) {
+                alert('Please fill in all required fields');
+                return;
+            }
+            
+            // Collect indicators
+            const indicators = [];
+            document.querySelectorAll('#indicators-container .indicator-item').forEach(item => {
+                const code = item.querySelector('.indicator-code').value.trim();
+                const name = item.querySelector('.indicator-name').value.trim();
+                if (code || name) {
+                    indicators.push({
+                        indicator_code: code || '',
+                        indicator_name: name || ''
+                    });
+                }
+            });
+            
+            try {
+                await apiCall(`/substrands/learning-area/${learningAreaId}/strand/${strandCode}/substrand`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        sub_strand_code: subStrandCode,
+                        sub_strand_name: subStrandName,
+                        indicators: indicators,
+                        rubrics: []
+                    })
+                });
+                
+                closeAddSubstrandModal();
+                showToast('Sub-strand added successfully!', 'success');
+                // Reload the view to show the new sub-strand
+                window.viewLearningAreaSubstrands(learningAreaId, learningAreaName);
+            } catch (error) {
+                console.error('Error adding sub-strand:', error);
+                alert('Error: ' + (error.message || 'Failed to add sub-strand'));
+            }
+        };
         
         async function editSubstrand(learningAreaId, strandCode, subStrandCode, learningAreaName) {
             try {
-                const substrandData = await apiCall(`/substrands/learning-area/${learningAreaId}`);
-                const { strands } = substrandData;
+                console.log('editSubstrand called:', { learningAreaId, strandCode, subStrandCode, learningAreaName, strandCodeType: typeof strandCode });
                 
-                const strand = strands.find(s => s.strand_code === strandCode);
-                if (!strand) {
-                    alert('Strand not found');
+                // Handle null or undefined strandCode
+                if (!strandCode || strandCode === 'null' || strandCode === 'undefined') {
+                    alert('Error: Strand code is missing. Please refresh the page and try again.');
+                    console.error('Strand code is missing:', strandCode);
                     return;
                 }
                 
-                const substrand = strand.sub_strands?.find(ss => ss.sub_strand_code === subStrandCode);
+                const substrandData = await apiCall(`/substrands/learning-area/${learningAreaId}`);
+                console.log('API response:', substrandData);
+                
+                const { strands } = substrandData;
+                if (!strands || !Array.isArray(strands)) {
+                    alert('Error: Invalid strands data received');
+                    console.error('Invalid strands:', strands);
+                    return;
+                }
+                
+                if (strands.length === 0) {
+                    alert('No strands found for this learning area.');
+                    return;
+                }
+                
+                // Try to find strand - make comparison more robust
+                const normalizedSearchCode = String(strandCode).trim();
+                const strand = strands.find(s => {
+                    const sCode = String(s.strand_code || '').trim();
+                    return sCode === normalizedSearchCode || 
+                           sCode.toLowerCase() === normalizedSearchCode.toLowerCase() ||
+                           sCode === strandCode || // Also try direct comparison
+                           String(s.strand_code) === String(strandCode); // Type-agnostic comparison
+                });
+                
+                if (!strand) {
+                    console.error('Strand not found. Available strands:', strands.map(s => ({ 
+                        code: s.strand_code, 
+                        codeType: typeof s.strand_code,
+                        name: s.strand_name 
+                    })));
+                    console.error('Looking for strand code:', strandCode, 'Type:', typeof strandCode);
+                    const availableCodes = strands.map(s => `"${s.strand_code}"`).join(', ');
+                    alert(`Strand not found.\n\nLooking for: "${strandCode}"\nAvailable codes: ${availableCodes}\n\nPlease check the browser console (F12) for more details.`);
+                    return;
+                }
+                
+                const substrand = strand.sub_strands?.find(ss => {
+                    const ssCode = String(ss.sub_strand_code || '').trim();
+                    const searchCode = String(subStrandCode || '').trim();
+                    return ssCode === searchCode || ssCode.toLowerCase() === searchCode.toLowerCase();
+                });
+                
                 if (!substrand) {
-                    alert('Sub-strand not found');
+                    console.error('Sub-strand not found. Available sub-strands:', strand.sub_strands?.map(ss => ss.sub_strand_code));
+                    console.error('Looking for sub-strand code:', subStrandCode);
+                    alert(`Sub-strand not found. Looking for: "${subStrandCode}". Available: ${strand.sub_strands?.map(ss => ss.sub_strand_code).join(', ') || 'none'}`);
                     return;
                 }
                 
@@ -4065,12 +4392,13 @@
                             <form id="edit-substrand-form" onsubmit="saveEditedSubstrand(event, ${learningAreaId}, '${strandCode}', '${subStrandCode}')">
                                 <div class="form-group">
                                     <label>Sub-strand Code *</label>
-                                    <input type="text" name="sub_strand_code" value="${substrand.sub_strand_code || ''}" required>
+                                    <input type="text" name="sub_strand_code" value="${String(substrand.sub_strand_code || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}" required>
+                                    <small style="color: #666; font-size: 0.85rem;">Note: Code is used to identify this sub-strand</small>
                                 </div>
                                 
                                 <div class="form-group">
                                     <label>Sub-strand Name *</label>
-                                    <input type="text" name="sub_strand_name" value="${substrand.sub_strand_name || ''}" required>
+                                    <input type="text" name="sub_strand_name" value="${String(substrand.sub_strand_name || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}" required>
                                 </div>
                                 
                                 <div class="form-group">
@@ -4128,34 +4456,53 @@
         async function saveEditedSubstrand(e, learningAreaId, strandCode, subStrandCode) {
             e.preventDefault();
             
+            console.log('saveEditedSubstrand called:', { learningAreaId, strandCode, subStrandCode });
+            
             const form = e.target;
-            const subStrandName = form.sub_strand_name.value;
+            const formData = new FormData(form);
+            const newSubStrandCode = formData.get('sub_strand_code')?.trim() || subStrandCode;
+            const subStrandName = formData.get('sub_strand_name')?.trim();
+            
+            if (!subStrandName) {
+                alert('Sub-strand name is required');
+                return;
+            }
             
             // Collect indicators
             const indicators = [];
             document.querySelectorAll('#edit-substrand-modal .indicator-item-input').forEach(item => {
-                const code = item.querySelector('.indicator-code-input').value;
-                const name = item.querySelector('.indicator-name-input').value;
-                if (code && name) {
+                const code = item.querySelector('.indicator-code-input')?.value?.trim();
+                const name = item.querySelector('.indicator-name-input')?.value?.trim();
+                if (code || name) {
                     indicators.push({
-                        indicator_code: code,
-                        indicator_name: name
+                        indicator_code: code || '',
+                        indicator_name: name || ''
                     });
                 }
             });
             
             try {
-                await apiCall(`/substrands/learning-area/${learningAreaId}/strand/${strandCode}/substrand/${subStrandCode}`, {
+                // Encode the codes for URL
+                const encodedStrandCode = encodeURIComponent(strandCode);
+                const encodedSubStrandCode = encodeURIComponent(subStrandCode);
+                
+                console.log('Calling API with:', {
+                    url: `/substrands/learning-area/${learningAreaId}/strand/${encodedStrandCode}/substrand/${encodedSubStrandCode}`,
+                    body: { sub_strand_name: subStrandName, indicators }
+                });
+                
+                await apiCall(`/substrands/learning-area/${learningAreaId}/strand/${encodedStrandCode}/substrand/${encodedSubStrandCode}`, {
                     method: 'PUT',
                     body: JSON.stringify({
                         sub_strand_name: subStrandName,
-                        indicators: indicators
+                        indicators: indicators,
+                        rubrics: []
                     })
                 });
                 
                 alert('Sub-strand updated successfully!');
                 closeEditSubstrandModal();
-                viewLearningAreaSubstrands(learningAreaId, 'Learning Area');
+                window.viewLearningAreaSubstrands(learningAreaId, 'Learning Area');
             } catch (error) {
                 console.error('Error updating sub-strand:', error);
                 alert('Error: ' + (error.message || 'Failed to update sub-strand'));
@@ -4171,22 +4518,34 @@
         }
         
         async function deleteSubstrand(learningAreaId, strandCode, subStrandCode, learningAreaName) {
+            if (!strandCode || strandCode === 'null' || strandCode === 'undefined' || 
+                !subStrandCode || subStrandCode === 'null' || subStrandCode === 'undefined') {
+                alert('Error: Missing strand or sub-strand code.');
+                return;
+            }
+            
             if (!confirm(`Are you sure you want to delete this sub-strand? This action cannot be undone.`)) {
                 return;
             }
             
             try {
-                await apiCall(`/substrands/learning-area/${learningAreaId}/strand/${strandCode}/substrand/${subStrandCode}`, {
+                const encodedStrandCode = encodeURIComponent(strandCode);
+                const encodedSubStrandCode = encodeURIComponent(subStrandCode);
+                
+                await apiCall(`/substrands/learning-area/${learningAreaId}/strand/${encodedStrandCode}/substrand/${encodedSubStrandCode}`, {
                     method: 'DELETE'
                 });
                 
-                alert('Sub-strand deleted successfully!');
-                viewLearningAreaSubstrands(learningAreaId, learningAreaName);
+                showToast('Sub-strand deleted successfully!', 'success');
+                window.viewLearningAreaSubstrands(learningAreaId, learningAreaName);
             } catch (error) {
                 console.error('Error deleting sub-strand:', error);
                 alert('Error: ' + (error.message || 'Failed to delete sub-strand'));
             }
         }
+        
+        // Make deleteSubstrand globally accessible
+        window.deleteSubstrand = deleteSubstrand;
 
         async function toggleUserStatus(userId, isActive) {
             try {

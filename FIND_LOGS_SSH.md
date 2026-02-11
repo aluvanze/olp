@@ -210,3 +210,13 @@ cat .env | grep DB_
 **Run these commands and share what you find!** 🔍
 
 
+
+
+
+
+
+
+
+
+
+

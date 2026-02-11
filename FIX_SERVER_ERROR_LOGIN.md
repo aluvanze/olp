@@ -257,3 +257,13 @@ cat .env | grep -E "DB_|JWT_"
 **What error do you see in `stderr.log`?** Share it and I'll help fix it! 🔍
 
 
+
+
+
+
+
+
+
+
+
+

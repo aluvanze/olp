@@ -104,6 +104,209 @@ router.get('/learning-area/:id', async (req, res) => {
   }
 });
 
+// Add strand to a learning area
+router.post('/learning-area/:learningAreaId/strand',
+  authorize('teacher', 'headteacher', 'deputy_headteacher'),
+  async (req, res) => {
+    try {
+      console.log('=== POST /learning-area/:learningAreaId/strand ===');
+      console.log('Params:', req.params);
+      console.log('Body:', req.body);
+      console.log('User:', req.user);
+      
+      const { learningAreaId } = req.params;
+      const { strand_code, strand_name } = req.body;
+      
+      if (!strand_code || !strand_name) {
+        console.error('Validation failed: Missing strand_code or strand_name');
+        return res.status(400).json({ message: 'Strand code and name are required' });
+      }
+      
+      // Get current learning area
+      console.log('Querying learning area:', learningAreaId);
+      const laResult = await pool.query(
+        'SELECT id, name, code, strands FROM learning_areas WHERE id = $1',
+        [learningAreaId]
+      );
+      
+      console.log('Learning area query result:', laResult.rows.length, 'rows');
+      
+      if (laResult.rows.length === 0) {
+        console.error('Learning area not found:', learningAreaId);
+        return res.status(404).json({ message: 'Learning area not found' });
+      }
+      
+      let strands = [];
+      if (laResult.rows[0].strands) {
+        if (typeof laResult.rows[0].strands === 'string') {
+          try {
+            strands = JSON.parse(laResult.rows[0].strands);
+          } catch (e) {
+            console.error('Error parsing strands JSON:', e);
+            strands = [];
+          }
+        } else {
+          strands = laResult.rows[0].strands;
+        }
+      }
+      
+      console.log('Current strands:', strands.length);
+      
+      // Check if strand code already exists
+      const existingStrand = strands.find(s => s.strand_code === strand_code);
+      if (existingStrand) {
+        console.error('Strand code already exists:', strand_code);
+        return res.status(400).json({ message: 'Strand code already exists' });
+      }
+      
+      // Add new strand
+      const newStrand = {
+        strand_code: strand_code,
+        strand_name: strand_name,
+        sub_strands: []
+      };
+      
+      strands.push(newStrand);
+      
+      console.log('New strands array length:', strands.length);
+      console.log('Updating database...');
+      
+      // Update learning area
+      const updateResult = await pool.query(
+        'UPDATE learning_areas SET strands = $1::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, name',
+        [JSON.stringify(strands), learningAreaId]
+      );
+      
+      console.log('Update result:', updateResult.rows.length, 'rows updated');
+      
+      res.status(201).json({ message: 'Strand created successfully', strand: newStrand });
+    } catch (error) {
+      console.error('Create strand error:', error);
+      console.error('Error stack:', error.stack);
+      res.status(500).json({ message: 'Server error', error: error.message });
+    }
+  }
+);
+
+// Update strand
+router.put('/learning-area/:learningAreaId/strand/:strandCode',
+  authorize('teacher', 'headteacher', 'deputy_headteacher'),
+  async (req, res) => {
+    try {
+      const { learningAreaId, strandCode } = req.params;
+      const { strand_code, strand_name } = req.body;
+      
+      if (!strand_code || !strand_name) {
+        return res.status(400).json({ message: 'Strand code and name are required' });
+      }
+      
+      // Get current learning area
+      const laResult = await pool.query(
+        'SELECT strands FROM learning_areas WHERE id = $1',
+        [learningAreaId]
+      );
+      
+      if (laResult.rows.length === 0) {
+        return res.status(404).json({ message: 'Learning area not found' });
+      }
+      
+      let strands = [];
+      if (laResult.rows[0].strands) {
+        if (typeof laResult.rows[0].strands === 'string') {
+          try {
+            strands = JSON.parse(laResult.rows[0].strands);
+          } catch (e) {
+            strands = [];
+          }
+        } else {
+          strands = laResult.rows[0].strands;
+        }
+      }
+      
+      // Find the strand
+      const strandIndex = strands.findIndex(s => s.strand_code === strandCode);
+      if (strandIndex === -1) {
+        return res.status(404).json({ message: 'Strand not found' });
+      }
+      
+      // Check if new code already exists (and it's not the same strand)
+      if (strand_code !== strandCode) {
+        const existingStrand = strands.find(s => s.strand_code === strand_code && s !== strands[strandIndex]);
+        if (existingStrand) {
+          return res.status(400).json({ message: 'Strand code already exists' });
+        }
+      }
+      
+      // Update strand
+      strands[strandIndex].strand_code = strand_code;
+      strands[strandIndex].strand_name = strand_name;
+      
+      // Update learning area
+      await pool.query(
+        'UPDATE learning_areas SET strands = $1::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [JSON.stringify(strands), learningAreaId]
+      );
+      
+      res.json({ message: 'Strand updated successfully', strand: strands[strandIndex] });
+    } catch (error) {
+      console.error('Update strand error:', error);
+      res.status(500).json({ message: 'Server error', error: error.message });
+    }
+  }
+);
+
+// Delete strand
+router.delete('/learning-area/:learningAreaId/strand/:strandCode',
+  authorize('teacher', 'headteacher', 'deputy_headteacher'),
+  async (req, res) => {
+    try {
+      const { learningAreaId, strandCode } = req.params;
+      
+      // Get current learning area
+      const laResult = await pool.query(
+        'SELECT strands FROM learning_areas WHERE id = $1',
+        [learningAreaId]
+      );
+      
+      if (laResult.rows.length === 0) {
+        return res.status(404).json({ message: 'Learning area not found' });
+      }
+      
+      let strands = [];
+      if (laResult.rows[0].strands) {
+        if (typeof laResult.rows[0].strands === 'string') {
+          try {
+            strands = JSON.parse(laResult.rows[0].strands);
+          } catch (e) {
+            strands = [];
+          }
+        } else {
+          strands = laResult.rows[0].strands;
+        }
+      }
+      
+      // Find and remove the strand
+      const strandIndex = strands.findIndex(s => s.strand_code === strandCode);
+      if (strandIndex === -1) {
+        return res.status(404).json({ message: 'Strand not found' });
+      }
+      
+      strands.splice(strandIndex, 1);
+      
+      // Update learning area
+      await pool.query(
+        'UPDATE learning_areas SET strands = $1::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [JSON.stringify(strands), learningAreaId]
+      );
+      
+      res.json({ message: 'Strand deleted successfully' });
+    } catch (error) {
+      console.error('Delete strand error:', error);
+      res.status(500).json({ message: 'Server error', error: error.message });
+    }
+  }
+);
+
 // Add sub-strand to a learning area
 router.post('/learning-area/:learningAreaId/strand/:strandCode/substrand', 
   authorize('teacher', 'headteacher', 'deputy_headteacher'),

@@ -334,3 +334,13 @@ After running all migrations, you should have tables like:
 **Run migrations from wherever your application code is deployed!** 🚀
 
 
+
+
+
+
+
+
+
+
+
+

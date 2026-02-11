@@ -178,3 +178,13 @@ ufw allow 5432/tcp
 **Share the server log error message and I can help fix it specifically!** 🔍
 
 
+
+
+
+
+
+
+
+
+
+

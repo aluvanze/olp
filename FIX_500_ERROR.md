@@ -235,3 +235,13 @@ pool.query('SELECT NOW()', (err, res) => {
 **Share the server log error message and I can help fix it specifically!** 🚀
 
 
+
+
+
+
+
+
+
+
+
+

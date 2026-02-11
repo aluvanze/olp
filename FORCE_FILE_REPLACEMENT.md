@@ -150,3 +150,13 @@ Check if your platform works this way.
 **Which hosting platform are you using?** I can provide specific steps for your platform! 🔧
 
 
+
+
+
+
+
+
+
+
+
+

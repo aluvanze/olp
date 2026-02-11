@@ -180,3 +180,13 @@ npm run migrate
 - `DB_PASSWORD=z6hqp3qnmJDD5XW` (your actual password)
 
 
+
+
+
+
+
+
+
+
+
+
