@@ -344,3 +344,4 @@ After running all migrations, you should have tables like:
 
 
 
+

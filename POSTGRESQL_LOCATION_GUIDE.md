@@ -315,3 +315,4 @@ Or check the service:
 Get-WmiObject Win32_Service | Where-Object {$_.Name -like "postgresql*"} | Format-List Name, PathName, State
 ```
 
+

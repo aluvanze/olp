@@ -217,3 +217,4 @@ pg_dump -U postgres grade10_lms > backup.sql
 
 **Everything is configured correctly!** Your application connects to PostgreSQL at `localhost:5432` using the database `grade10_lms`.
 
+
