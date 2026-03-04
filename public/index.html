@@ -15,8 +15,7 @@
             <div class="login-left-panel">
                 <div class="login-content-wrapper">
                     <div class="student-photo-container">
-                        <img src="student-photo.jpeg" alt="Student" class="student-photo" id="studentPhoto"
-                            loading="eager" fetchpriority="high">
+                        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='42' r='22' fill='%23f3f4f6'/%3E%3Cellipse cx='50' cy='92' rx='32' ry='22' fill='%23f3f4f6'/%3E%3C/svg%3E" alt="Student" class="student-photo" id="studentPhoto" loading="eager" fetchpriority="high">
                     </div>
                     <div class="login-branding">
                         <h1 class="brand-title">Grade 10 OLP System</h1>
@@ -88,9 +87,82 @@
     </div>
 
     <script>
-        const API_BASE_URL = 'http://localhost:3000/api';
+        const API_BASE_URL = (typeof window !== 'undefined' && window.location?.origin) ? window.location.origin + '/api' : '/api';
         let currentUser = null;
         let authToken = null;
+        let substrandsViewContext = null; // { learningAreaId, learningAreaName } for event delegation
+
+        function handleSubstrandsClick(e) {
+            // Only handle clicks that originated inside main content or a modal (not nav, sidebar, user menu)
+            var dash = document.getElementById('dashboardContent');
+            var inContent = dash && dash.contains(e.target);
+            var inModal = e.target && e.target.nodeType === 1 && e.target.closest && e.target.closest('.modal-overlay');
+            if (!inContent && !inModal) return;
+            // Resolve target to an Element (e.target can be text node in some cases)
+            var el = e.target;
+            if (!el || el.nodeType !== 1) el = el ? el.parentElement : null;
+            if (!el || typeof el.closest !== 'function') return;
+            var btn = el.closest('button[data-action]');
+            if (!btn) return;
+            // Only handle if the click was actually on this button (or inside it), not on a different button up the tree
+            if (!btn.contains(el)) return;
+            const action = btn.dataset.action;
+            // Let Manage Sub-strands Import / Add Strand / Add Sub-strand be handled by inline onclick only
+            if (action === 'import-excel' || action === 'add-strand' || action === 'add-substrand') return;
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+                if (action === 'edit-strand') {
+                    if (substrandsViewContext && window.editStrand) {
+                        window.editStrand(substrandsViewContext.learningAreaId, btn.dataset.strandCode || null, substrandsViewContext.learningAreaName);
+                    } else {
+                        alert('Error: Edit strand not available. Refresh the page and try again.');
+                    }
+                } else if (action === 'delete-strand') {
+                    if (substrandsViewContext && window.deleteStrand) {
+                        window.deleteStrand(substrandsViewContext.learningAreaId, btn.dataset.strandCode || null, substrandsViewContext.learningAreaName);
+                    } else {
+                        alert('Error: Delete strand not available. Refresh the page and try again.');
+                    }
+                } else if (action === 'edit-substrand') {
+                    if (substrandsViewContext && window.editSubstrand) {
+                        window.editSubstrand(substrandsViewContext.learningAreaId, btn.dataset.strandCode || null, btn.dataset.subStrandCode || null, substrandsViewContext.learningAreaName);
+                    } else {
+                        alert('Error: Edit sub-strand not available. Refresh the page and try again.');
+                    }
+                } else if (action === 'delete-substrand') {
+                    if (substrandsViewContext && window.deleteSubstrand) {
+                        window.deleteSubstrand(substrandsViewContext.learningAreaId, btn.dataset.strandCode || null, btn.dataset.subStrandCode || null, substrandsViewContext.learningAreaName);
+                    } else {
+                        alert('Error: Delete sub-strand not available. Refresh the page and try again.');
+                    }
+                } else if (action === 'close-import-modal') {
+                    if (window.closeImportExcelModal) window.closeImportExcelModal();
+                    else alert('Close handler not loaded. Please refresh.');
+                } else if (action === 'do-import-excel') {
+                    const id = parseInt(btn.dataset.learningAreaId, 10);
+                    const name = btn.dataset.learningAreaName || '';
+                    if (isNaN(id) || !window.doImportExcel) {
+                        alert('Error: Import not ready. Refresh and try again.');
+                        return;
+                    }
+                    window.doImportExcel(id, name);
+                } else if (action === 'close-add-strand-modal') {
+                    if (window.closeAddStrandModal) window.closeAddStrandModal();
+                    else alert('Close handler not loaded.');
+                } else if (action === 'close-add-substrand-modal') {
+                    if (window.closeAddSubstrandModal) window.closeAddSubstrandModal();
+                    else alert('Close handler not loaded.');
+                } else {
+                    alert('Unknown action: ' + (action || '(none)') + '. Please refresh the page.');
+                }
+            } catch (err) {
+                console.error('Button click error:', err);
+                alert('Error: ' + (err.message || 'Something went wrong. Check the console (F12) for details.'));
+            }
+        }
+        document.addEventListener('click', handleSubstrandsClick, true);
+
         // Check if user is already logged in
         window.addEventListener('DOMContentLoaded', () => {
             const token = localStorage.getItem('authToken');
@@ -99,47 +171,25 @@
                 checkAuth();
             }
 
-            // Handle student photo loading as background image
+            // Optional: if you add student-photo.jpeg (or .jpg/.png) to the public folder,
+            // we use it as the login panel background once.
             const leftPanel = document.querySelector('.login-left-panel');
             if (leftPanel) {
-                // Try multiple possible image names and formats
-                const imageNames = [
-                    'student-photo.jpg',
-                    'student-photo.png',
-                    'student-photo.jpeg',
-                    'student.jpg',
-                    'student.png',
-                    'login-student.jpg',
-                    'login-student.png'
-                ];
-                let imageIndex = 0;
-
-                const tryLoadBackgroundImage = () => {
-                    if (imageIndex < imageNames.length) {
-                        const img = new Image();
-                        img.onload = () => {
-                            // Update the ::before pseudo-element background via CSS variable
-                            const style = document.createElement('style');
-                            style.textContent = `
-                                .login-left-panel::before {
-                                    background-image: url('${imageNames[imageIndex]}') !important;
-                                    opacity: 1 !important;
-                                }
-                            `;
-                            document.head.appendChild(style);
-                            leftPanel.classList.add('has-photo');
-                        };
-                        img.onerror = () => {
-                            imageIndex++;
-                            tryLoadBackgroundImage();
-                        };
-                        img.src = imageNames[imageIndex];
-                    } else {
-                        console.log('Student photo not found. Please add student-photo.jpg to the public folder.');
-                    }
+                const photoUrl = 'student-photo.jpeg';
+                const img = new Image();
+                img.onload = () => {
+                    const style = document.createElement('style');
+                    style.textContent = `
+                        .login-left-panel::before {
+                            background-image: url('${photoUrl}') !important;
+                            opacity: 1 !important;
+                        }
+                    `;
+                    document.head.appendChild(style);
+                    leftPanel.classList.add('has-photo');
                 };
-
-                tryLoadBackgroundImage();
+                img.onerror = () => { /* no file in public/ – keep gradient, no 404 spam */ };
+                img.src = photoUrl;
             }
         });
 
@@ -303,6 +353,7 @@
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
                 sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) +
+                    createSidebarButton('manage-substrands', 'Manage Sub-strands') +
                     createSidebarButton('register-student', 'Register Student') +
                     createSidebarButton('messages', 'Messages');
             } else if (role === 'headteacher' || role === 'deputy_headteacher' || role === 'superadmin' || role === 'finance') {
@@ -317,6 +368,7 @@
                 `;
                 sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) +
                     (role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher' ? createSidebarButton('admin-dashboard', 'System Overview') : '') +
+                    createSidebarButton('manage-substrands', 'Manage Sub-strands') +
                     createSidebarButton('register-student', 'Register Student') +
                     (role === 'superadmin' || role === 'headteacher' ? createSidebarButton('manage-terms', 'Manage Terms') : '') +
                     (role === 'superadmin' ? createSidebarButton('users', 'User Management') : '') +
@@ -1721,7 +1773,7 @@
                 </div>
                 
                 <div id="course-tab-content">
-                    ${renderCourseModules(modules, courseId)}
+                    ${renderCourseModules(modules, courseId, course.learning_area_id, course.course_name || course.learning_area_name, course.strands || [])}
                 </div>
 
                 <!-- Modern Module Form Modal -->
@@ -1760,19 +1812,73 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Import Strands from Excel Modal (same pattern as Add Module) -->
+                <div id="import-excel-modal-course" class="modal-overlay" style="display: none;" onclick="if(event.target === this) closeImportExcelModalCourse()">
+                    <div class="modal-content" style="max-width: 500px; width: 90%;">
+                        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; border-bottom: 1px solid #ddd;">
+                            <h2 style="margin: 0;">Import Strands from Excel</h2>
+                            <button type="button" class="modal-close" onclick="closeImportExcelModalCourse()" aria-label="Close" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #666;">&times;</button>
+                        </div>
+                        <div style="padding: 1.5rem;">
+                            <input type="hidden" id="import-excel-la-id" value="">
+                            <input type="hidden" id="import-excel-la-name" value="">
+                            <p style="margin: 0 0 1rem; color: #666;">Import strands and sub-strands for this learning area. Excel: columns <strong>Strand</strong>, <strong>Sub-strand</strong>, <strong>Rubrics</strong>.</p>
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label for="import-excel-file-input-course">Select Excel file (.xlsx or .xls)</label>
+                                <input type="file" id="import-excel-file-input-course" accept=".xlsx,.xls" style="display: block; margin-top: 0.5rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; width: 100%;">
+                            </div>
+                            <div id="import-excel-status-course" style="margin-bottom: 1rem; font-size: 0.9rem;"></div>
+                            <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                                <button type="button" onclick="closeImportExcelModalCourse()" class="btn-secondary">Cancel</button>
+                                <button type="button" id="import-excel-btn-course" onclick="doImportExcelFromCourseModal()" class="btn-primary">Import</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             `;
 
             // Store course data globally for tab switching
             window.currentCourseData = { course, modules, assignments, courseId };
         }
 
-        function renderCourseModules(modules, courseId) {
+        function renderCourseModules(modules, courseId, learningAreaId, learningAreaName, strands) {
+            const laId = learningAreaId || '';
+            const laName = String(learningAreaName || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, "\\'");
+            const laIdArg = laId ? laId : 'null';
+            const laNameArg = "'" + String(learningAreaName || '').replace(/'/g, "\\'") + "'";
+            const strandsList = Array.isArray(strands) ? strands : [];
+            const strandsHtml = strandsList.length === 0
+                ? '<p style="color:#666; margin:0 0 1rem 0;">No curriculum strands yet. Use <strong>Import Strands from Excel</strong> or go to <strong>Manage Sub-strands</strong> to add strands for this learning area.</p>'
+                : `
+                <div class="strands-section" style="margin-bottom: 1.5rem;">
+                    <h4 style="margin: 0 0 0.75rem 0; color: #333;">Curriculum strands</h4>
+                    ${strandsList.map((strand, si) => {
+                        const subs = strand.sub_strands || [];
+                        return `
+                        <div style="margin-bottom: 1rem; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden;">
+                            <div style="padding: 0.75rem 1rem; background: #f5f5f5; font-weight: 600; color: #333;">${strand.strand_name || 'Strand ' + (si + 1)}${strand.strand_code ? ' <span style="color:#666; font-weight:normal; font-size:0.9em;">(' + strand.strand_code + ')</span>' : ''}</div>
+                            ${subs.length === 0 ? '<div style="padding: 0.5rem 1rem; color:#888; font-size:0.9rem;">No sub-strands</div>' : `
+                            <ul style="margin: 0; padding: 0.5rem 1rem 1rem 1.5rem; list-style: disc;">
+                                ${subs.map(ss => '<li style="margin-bottom: 0.25rem;">' + (ss.sub_strand_name || ss.sub_strand_code || 'Sub-strand') + (ss.sub_strand_code ? ' <span style="color:#666; font-size:0.85em;">(' + ss.sub_strand_code + ')</span>' : '') + '</li>').join('')}
+                            </ul>
+                            `}
+                        </div>
+                        `;
+                    }).join('')}
+                </div>
+                `;
             return `
                 <div class="course-section">
-                    <div class="section-header">
-                        <h3>Learning Modules</h3>
-                        <button onclick="createModule(${courseId})" class="btn-primary">Add Module</button>
+                    <div class="section-header" style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+                        <h3 style="margin: 0;">Learning Modules</h3>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button type="button" class="btn-secondary" onclick="openImportExcelModal(${laIdArg}, ${laNameArg})" title="Import strands from Excel">📥 Import Strands from Excel</button>
+                            <button onclick="createModule(${courseId})" class="btn-primary">Add Module</button>
+                        </div>
                     </div>
+                    ${strandsHtml}
+                    <h4 style="margin: 1rem 0 0.5rem 0; color: #333;">Modules</h4>
                     <div class="modules-list">
                         ${modules.length === 0 ? '<p>No modules yet. Add a module to get started.</p>' : modules.map(module => `
                             <div class="module-card">
@@ -1805,6 +1911,80 @@
                 modal.style.display = 'none';
             }, 300);
         }
+
+        // Import from Excel: same pattern as Add Module — open modal by ID, set values, show
+        window.openImportExcelModal = function(laId, laName) {
+            const modal = document.getElementById('import-excel-modal-course');
+            const inputId = document.getElementById('import-excel-la-id');
+            const inputName = document.getElementById('import-excel-la-name');
+            const fileInput = document.getElementById('import-excel-file-input-course');
+            const status = document.getElementById('import-excel-status-course');
+            if (!modal || !inputId || !inputName) return;
+            inputId.value = laId != null && laId !== '' ? String(laId) : '';
+            inputName.value = (laName != null && laName !== undefined) ? String(laName) : '';
+            if (fileInput) fileInput.value = '';
+            if (status) status.innerHTML = '';
+            modal.style.display = 'flex';
+            setTimeout(() => modal.classList.add('show'), 10);
+        };
+
+        window.closeImportExcelModalCourse = function() {
+            const modal = document.getElementById('import-excel-modal-course');
+            if (!modal) return;
+            modal.classList.remove('show');
+            setTimeout(() => { modal.style.display = 'none'; }, 300);
+        };
+
+        window.doImportExcelFromCourseModal = async function() {
+            const inputId = document.getElementById('import-excel-la-id');
+            const inputName = document.getElementById('import-excel-la-name');
+            const fileInput = document.getElementById('import-excel-file-input-course');
+            const status = document.getElementById('import-excel-status-course');
+            const btn = document.getElementById('import-excel-btn-course');
+            let laId = (inputId && inputId.value) ? inputId.value.trim() : '';
+            const laName = (inputName && inputName.value) ? inputName.value.trim() : '';
+            let id = laId ? parseInt(laId, 10) : NaN;
+            if (isNaN(id) || id <= 0) {
+                const areas = await apiCall('/substrands/learning-areas').catch(() => []);
+                const nameForMatch = (laName || '').split(/\s*[-–]\s*/)[0].trim().toLowerCase();
+                const match = areas.find(la => {
+                    const n = (la.name || '').toLowerCase();
+                    return n === nameForMatch || n.includes(nameForMatch) || nameForMatch.includes(n);
+                });
+                if (match) { id = match.id; } else {
+                    if (status) status.innerHTML = '<span style="color:#d32f2f;">Could not find learning area. Use Manage Sub-strands to import.</span>';
+                    return;
+                }
+            }
+            if (!fileInput || !fileInput.files || !fileInput.files[0]) {
+                if (status) status.innerHTML = '<span style="color:#d32f2f;">Please select an Excel file.</span>';
+                return;
+            }
+            if (!authToken) {
+                if (status) status.innerHTML = '<span style="color:#d32f2f;">Please sign in again.</span>';
+                return;
+            }
+            try {
+                if (btn) btn.disabled = true;
+                if (status) status.innerHTML = '<span style="color:#1976d2;">Uploading...</span>';
+                const formData = new FormData();
+                formData.append('file', fileInput.files[0]);
+                const url = (typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : (window.location.origin + '/api')) + '/substrands/learning-area/' + id + '/import-excel';
+                const response = await fetch(url, { method: 'POST', headers: { 'Authorization': 'Bearer ' + authToken }, body: formData });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.message || 'Import failed (' + response.status + ')');
+                if (status) status.innerHTML = '<span style="color:#388e3c;">Imported: ' + (data.summary ? data.summary.strands + ' strands, ' + data.summary.sub_strands + ' sub-strands.' : '') + '</span>';
+                setTimeout(() => {
+                    closeImportExcelModalCourse();
+                    const courseData = window.currentCourseData;
+                    if (courseData && courseData.courseId) viewCourseDetails(courseData.courseId);
+                }, 1500);
+            } catch (err) {
+                if (status) status.innerHTML = '<span style="color:#d32f2f;">' + (err.message || 'Import failed') + '</span>';
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        };
 
         async function saveModule(e) {
             e.preventDefault();
@@ -1850,7 +2030,7 @@
 
             switch (tabName) {
                 case 'modules':
-                    content.innerHTML = renderCourseModules(data.modules, data.courseId);
+                    content.innerHTML = renderCourseModules(data.modules, data.courseId, data.course?.learning_area_id, data.course?.course_name || data.course?.learning_area_name, data.course?.strands || []);
                     break;
                 case 'attendance':
                     content.innerHTML = `
@@ -2627,6 +2807,19 @@
                 showToast('Error activating term: ' + error.message, 'error');
             }
         }
+
+        // Error feedback for Sub-strands buttons (show toast or alert)
+        window.substrandsButtonError = function(msg) {
+            if (typeof showToast === 'function') showToast(msg || 'Something went wrong', 'error');
+            else alert(msg || 'Something went wrong');
+            console.error('Substrands button error:', msg);
+        };
+        window.runSubstrandsAction = function(fn) {
+            try {
+                if (!fn || typeof fn !== 'function') { substrandsButtonError('Feature not loaded. Refresh the page.'); return; }
+                fn.apply(window, Array.prototype.slice.call(arguments, 1));
+            } catch (e) { substrandsButtonError(e.message); }
+        };
 
         // Toast notification logic
         function showToast(message, type = 'success') {
@@ -3865,6 +4058,7 @@
         async function loadManageSubstrands() {
             try {
                 const learningAreas = await apiCall('/substrands/learning-areas');
+                window.substrandsLearningAreasList = learningAreas;
                 const content = document.getElementById('dashboardContent');
                 const role = currentUser.role;
                 const backView = (role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher') ? 'admin-dashboard' : 'dashboard';
@@ -3892,7 +4086,8 @@
                                     <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
                                         <div>
                                             <h3 style="margin: 0 0 0.5rem 0; color: #333;">${la.name}</h3>
-                                            ${la.code ? `<span style="color: #666; font-size: 0.9rem;">Code: ${la.code}</span>` : ''}
+                                            <span style="color: #888; font-size: 0.85rem;">ID: ${la.id}</span>
+                                            ${la.code ? `<span style="color: #666; font-size: 0.9rem;"> · Code: ${la.code}</span>` : ''}
                                         </div>
                                     </div>
                                     
@@ -3932,17 +4127,26 @@
         
         window.viewLearningAreaSubstrands = async function(learningAreaId, learningAreaName) {
             try {
+                substrandsViewContext = { learningAreaId, learningAreaName };
                 const substrandData = await apiCall(`/substrands/learning-area/${learningAreaId}`);
-                const { strands, learningArea } = substrandData;
+                let strands = Array.isArray(substrandData.strands) ? substrandData.strands : [];
+                const learningArea = substrandData.learningArea || { id: learningAreaId, name: learningAreaName, code: '' };
+                if (window.substrandsLearningAreasList && strands.length >= 0) {
+                    const idx = window.substrandsLearningAreasList.findIndex(la => la.id == learningAreaId || String(la.id) === String(learningAreaId));
+                    if (idx >= 0) {
+                        window.substrandsLearningAreasList[idx] = { ...window.substrandsLearningAreasList[idx], strands, total_strands: strands.length, total_substrands: strands.reduce((s, st) => s + (st.sub_strands && st.sub_strands.length || 0), 0) };
+                    }
+                }
                 
                 const content = document.getElementById('dashboardContent');
                 content.innerHTML = `
                     <div class="view-header">
-                        <button onclick="loadManageSubstrands()" class="btn-back">← Back to Learning Areas</button>
-                        <h2>${learningAreaName} - Sub-strands</h2>
-                        <div style="display: flex; gap: 0.75rem;">
-                            <button onclick="(function(){ try { if(typeof window.showAddStrandToLearningArea === 'function') { window.showAddStrandToLearningArea(${learningAreaId}, '${learningAreaName.replace(/'/g, "\\'")}'); } else { console.error('showAddStrandToLearningArea not found on window'); alert('Error: Function not loaded. Please refresh the page.'); } } catch(err) { console.error('Button click error:', err); alert('Error: ' + err.message); } })();" class="btn-secondary">Add Strand</button>
-                            <button onclick="showAddSubstrandToLearningArea(${learningAreaId}, '${learningAreaName.replace(/'/g, "\\'")}')" class="btn-primary">Add Sub-strand</button>
+                        <button type="button" onclick="loadManageSubstrands()" class="btn-back">← Back to Learning Areas</button>
+                        <h2>${learningAreaName} <span style="color: #888; font-size: 0.75em; font-weight: normal;">(ID: ${learningAreaId})</span> - Sub-strands</h2>
+                        <div class="view-header-actions substrands-header-actions" style="display: flex; gap: 0.75rem; flex-shrink: 0;">
+                            <button type="button" class="btn-secondary" data-action="import-excel" data-learning-area-id="${learningAreaId}" data-learning-area-name="${String(learningAreaName).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')}" onclick="var b=this; var id=parseInt(b.dataset.learningAreaId,10); var nm=(b.dataset.learningAreaName||'').trim(); if(!isNaN(id)&amp;&amp;window.showImportExcelModal){ window.showImportExcelModal(id,nm); } else { alert('Import from Excel is not available. Refresh the page.'); }">📥 Import from Excel</button>
+                            <button type="button" class="btn-secondary" data-action="add-strand" data-learning-area-id="${learningAreaId}" data-learning-area-name="${String(learningAreaName).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')}" onclick="var b=this; var id=parseInt(b.dataset.learningAreaId,10); var nm=(b.dataset.learningAreaName||'').trim(); if(id&amp;&amp;nm&amp;&amp;window.showAddStrandToLearningArea){ window.showAddStrandToLearningArea(id,nm); } else { alert('Add Strand is not available. Refresh the page.'); }">Add Strand</button>
+                            <button type="button" class="btn-primary" data-action="add-substrand" data-strand-code="" data-learning-area-id="${learningAreaId}" data-learning-area-name="${String(learningAreaName).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')}" onclick="var b=this; var id=parseInt(b.dataset.learningAreaId,10); var nm=(b.dataset.learningAreaName||'').trim(); var sc=(b.dataset.strandCode||'').trim(); if(id&amp;&amp;nm&amp;&amp;window.showAddSubstrandToLearningArea){ window.showAddSubstrandToLearningArea(id,nm,sc); } else { alert('Add Sub-strand is not available. Refresh the page.'); }">Add Sub-strand</button>
                         </div>
                     </div>
                     
@@ -3952,7 +4156,7 @@
                                 <div class="empty-state-icon">📚</div>
                                 <h4>No Strands Found</h4>
                                 <p>This learning area doesn't have any strands configured yet.</p>
-                                <button onclick="(function(){ try { if(typeof window.showAddStrandToLearningArea === 'function') { window.showAddStrandToLearningArea(${learningAreaId}, '${learningAreaName.replace(/'/g, "\\'")}'); } else { console.error('showAddStrandToLearningArea not found on window'); alert('Error: Function not loaded. Please refresh the page.'); } } catch(err) { console.error('Button click error:', err); alert('Error: ' + err.message); } })();" class="btn-primary" style="margin-top: 1rem;">Add First Strand</button>
+                                <button type="button" class="btn-primary" data-action="add-strand" data-learning-area-id="${learningAreaId}" data-learning-area-name="${String(learningAreaName).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')}" onclick="var b=this; var id=parseInt(b.dataset.learningAreaId,10); var nm=(b.dataset.learningAreaName||'').trim(); if(id&amp;&amp;nm&amp;&amp;window.showAddStrandToLearningArea){ window.showAddStrandToLearningArea(id,nm); } else { alert('Add Strand is not available. Refresh the page.'); }" style="margin-top: 1rem;">Add First Strand</button>
                             </div>
                         ` : strands.map((strand, strandIndex) => {
                             const substrands = strand.sub_strands || [];
@@ -3964,14 +4168,9 @@
                                             ${strand.strand_code ? `<span style="color: #666; font-size: 0.9rem;">Code: ${strand.strand_code}</span>` : ''}
                                         </div>
                                         <div style="display: flex; gap: 0.5rem; align-items: center;">
-                                            <button onclick="editStrand(${learningAreaId}, ${strand.strand_code ? `'${String(strand.strand_code).replace(/'/g, "\\'")}'` : 'null'}, '${learningAreaName.replace(/'/g, "\\'")}')" 
-                                                    class="btn-secondary btn-small">Edit</button>
-                                            <button onclick="deleteStrand(${learningAreaId}, ${strand.strand_code ? `'${String(strand.strand_code).replace(/'/g, "\\'")}'` : 'null'}, '${learningAreaName.replace(/'/g, "\\'")}')" 
-                                                    class="btn-danger btn-small">Delete</button>
-                                            <button onclick="showAddSubstrandToLearningArea(${learningAreaId}, '${learningAreaName.replace(/'/g, "\\'")}', '${strand.strand_code}')" 
-                                                    class="btn-primary btn-small">
-                                                + Add Sub-strand
-                                            </button>
+                                            <button type="button" onclick="runSubstrandsAction(window.editStrand, ${learningAreaId}, '${String(strand.strand_code || '').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${String(learningAreaName).replace(/'/g, "\\'").replace(/"/g, '&quot;')}')" class="btn-secondary btn-small">Edit</button>
+                                            <button type="button" onclick="runSubstrandsAction(window.deleteStrand, ${learningAreaId}, '${String(strand.strand_code || '').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${String(learningAreaName).replace(/'/g, "\\'").replace(/"/g, '&quot;')}')" class="btn-danger btn-small">Delete</button>
+                                            <button type="button" onclick="runSubstrandsAction(window.showAddSubstrandToLearningArea, ${learningAreaId}, '${String(learningAreaName).replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${String(strand.strand_code || '').replace(/'/g, "\\'").replace(/"/g, '&quot;')}')" class="btn-primary btn-small">+ Add Sub-strand</button>
                                         </div>
                                     </div>
                                     
@@ -3999,10 +4198,8 @@
                                                         ` : ''}
                                                     </div>
                                                     <div style="display: flex; gap: 0.5rem;">
-                                                        <button onclick="editSubstrand(${learningAreaId}, ${strand.strand_code ? `'${String(strand.strand_code).replace(/'/g, "\\'")}'` : 'null'}, ${substrand.sub_strand_code ? `'${String(substrand.sub_strand_code).replace(/'/g, "\\'")}'` : 'null'}, '${learningAreaName.replace(/'/g, "\\'")}')" 
-                                                                class="btn-secondary btn-small">Edit</button>
-                                                        <button onclick="deleteSubstrand(${learningAreaId}, ${strand.strand_code ? `'${String(strand.strand_code).replace(/'/g, "\\'")}'` : 'null'}, ${substrand.sub_strand_code ? `'${String(substrand.sub_strand_code).replace(/'/g, "\\'")}'` : 'null'}, '${learningAreaName.replace(/'/g, "\\'")}')" 
-                                                                class="btn-danger btn-small">Delete</button>
+                                                        <button type="button" onclick="runSubstrandsAction(window.editSubstrand, ${learningAreaId}, '${String(strand.strand_code || '').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${String(substrand.sub_strand_code || '').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${String(learningAreaName).replace(/'/g, "\\'").replace(/"/g, '&quot;')}')" class="btn-secondary btn-small">Edit</button>
+                                                        <button type="button" onclick="runSubstrandsAction(window.deleteSubstrand, ${learningAreaId}, '${String(strand.strand_code || '').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${String(substrand.sub_strand_code || '').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${String(learningAreaName).replace(/'/g, "\\'").replace(/"/g, '&quot;')}')" class="btn-danger btn-small">Delete</button>
                                                     </div>
                                                 </div>
                                             </div>
@@ -4013,12 +4210,163 @@
                         }).join('')}
                     </div>
                 `;
+                // Sub-strands actions are handled by document-level handleSubstrandsClick only (no duplicate listeners)
             } catch (error) {
                 console.error('Error loading learning area substrands:', error);
                 alert('Error: ' + (error.message || 'Failed to load sub-strands'));
             }
         };
         
+        window.openImportExcelForCourse = async function(btn) {
+            try {
+                const laId = (btn.dataset.learningAreaId || '').trim();
+                const courseName = (btn.dataset.learningAreaName || btn.dataset.courseName || '').trim();
+                const id = laId ? parseInt(laId, 10) : NaN;
+                if (!isNaN(id) && id > 0) {
+                    if (typeof window.showImportExcelModal === 'function') {
+                        window.showImportExcelModal(id, courseName || 'Learning Area');
+                    } else {
+                        alert('Import is not ready. Please refresh the page and try again.');
+                    }
+                    return;
+                }
+                // No learning_area_id: resolve by learning area name (e.g. "Agriculture" from "Agriculture - Term 1 2026...")
+                const areas = await apiCall('/substrands/learning-areas');
+                const nameForMatch = (courseName || '').split(/\s*[-–]\s*/)[0].trim().toLowerCase();
+                const match = areas.find(la => {
+                    const n = (la.name || '').toLowerCase();
+                    return n === nameForMatch || n.includes(nameForMatch) || nameForMatch.includes(n);
+                });
+                if (match) {
+                    if (typeof window.showImportExcelModal === 'function') {
+                        window.showImportExcelModal(match.id, match.name);
+                    } else {
+                        alert('Import is not ready. Please refresh the page and try again.');
+                    }
+                } else {
+                    if (typeof showToast === 'function') showToast('This course is not linked to a learning area. Go to Manage Sub-strands to import.', 'error');
+                    else alert('This course is not linked to a learning area. Please go to Manage Sub-strands to import strands.');
+                }
+            } catch (err) {
+                console.error('Resolve learning area:', err);
+                if (typeof showToast === 'function') showToast('Error: ' + (err.message || 'Could not load learning areas.'), 'error');
+                else alert('Could not load learning areas. Please try Manage Sub-strands to import strands.');
+            }
+        };
+        
+        window.showImportExcelModal = function(learningAreaId, learningAreaName) {
+            const existingModal = document.getElementById('import-excel-modal');
+            if (existingModal) existingModal.remove();
+
+            const modal = document.createElement('div');
+            modal.id = 'import-excel-modal';
+            modal.className = 'modal-overlay';
+            modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10001; display: flex; align-items: center; justify-content: center;';
+            modal.onclick = function(e) { if (e.target === modal) window.closeImportExcelModal(); };
+
+            const escName = String(learningAreaName).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            modal.innerHTML = `
+                <div class="modal-content" style="background: white; border-radius: 8px; padding: 0; max-width: 500px; width: 90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative; z-index: 1; pointer-events: auto;">
+                    <div class="modal-header" style="padding: 1.5rem; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
+                        <h3 style="margin: 0;">Import Strands from Excel</h3>
+                        <button type="button" data-action="close-import-modal" style="background: none; border: none; cursor: pointer; font-size: 1.5rem; color: #666;">&times;</button>
+                    </div>
+                    <div style="padding: 1.5rem; position: relative; z-index: 1; pointer-events: auto;">
+                        <p style="margin: 0 0 1rem; color: #666;">Import strands and sub-strands for <strong>${escName}</strong>. Excel file must have columns: <strong>Strand</strong>, <strong>Sub-strand</strong>, <strong>Rubrics</strong>.</p>
+                        <p style="margin: 0 0 1rem; font-size: 0.9rem; color: #666;">Example format: Strand "1.0 Crop Production", Sub-strand "1.1 Agricultural Land", Rubrics "Ability to describe ways of accessing land for...". Merged cells are supported.</p>
+                        <form id="import-excel-form">
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label for="excel-file-input">Select Excel file (.xlsx or .xls)</label>
+                                <input type="file" id="excel-file-input" accept=".xlsx,.xls" required style="display: block; margin-top: 0.5rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; width: 100%;">
+                            </div>
+                            <div id="import-excel-status" style="margin-bottom: 1rem; font-size: 0.9rem;"></div>
+                            <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                                <button type="button" data-action="close-import-modal" class="btn-secondary">Cancel</button>
+                                <button type="button" data-action="do-import-excel" data-learning-area-id="${learningAreaId}" data-learning-area-name="${String(learningAreaName).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')}" id="import-excel-btn" class="btn-primary">Import</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            var closeBtn = modal.querySelector('[data-action="close-import-modal"]');
+            var cancelBtn = modal.querySelectorAll('[data-action="close-import-modal"]')[1];
+            var importBtn = modal.querySelector('[data-action="do-import-excel"]');
+            function closeImport() { var m = document.getElementById('import-excel-modal'); if (m) m.remove(); }
+            if (closeBtn) closeBtn.addEventListener('click', closeImport);
+            if (cancelBtn) cancelBtn.addEventListener('click', closeImport);
+            if (importBtn) importBtn.addEventListener('click', function() {
+                var inp = document.getElementById('excel-file-input');
+                if (!inp || !inp.files || !inp.files[0]) {
+                    var st = document.getElementById('import-excel-status');
+                    if (st) st.innerHTML = '<span style="color:#d32f2f;">Please select a file.</span>';
+                    return;
+                }
+                if (window.doImportExcel) window.doImportExcel(learningAreaId, learningAreaName);
+                else alert('Import handler not loaded.');
+            });
+        };
+
+        window.closeImportExcelModal = function() {
+            const m = document.getElementById('import-excel-modal');
+            if (m) m.remove();
+        };
+
+        window.doImportExcel = async function(learningAreaId, learningAreaName) {
+            const input = document.getElementById('excel-file-input');
+            const status = document.getElementById('import-excel-status');
+            const btn = document.getElementById('import-excel-btn');
+            const id = typeof learningAreaId === 'number' ? learningAreaId : parseInt(learningAreaId, 10);
+            if (isNaN(id) || id <= 0) {
+                if (status) status.innerHTML = '<span style="color: #d32f2f;">Invalid learning area ID. Please close and try again.</span>';
+                return;
+            }
+            if (!input || !input.files || !input.files[0]) {
+                if (status) status.innerHTML = '<span style="color: #d32f2f;">Please select a file.</span>';
+                return;
+            }
+            try {
+                if (btn) btn.disabled = true;
+                if (status) status.innerHTML = '<span style="color: #1976d2;">Uploading and importing...</span>';
+                const formData = new FormData();
+                formData.append('file', input.files[0]);
+                const url = `${API_BASE_URL}/substrands/learning-area/${id}/import-excel`;
+                if (!authToken) {
+                    if (status) status.innerHTML = '<span style="color: #d32f2f;">You must be signed in to import. Please log in again.</span>';
+                    return;
+                }
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` },
+                    body: formData
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    const serverMsg = data.message || data.error || '';
+                    if (response.status === 401) throw new Error('Session expired or not signed in. Please log in again.');
+                    if (response.status === 403) throw new Error('You do not have permission to import strands.');
+                    if (response.status === 404) throw new Error(serverMsg || 'Learning area not found.');
+                    if (response.status === 500) throw new Error(serverMsg || 'Server or database error. Check server logs.');
+                    throw new Error(serverMsg || `Import failed (${response.status}).`);
+                }
+                if (status) status.innerHTML = '<span style="color: #388e3c;">Import successful: ' + (data.summary ? data.summary.strands + ' strands, ' + data.summary.sub_strands + ' sub-strands, ' + (data.summary.rubrics || 0) + ' rubrics.' : '') + '</span>';
+                setTimeout(() => {
+                    window.closeImportExcelModal();
+                    if (typeof viewLearningAreaSubstrands === 'function') {
+                        viewLearningAreaSubstrands(id, learningAreaName || data.learningAreaName || 'Learning Area');
+                    } else {
+                        loadManageSubstrands();
+                    }
+                }, 1500);
+            } catch (err) {
+                const msg = err.message || (err.name === 'TypeError' && err.message && err.message.includes('fetch') ? 'Network error. Is the server running?' : 'Import failed.');
+                if (status) status.innerHTML = '<span style="color: #d32f2f;">' + msg + '</span>';
+                console.error('Import Excel error:', err);
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        };
+
         // Make function globally accessible - define directly on window
         window.showAddStrandToLearningArea = function(learningAreaId, learningAreaName) {
             console.log('=== showAddStrandToLearningArea CALLED ===', { learningAreaId, learningAreaName, timestamp: new Date().toISOString() });
@@ -4038,7 +4386,7 @@
                 const modal = document.createElement('div');
                 modal.id = 'add-strand-modal';
                 modal.className = 'modal-overlay';
-                modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center;';
+                modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10001; display: flex; align-items: center; justify-content: center;';
                 modal.onclick = function(e) {
                     if (e.target === modal) {
                         window.closeAddStrandModal();
@@ -4048,10 +4396,10 @@
                 const escapedName = String(learningAreaName).replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 
                 modal.innerHTML = `
-                    <div class="modal-content" style="background: white; border-radius: 8px; padding: 0; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    <div class="modal-content" style="background: white; border-radius: 8px; padding: 0; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative; z-index: 1; pointer-events: auto;" onclick="event.stopPropagation();">
                         <div class="modal-header" style="padding: 1.5rem; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
-                            <h2 style="margin: 0;">Add New Strand - ${escapedName}</h2>
-                            <button onclick="window.closeAddStrandModal()" class="modal-close" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #666;">&times;</button>
+                        <h2 style="margin: 0;">Add New Strand - ${escapedName}</h2>
+                        <button type="button" data-action="close-add-strand-modal" class="modal-close" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #666;">&times;</button>
                         </div>
                         <div class="modal-body" style="padding: 1.5rem;">
                             <form id="add-strand-form" onsubmit="(function(e){ e.preventDefault(); e.stopPropagation(); try { if(typeof window.saveNewStrand === 'function') { window.saveNewStrand(e, ${learningAreaId}, '${escapedName}'); } else { console.error('saveNewStrand not found'); alert('Error: Save function not found. Please refresh.'); } } catch(err) { console.error('Form submit error:', err); alert('Error: ' + err.message); } return false; })(event);">
@@ -4068,7 +4416,7 @@
                                 </div>
                                 
                                 <div class="form-actions" style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem;">
-                                    <button type="button" onclick="window.closeAddStrandModal()" class="btn-secondary">Cancel</button>
+                                    <button type="button" data-action="close-add-strand-modal" class="btn-secondary">Cancel</button>
                                     <button type="submit" class="btn-primary">Add Strand</button>
                                 </div>
                             </form>
@@ -4080,7 +4428,9 @@
                 console.log('Modal added to DOM');
             } catch (error) {
                 console.error('Error in showAddStrandToLearningArea:', error);
-                alert('Error opening add strand form: ' + error.message);
+                if (typeof substrandsButtonError === 'function') substrandsButtonError('Error opening add strand form: ' + (error.message || 'Unknown error'));
+                else if (typeof showToast === 'function') showToast('Error: ' + (error.message || 'Unknown error'), 'error');
+                else alert('Error opening add strand form: ' + error.message);
             }
         };
         
@@ -4146,12 +4496,8 @@
                 }
             } catch (error) {
                 console.error('Error adding strand:', error);
-                console.error('Error details:', {
-                    message: error.message,
-                    status: error.status,
-                    response: error.response
-                });
-                alert('Error: ' + (error.message || 'Failed to add strand'));
+                if (typeof showToast === 'function') showToast('Error: ' + (error.message || 'Failed to add strand'), 'error');
+                else alert('Error: ' + (error.message || 'Failed to add strand'));
             }
         };
         
@@ -4170,33 +4516,35 @@
                 })
                 .catch(error => {
                     console.error('Error loading strands:', error);
-                    alert('Error: ' + (error.message || 'Failed to load strands'));
+                    if (typeof showToast === 'function') showToast('Error: ' + (error.message || 'Failed to load strands'), 'error');
+                    else if (typeof substrandsButtonError === 'function') substrandsButtonError(error.message || 'Failed to load strands');
+                    else alert('Error: ' + (error.message || 'Failed to load strands'));
                 });
         };
         
         window.showCreateSubstrandForm = function(learningAreaId, strands, learningArea, preselectedStrandCode = null, learningAreaName = '') {
             const modal = document.createElement('div');
             modal.id = 'add-substrand-modal';
-            modal.className = 'modal-overlay';
-            modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center;';
-            modal.onclick = function(e) {
-                if (e.target === modal) {
-                    closeAddSubstrandModal();
-                }
-            };
+                modal.className = 'modal-overlay';
+                modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10001; display: flex; align-items: center; justify-content: center;';
+                modal.onclick = function(e) {
+                    if (e.target === modal) {
+                        window.closeAddSubstrandModal();
+                    }
+                };
             
             const strandOptions = strands.map(s => 
-                `<option value="${s.strand_code}" ${preselectedStrandCode === s.strand_code ? 'selected' : ''}>${s.strand_name || s.strand_code}</option>`
+                `<option value="${String(s.strand_code || '').replace(/"/g, '&quot;')}" ${preselectedStrandCode === s.strand_code ? 'selected' : ''}>${(s.strand_name || s.strand_code || '').replace(/</g, '&lt;')}</option>`
             ).join('');
             
             modal.innerHTML = `
-                <div class="modal-content" style="background: white; border-radius: 8px; padding: 0; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <div class="modal-content" style="background: white; border-radius: 8px; padding: 0; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative; z-index: 1; pointer-events: auto;" onclick="event.stopPropagation();">
                     <div class="modal-header" style="padding: 1.5rem; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
                         <h2 style="margin: 0;">Add Sub-strand - ${learningAreaName}</h2>
-                        <button onclick="closeAddSubstrandModal()" class="modal-close" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #666;">&times;</button>
+                        <button type="button" data-action="close-add-substrand-modal" class="modal-close" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #666;">&times;</button>
                     </div>
                     <div class="modal-body" style="padding: 1.5rem;">
-                        <form id="add-substrand-form" onsubmit="saveNewSubstrand(event, ${learningAreaId}, '${learningAreaName.replace(/'/g, "\\'")}')">
+                        <form id="add-substrand-form" onsubmit="(function(ev){ ev.preventDefault(); ev.stopPropagation(); try { if(typeof window.saveNewSubstrand === 'function') { window.saveNewSubstrand(ev, ${learningAreaId}, '${learningAreaName.replace(/'/g, "\\'").replace(/"/g, '&quot;')}'); } else { alert('Save function not found. Please refresh.'); } } catch(err) { console.error(err); alert('Error: ' + err.message); } return false; })(event);">
                             <div class="form-group">
                                 <label>Strand *</label>
                                 <select name="strand_code" id="substrand-strand-select" required>
@@ -4223,14 +4571,14 @@
                                     <div class="indicator-item" style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
                                         <input type="text" class="indicator-code" placeholder="Code" style="width: 120px;">
                                         <input type="text" class="indicator-name" placeholder="Indicator description" style="flex: 1;">
-                                        <button type="button" onclick="removeIndicatorItem(this)" class="btn-danger btn-small">Remove</button>
+                                        <button type="button" onclick="window.removeIndicatorItem && window.removeIndicatorItem(this)" class="btn-danger btn-small">Remove</button>
                                     </div>
                                 </div>
-                                <button type="button" onclick="addIndicatorItem()" class="btn-secondary btn-small" style="margin-top: 0.5rem;">+ Add Indicator</button>
+                                <button type="button" onclick="window.addIndicatorItem && window.addIndicatorItem()" class="btn-secondary btn-small" style="margin-top: 0.5rem;">+ Add Indicator</button>
                             </div>
                             
                             <div class="form-actions" style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem;">
-                                <button type="button" onclick="closeAddSubstrandModal()" class="btn-secondary">Cancel</button>
+                                <button type="button" data-action="close-add-substrand-modal" class="btn-secondary">Cancel</button>
                                 <button type="submit" class="btn-primary">Add Sub-strand</button>
                             </div>
                         </form>
@@ -4256,7 +4604,7 @@
             newItem.innerHTML = `
                 <input type="text" class="indicator-code" placeholder="Code" style="width: 120px;">
                 <input type="text" class="indicator-name" placeholder="Indicator description" style="flex: 1;">
-                <button type="button" onclick="removeIndicatorItem(this)" class="btn-danger btn-small">Remove</button>
+                <button type="button" onclick="window.removeIndicatorItem && window.removeIndicatorItem(this)" class="btn-danger btn-small">Remove</button>
             `;
             container.appendChild(newItem);
         };
@@ -4268,9 +4616,9 @@
         window.saveNewSubstrand = async function(e, learningAreaId, learningAreaName) {
             e.preventDefault();
             const formData = new FormData(e.target);
-            const strandCode = formData.get('strand_code');
-            const subStrandCode = formData.get('sub_strand_code').trim();
-            const subStrandName = formData.get('sub_strand_name').trim();
+            const strandCode = formData.get('strand_code') || '';
+            const subStrandCode = (formData.get('sub_strand_code') || '').trim();
+            const subStrandName = (formData.get('sub_strand_name') || '').trim();
             
             if (!strandCode || !subStrandCode || !subStrandName) {
                 alert('Please fill in all required fields');
@@ -4291,7 +4639,8 @@
             });
             
             try {
-                await apiCall(`/substrands/learning-area/${learningAreaId}/strand/${strandCode}/substrand`, {
+                const encodedStrandCode = encodeURIComponent(strandCode);
+                await apiCall(`/substrands/learning-area/${learningAreaId}/strand/${encodedStrandCode}/substrand`, {
                     method: 'POST',
                     body: JSON.stringify({
                         sub_strand_code: subStrandCode,
@@ -4301,13 +4650,14 @@
                     })
                 });
                 
-                closeAddSubstrandModal();
+                window.closeAddSubstrandModal();
                 showToast('Sub-strand added successfully!', 'success');
                 // Reload the view to show the new sub-strand
                 window.viewLearningAreaSubstrands(learningAreaId, learningAreaName);
             } catch (error) {
                 console.error('Error adding sub-strand:', error);
-                alert('Error: ' + (error.message || 'Failed to add sub-strand'));
+                if (typeof showToast === 'function') showToast('Error: ' + (error.message || 'Failed to add sub-strand'), 'error');
+                else alert('Error: ' + (error.message || 'Failed to add sub-strand'));
             }
         };
         
@@ -4505,7 +4855,8 @@
                 window.viewLearningAreaSubstrands(learningAreaId, 'Learning Area');
             } catch (error) {
                 console.error('Error updating sub-strand:', error);
-                alert('Error: ' + (error.message || 'Failed to update sub-strand'));
+                if (typeof showToast === 'function') showToast('Error: ' + (error.message || 'Failed to update sub-strand'), 'error');
+                else alert('Error: ' + (error.message || 'Failed to update sub-strand'));
             }
         }
         
@@ -4540,12 +4891,60 @@
                 window.viewLearningAreaSubstrands(learningAreaId, learningAreaName);
             } catch (error) {
                 console.error('Error deleting sub-strand:', error);
-                alert('Error: ' + (error.message || 'Failed to delete sub-strand'));
+                if (typeof showToast === 'function') showToast('Error: ' + (error.message || 'Failed to delete sub-strand'), 'error');
+                else alert('Error: ' + (error.message || 'Failed to delete sub-strand'));
             }
         }
         
-        // Make deleteSubstrand globally accessible
+        // Make substrand functions globally accessible for event delegation
         window.deleteSubstrand = deleteSubstrand;
+        window.editSubstrand = editSubstrand;
+
+        window.editStrand = async function(learningAreaId, strandCode, learningAreaName) {
+            if (!strandCode || strandCode === 'null' || strandCode === 'undefined') {
+                alert('Error: Strand code is missing. Please refresh the page.');
+                return;
+            }
+            try {
+                const strandData = await apiCall(`/substrands/learning-area/${learningAreaId}`);
+                const strand = (strandData.strands || []).find(s => String(s.strand_code || '').trim() === String(strandCode).trim());
+                if (!strand) {
+                    if (typeof showToast === 'function') showToast('Strand not found.', 'error');
+                    else alert('Strand not found.');
+                    return;
+                }
+                const newCode = prompt('Strand code:', strand.strand_code) || strand.strand_code;
+                const newName = prompt('Strand name:', strand.strand_name) || strand.strand_name;
+                if (!newCode || !newName) return;
+                await apiCall(`/substrands/learning-area/${learningAreaId}/strand/${encodeURIComponent(strandCode)}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ strand_code: newCode, strand_name: newName })
+                });
+                if (typeof showToast === 'function') showToast('Strand updated successfully!', 'success');
+                else alert('Strand updated successfully!');
+                viewLearningAreaSubstrands(learningAreaId, learningAreaName);
+            } catch (e) {
+                if (typeof showToast === 'function') showToast('Error: ' + (e.message || 'Failed to update strand'), 'error');
+                else alert('Error: ' + (e.message || 'Failed to update strand'));
+            }
+        };
+
+        window.deleteStrand = async function(learningAreaId, strandCode, learningAreaName) {
+            if (!strandCode || strandCode === 'null' || strandCode === 'undefined') {
+                alert('Error: Strand code is missing.');
+                return;
+            }
+            if (!confirm('Delete this strand and all its sub-strands? This cannot be undone.')) return;
+            try {
+                await apiCall(`/substrands/learning-area/${learningAreaId}/strand/${encodeURIComponent(strandCode)}`, { method: 'DELETE' });
+                if (typeof showToast === 'function') showToast('Strand deleted successfully!', 'success');
+                else alert('Strand deleted successfully!');
+                viewLearningAreaSubstrands(learningAreaId, learningAreaName);
+            } catch (e) {
+                if (typeof showToast === 'function') showToast('Error: ' + (e.message || 'Failed to delete strand'), 'error');
+                else alert('Error: ' + (e.message || 'Failed to delete strand'));
+            }
+        };
 
         async function toggleUserStatus(userId, isActive) {
             try {

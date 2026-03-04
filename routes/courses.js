@@ -401,7 +401,7 @@ router.get('/:id', async (req, res) => {
   try {
     const courseResult = await pool.query(
       `SELECT c.*, u.first_name as teacher_first_name, u.last_name as teacher_last_name,
-              la.strands, la.name as learning_area_name, la.code as learning_area_code
+              la.id as learning_area_id, la.strands, la.name as learning_area_name, la.code as learning_area_code
        FROM courses c
        LEFT JOIN users u ON c.teacher_id = u.id
        LEFT JOIN learning_areas la ON c.learning_area_id = la.id
@@ -415,13 +415,19 @@ router.get('/:id', async (req, res) => {
     
     const course = courseResult.rows[0];
     
-    // Parse strands if they exist
+    // Parse and normalize strands from learning area (so Learning Modules tab can show curriculum)
     if (course.strands && typeof course.strands === 'string') {
       try {
         course.strands = JSON.parse(course.strands);
       } catch (e) {
         course.strands = null;
       }
+    }
+    if (course.strands && !Array.isArray(course.strands)) {
+      course.strands = [course.strands];
+    }
+    if (!course.strands || !Array.isArray(course.strands)) {
+      course.strands = [];
     }
     
     // Check access permissions
