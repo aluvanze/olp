@@ -4,154 +4,126 @@ Use these steps when you want to update the application code on your existing pl
 
 ---
 
-## Where is `.env` on the VPS?
+## Pull from repository URL at `/var/www/olp` (no login required)
 
-The `.env` file is in your **project root** (the same folder as `server.js` and `package.json`). On a VPS it is usually **not** under `/var` unless you put the app there.
+Use this when your app is at **`/var/www/olp`** and you want to **get new code from a public repository URL** and **keep your database setup** (`.env` and existing DB).
 
-**Typical locations:**
-
-| Location | When it's used |
-|----------|-----------------|
-| `~/olp/.env` | Project in home dir, folder named `olp` |
-| `~/grade10-lms/.env` | Project in home dir, folder from repo name |
-| `/home/yourusername/olp/.env` | Same as above (replace `yourusername`) |
-| `/var/www/olp/.env` | If you deployed the app under `/var/www` |
-| `/var/www/grade10-lms/.env` | Same under `/var/www` |
-
-**How to find it:**
-
-1. **SSH into the VPS:**
-   ```bash
-   ssh yourusername@your-vps-ip
-   ```
-
-2. **Go to where the app runs from** (e.g. where you run `npm start` or where PM2 is started):
-   ```bash
-   cd ~/olp
-   # or
-   cd /var/www/olp
-   # or wherever your project lives
-   ```
-
-3. **List files and confirm `.env` is there** (it may be hidden):
-   ```bash
-   ls -la
-   ```
-   You should see `.env` in the list (same folder as `server.js`, `package.json`).
-
-4. **Open or edit `.env`:**
-   ```bash
-   nano .env
-   ```
-   Or only view it (read-only):
-   ```bash
-   cat .env
-   ```
-
-5. **If you're not sure where the app is**, find the process:
-   ```bash
-   pm2 list
-   ```
-   Then check the path PM2 shows for the app, or:
-   ```bash
-   pm2 show 0
-   ```
-   The "script path" or "exec cwd" is your project root; `.env` is in that folder.
-
-**Quick one-liner to find `.env` anywhere under your home or `/var/www`:**
-```bash
-find ~ /var/www -name ".env" -type f 2>/dev/null
-```
+**Use a public repository HTTPS URL** — e.g. `https://github.com/username/olp.git`. No GitHub login or password is needed for public repos.
 
 ---
 
-## 1. Back up your credentials (on the server/platform)
+### Option A: Already a Git repo (recommended)
 
-Before replacing any code:
-
-1. **Copy your existing `.env` file** to a safe place (e.g. your PC or a backup folder):
-   - On the server: the file is usually in the project root: `olp/.env` or `grade10-lms/.env`
-   - Download or copy its contents somewhere safe.
-
-2. **Do not delete** the `.env` file on the server. The app needs it to connect to your database.
-
----
-
-## 2. Upload / replace the application code
-
-- **Option A – Git (recommended)**  
-  - On the server, go to your project folder and run:
-    ```bash
-    git fetch origin
-    git pull origin main
-    ```
-  - Git will **not** overwrite `.env` (it is in `.gitignore`), so your credentials stay as they are.
-
-- **Option B – Upload files manually (FTP / file manager)**  
-  - Upload or overwrite only the **application files** (e.g. `server.js`, `routes/`, `public/`, `config/`, `migrations/`, `package.json`, etc.).
-  - **Do not upload or overwrite** a `.env` file from your computer if you have one there. Keep using the `.env` that is **already on the server**.
-
-- **Option C – Zip / replace folder**  
-  - Replace the project folder with the new code, **except**:
-    - Do **not** replace the `.env` file.
-    - Before replacing: copy the server’s existing `.env` to a safe place, then after replacing the code, **put that same `.env` back** into the project root.
-
----
-
-## 3. Install dependencies (if code or package.json changed)
-
-On the server, in the project root:
+Run these on the VPS. Use your **public repo URL**. Replace `main` with `master` if your default branch is `master`.
 
 ```bash
+# 1. SSH in, then go to the app
+cd /var/www/olp
+
+# 2. Back up .env (in case anything goes wrong)
+cp .env /tmp/olp.env.backup
+
+# 3. Stop the app (if you use PM2)
+pm2 stop all
+
+# 4. (Optional) Set the remote URL you pull from (public repo — no login required)
+#    Only if you need to point at a different repo or fix the URL:
+#    git remote set-url origin https://github.com/username/repo.git
+
+# 5. Get latest code from the repository (replaces tracked files; .env is not tracked so it stays)
+git fetch origin
+git reset --hard origin/main
+git pull origin main
+
+# 6. Restore .env if it was removed (normally it is not)
+if [ ! -f .env ]; then cp /tmp/olp.env.backup .env; fi
+
+# 7. Install dependencies
 npm install
+
+# 8. Restart the app
+pm2 start all
+# or: pm2 restart all
+# If you only want to restart the OLP app (e.g. you have "olp" and "olp-app" in pm2 list):
+# pm2 stop olp && pm2 restart olp
 ```
 
-This does not touch `.env`.
+Your `.env` (database credentials) is **not** in Git, so it is not replaced. Only application code is updated.
 
 ---
 
-## 4. Restart the application
+### Option B: Delete folder and clone again (full fresh copy)
 
-- If you use **PM2**:
-  ```bash
-  pm2 restart all
-  ```
-- If you use a **systemd** service or another process manager, restart that service.
-- If you run the app manually:
-  ```bash
-  node server.js
-  ```
-  or:
-  ```bash
-  npm start
-  ```
+Use this if the folder is not a Git repo or you want a clean clone. **Use your public repository HTTPS URL** — no login required.
+
+```bash
+# 1. SSH in
+cd /var/www
+
+# 2. Back up .env from current app
+cp olp/.env /tmp/olp.env.backup
+
+# 3. Stop the app (if you use PM2)
+pm2 stop all
+
+# 4. Remove current code (folder and all)
+sudo rm -rf olp
+
+# 5. Clone from public repository URL (no login required)
+#    Paste your public HTTPS URL, e.g. https://github.com/username/olp.git
+sudo git clone https://github.com/aluvanze/olp.git
+
+# 6. Put your database setup back (required)
+sudo cp /tmp/olp.env.backup olp/.env
+sudo chown $(whoami):$(whoami) olp/.env
+# If you need correct ownership for the whole folder:
+# sudo chown -R $(whoami):$(whoami) olp
+
+# 7. Go in and install, then start
+cd olp
+npm install
+pm2 start server.js --name olp
+# or: node server.js
+```
+
+Replace `https://github.com/username/olp.git` with your actual public repo URL. No GitHub account or token needed.
 
 ---
 
-## 5. Variables your `.env` must have (do not delete these)
+### If clone asks for password: "Password authentication is not supported"
 
-Your existing `.env` on the server should keep at least these. **Do not remove or overwrite them** when redeploying:
+GitHub no longer accepts your account password for Git. You will see **"Password authentication is not supported for Git operations"** or **"Authentication failed"**.
 
-| Variable        | Purpose                          |
-|----------------|-----------------------------------|
-| `DB_HOST`      | Database server address           |
-| `DB_PORT`      | Database port (often 5432)        |
-| `DB_NAME`      | Database name (e.g. grade10_lms)  |
-| `DB_USER`      | Database username                 |
-| `DB_PASSWORD`  | Database password                 |
-| `JWT_SECRET`   | Secret for login tokens           |
-| `PORT`         | App port (e.g. 3000)              |
+**Option 1 – No login (easiest): make the repo public**
 
-Optional (if you use them): `FRONTEND_URL`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASS`, `EMAIL_FROM`, `JWT_EXPIRES_IN`, `NODE_ENV`.
+1. On GitHub: open the repo → **Settings** → **General**.
+2. Scroll to **Danger zone** → **Change repository visibility** → **Make public**.
+3. On the VPS, clone again with the same HTTPS URL. You will **not** be prompted for username or password:
+   ```bash
+   sudo git clone https://github.com/aluvanze/olp.git olp
+   ```
+
+**Option 2 – Keep repo private: use a Personal Access Token (PAT)**
+
+1. On GitHub: **Profile (top right)** → **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)** → **Generate new token**.
+2. Give it a name, tick **repo**, then generate and **copy the token** (you won't see it again).
+3. On the VPS, clone using the token instead of a password (replace `YOUR_TOKEN` with the token you copied):
+   ```bash
+   sudo git clone https://YOUR_TOKEN@github.com/aluvanze/olp.git olp
+   ```
+   Example (fake token): `sudo git clone https://ghp_xxxxxxxxxxxx@github.com/aluvanze/olp.git olp`
+
+Use **Option 1** if you don't mind the repo being public. Use **Option 2** if the repo must stay private.
 
 ---
 
-## Quick checklist
+### Checklist for `/var/www/olp`
 
-- [ ] Backed up existing `.env` from the server
-- [ ] Replaced/updated only code (no overwrite of `.env` on server)
-- [ ] Ran `npm install` if needed
-- [ ] Restarted the app
-- [ ] Confirmed `.env` is still in the project root and unchanged
+- [ ] Backed up `.env` (e.g. to `/tmp/olp.env.backup`)
+- [ ] Stopped the app (e.g. `pm2 stop all`)
+- [ ] Pulled or cloned new code
+- [ ] `.env` is back in `/var/www/olp/` and not overwritten
+- [ ] Ran `npm install`
+- [ ] Restarted the app (e.g. `pm2 restart olp` or `pm2 start all`)
 
-If you keep your server’s `.env` and only update code + run `npm install` + restart, your database credentials and existing config will stay intact.
+**PM2:** If your app is named `olp` in `pm2 list`, use `pm2 stop olp` and `pm2 restart olp` so you don’t affect other processes. To remove a stopped duplicate (e.g. `olp-app`): `pm2 delete olp-app`.

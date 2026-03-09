@@ -206,11 +206,14 @@ router.get('/students', authorize('teacher', 'headteacher', 'deputy_headteacher'
   }
 });
 
-// Get student's current course enrollments
+// Get student's current course enrollments (studentId = users.id for the student)
 router.get('/students/:studentId/enrollments', authorize('teacher', 'headteacher', 'deputy_headteacher', 'superadmin'), async (req, res) => {
   try {
-    const { studentId } = req.params;
-    const { academic_year } = req.query;
+    const studentIdNum = parseInt(req.params.studentId, 10);
+    if (isNaN(studentIdNum)) {
+      return res.status(400).json({ message: 'Invalid student ID' });
+    }
+    const academic_year = (req.query.academic_year || '').trim();
 
     let query = `
       SELECT ce.id, ce.course_id, ce.status, ce.enrollment_date as enrolled_at,
@@ -221,7 +224,7 @@ router.get('/students/:studentId/enrollments', authorize('teacher', 'headteacher
       LEFT JOIN users u ON c.teacher_id = u.id
       WHERE ce.student_id = $1 AND ce.status = 'active'
     `;
-    const params = [studentId];
+    const params = [studentIdNum];
 
     if (academic_year) {
       query += ' AND c.academic_year = $2';
@@ -245,7 +248,7 @@ router.delete('/enrollments/:enrollmentId', authorize('teacher', 'headteacher', 
 
     const result = await pool.query(
       `UPDATE course_enrollments 
-       SET status = 'inactive', updated_at = CURRENT_TIMESTAMP
+       SET status = 'inactive'
        WHERE id = $1
        RETURNING *`,
       [enrollmentId]
@@ -265,17 +268,20 @@ router.delete('/enrollments/:enrollmentId', authorize('teacher', 'headteacher', 
 // Enroll existing student in courses for a term
 router.post('/enroll/:studentId', authorize('teacher', 'headteacher', 'deputy_headteacher', 'superadmin'), async (req, res) => {
   try {
-    const { studentId } = req.params;
+    const studentIdNum = parseInt(req.params.studentId, 10);
+    if (isNaN(studentIdNum)) {
+      return res.status(400).json({ message: 'Invalid student ID' });
+    }
     const { course_ids, term, academic_year } = req.body;
 
-    if (!course_ids || course_ids.length === 0) {
+    if (!course_ids || !Array.isArray(course_ids) || course_ids.length === 0) {
       return res.status(400).json({ message: 'At least one course must be selected' });
     }
 
-    // Verify student exists
+    // Verify student exists (student_id in DB is users.id for role=student)
     const studentCheck = await pool.query(
       'SELECT id FROM users WHERE id = $1 AND role = $2',
-      [parseInt(studentId), 'student']
+      [studentIdNum, 'student']
     );
 
     if (studentCheck.rows.length === 0) {
@@ -289,9 +295,12 @@ router.post('/enroll/:studentId', authorize('teacher', 'headteacher', 'deputy_he
       const enrollments = [];
       for (const courseId of course_ids) {
         // Verify course exists and matches academic year
+        const courseIdNum = parseInt(courseId, 10);
+        if (isNaN(courseIdNum)) continue;
+
         const courseCheck = await client.query(
           'SELECT id, academic_year FROM courses WHERE id = $1 AND is_active = true',
-          [parseInt(courseId)]
+          [courseIdNum]
         );
 
         if (courseCheck.rows.length === 0) {
@@ -301,7 +310,7 @@ router.post('/enroll/:studentId', authorize('teacher', 'headteacher', 'deputy_he
         // Check if enrollment already exists (any status)
         const existingEnrollment = await client.query(
           'SELECT id, status FROM course_enrollments WHERE student_id = $1 AND course_id = $2',
-          [parseInt(studentId), parseInt(courseId)]
+          [studentIdNum, courseIdNum]
         );
 
         if (existingEnrollment.rows.length === 0) {
@@ -311,7 +320,7 @@ router.post('/enroll/:studentId', authorize('teacher', 'headteacher', 'deputy_he
               `INSERT INTO course_enrollments (student_id, course_id, status, enrollment_date)
                VALUES ($1, $2, 'active', CURRENT_DATE)
                RETURNING id`,
-              [parseInt(studentId), parseInt(courseId)]
+              [studentIdNum, courseIdNum]
             );
             enrollments.push(enrollmentResult.rows[0].id);
           } catch (insertError) {
@@ -323,7 +332,7 @@ router.post('/enroll/:studentId', authorize('teacher', 'headteacher', 'deputy_he
                  SET status = 'active', enrollment_date = CURRENT_DATE
                  WHERE student_id = $1 AND course_id = $2
                  RETURNING id`,
-                [parseInt(studentId), parseInt(courseId)]
+                [studentIdNum, courseIdNum]
               );
               if (updateResult.rows.length > 0) {
                 enrollments.push(updateResult.rows[0].id);

@@ -406,8 +406,47 @@ router.post('/enrollments/:enrollmentId/authorize', authorize('teacher', 'headte
   }
 });
 
-// Superadmin: Get all users with pagination
-router.get('/users', authorize('superadmin'), async (req, res) => {
+// Superadmin/Headteacher: Create new user
+router.post('/users', authorize('superadmin', 'headteacher'), async (req, res) => {
+  try {
+    const { username, email, password, first_name, last_name, role, phone } = req.body;
+
+    const validRoles = ['student', 'teacher', 'headteacher', 'deputy_headteacher', 'finance', 'parent', 'superadmin'];
+    if (!username || !email || !password || !first_name || !last_name || !role) {
+      return res.status(400).json({ message: 'Username, email, password, first_name, last_name, and role are required' });
+    }
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ message: 'Invalid role. Must be: ' + validRoles.join(', ') });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters' });
+    }
+
+    const existingUser = await pool.query(
+      'SELECT id FROM users WHERE username = $1 OR email = $2',
+      [username.trim(), email.trim()]
+    );
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ message: 'Username or email already exists' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const result = await pool.query(
+      `INSERT INTO users (username, email, password_hash, first_name, last_name, role, phone)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, username, email, first_name, last_name, role, phone, is_active, created_at`,
+      [username.trim(), email.trim(), passwordHash, first_name.trim(), last_name.trim(), role, phone ? phone.trim() : null]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Add user error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Superadmin/Headteacher: Get all users with pagination
+router.get('/users', authorize('superadmin', 'headteacher'), async (req, res) => {
   try {
     const { role, search, is_active, page = 1, limit = 20 } = req.query;
     const pageNum = parseInt(page);
@@ -473,7 +512,7 @@ router.get('/users', authorize('superadmin'), async (req, res) => {
 });
 
 // Superadmin: Update user (activate/deactivate, change role)
-router.put('/users/:id', authorize('superadmin'), async (req, res) => {
+router.put('/users/:id', authorize('superadmin', 'headteacher'), async (req, res) => {
   try {
     const { is_active, role } = req.body;
     const userId = req.params.id;

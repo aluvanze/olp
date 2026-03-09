@@ -220,17 +220,26 @@ router.get('/terms', async (req, res) => {
   }
 });
 
-// Get courses grouped by category/learning area
+// Get courses grouped by category/learning area (must be before /:id to avoid route conflict)
 router.get('/by-category/:academicYear', async (req, res) => {
   try {
-    const { academicYear } = req.params;
+    const academicYear = (req.params.academicYear || '').trim();
 
     if (!academicYear) {
       return res.status(400).json({ message: 'Academic year is required' });
     }
 
-    // First try to get courses with learning_area_id if column exists
+    // Try with learning_area join; fallback to simple query if it fails (e.g. missing column)
     let result;
+    const simpleQuery = () => pool.query(
+      `SELECT c.id, c.course_name, c.course_code, c.description, c.academic_year,
+              u.first_name as teacher_first_name, u.last_name as teacher_last_name
+       FROM courses c
+       LEFT JOIN users u ON c.teacher_id = u.id
+       WHERE c.academic_year = $1 AND c.is_active = true
+       ORDER BY c.course_name`,
+      [academicYear]
+    );
     try {
       result = await pool.query(
         `SELECT c.id, c.course_name, c.course_code, c.description, c.academic_year,
@@ -246,17 +255,8 @@ router.get('/by-category/:academicYear', async (req, res) => {
         [academicYear]
       );
     } catch (error) {
-      // If learning_area_id column doesn't exist or join fails, get courses without it
       console.log('Learning area join failed, using simple query:', error.message);
-      result = await pool.query(
-        `SELECT c.id, c.course_name, c.course_code, c.description, c.academic_year,
-                u.first_name as teacher_first_name, u.last_name as teacher_last_name
-         FROM courses c
-         LEFT JOIN users u ON c.teacher_id = u.id
-         WHERE c.academic_year = $1 AND c.is_active = true
-         ORDER BY c.course_name`,
-        [academicYear]
-      );
+      result = await simpleQuery();
     }
 
     // Group courses by category based on course name/code
@@ -391,6 +391,29 @@ router.get('/term/:term/:academicYear', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Get courses for term error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get enrolled students for a course (for course detail Students tab)
+router.get('/:id/enrollments', async (req, res) => {
+  try {
+    const courseId = parseInt(req.params.id, 10);
+    if (isNaN(courseId)) {
+      return res.status(400).json({ message: 'Invalid course ID' });
+    }
+    const result = await pool.query(
+      `SELECT ce.id as enrollment_id, ce.student_id, ce.enrollment_date, ce.status,
+              u.first_name, u.last_name, u.username, u.email
+       FROM course_enrollments ce
+       INNER JOIN users u ON ce.student_id = u.id AND u.role = 'student'
+       WHERE ce.course_id = $1 AND ce.status = 'active'
+       ORDER BY u.last_name, u.first_name`,
+      [courseId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get course enrollments error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

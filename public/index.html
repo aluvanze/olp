@@ -363,7 +363,7 @@
                     <button onclick="loadView('manage-substrands')" class="nav-btn">Manage Sub-strands</button>
                     <button onclick="loadView('register-student')" class="nav-btn">Register Student</button>
                     ${role === 'superadmin' || role === 'headteacher' ? `<button onclick="loadView('manage-terms')" class="nav-btn">Manage Terms</button>` : ''}
-                    ${role === 'superadmin' ? `<button onclick="loadView('users')" class="nav-btn">User Management</button>` : ''}
+                    ${(role === 'superadmin' || role === 'headteacher') ? `<button onclick="loadView('users')" class="nav-btn">User Management</button>` : ''}
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
                 sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) +
@@ -371,7 +371,7 @@
                     createSidebarButton('manage-substrands', 'Manage Sub-strands') +
                     createSidebarButton('register-student', 'Register Student') +
                     (role === 'superadmin' || role === 'headteacher' ? createSidebarButton('manage-terms', 'Manage Terms') : '') +
-                    (role === 'superadmin' ? createSidebarButton('users', 'User Management') : '') +
+                    ((role === 'superadmin' || role === 'headteacher') ? createSidebarButton('users', 'User Management') : '') +
                     createSidebarButton('messages', 'Messages');
             } else if (role === 'parent') {
                 navButtons = `
@@ -494,8 +494,9 @@
                 </div>
             `;
 
-            // Automatically load the dashboard content
-            loadView('dashboard');
+            // Headteachers land on Register Student (assign learning areas) by default
+            const leadToAssignLearningAreas = role === 'headteacher' || role === 'deputy_headteacher' || role === 'superadmin';
+            loadView(leadToAssignLearningAreas ? 'register-student' : 'dashboard');
         }
 
         async function loadView(viewName) {
@@ -1848,6 +1849,7 @@
             const laIdArg = laId ? laId : 'null';
             const laNameArg = "'" + String(learningAreaName || '').replace(/'/g, "\\'") + "'";
             const strandsList = Array.isArray(strands) ? strands : [];
+            const esc = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
             const strandsHtml = strandsList.length === 0
                 ? '<p style="color:#666; margin:0 0 1rem 0;">No curriculum strands yet. Use <strong>Import Strands from Excel</strong> or go to <strong>Manage Sub-strands</strong> to add strands for this learning area.</p>'
                 : `
@@ -1855,14 +1857,40 @@
                     <h4 style="margin: 0 0 0.75rem 0; color: #333;">Curriculum strands</h4>
                     ${strandsList.map((strand, si) => {
                         const subs = strand.sub_strands || [];
+                        const strandCode = strand.strand_code || '';
                         return `
-                        <div style="margin-bottom: 1rem; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden;">
-                            <div style="padding: 0.75rem 1rem; background: #f5f5f5; font-weight: 600; color: #333;">${strand.strand_name || 'Strand ' + (si + 1)}${strand.strand_code ? ' <span style="color:#666; font-weight:normal; font-size:0.9em;">(' + strand.strand_code + ')</span>' : ''}</div>
-                            ${subs.length === 0 ? '<div style="padding: 0.5rem 1rem; color:#888; font-size:0.9rem;">No sub-strands</div>' : `
-                            <ul style="margin: 0; padding: 0.5rem 1rem 1rem 1.5rem; list-style: disc;">
-                                ${subs.map(ss => '<li style="margin-bottom: 0.25rem;">' + (ss.sub_strand_name || ss.sub_strand_code || 'Sub-strand') + (ss.sub_strand_code ? ' <span style="color:#666; font-size:0.85em;">(' + ss.sub_strand_code + ')</span>' : '') + '</li>').join('')}
-                            </ul>
-                            `}
+                        <div class="strand-section" style="margin-bottom: 1.5rem; border: 1px solid #ddd; border-radius: 8px; padding: 1rem; background: white;">
+                            <div class="strand-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 2px solid #4CAF50;">
+                                <div>
+                                    <h3 style="margin: 0; color: #333; font-size: 1.1rem;">${strand.strand_name || 'Strand ' + (si + 1)}</h3>
+                                    ${strandCode ? '<span style="color: #666; font-size: 0.9rem;">Code: ' + strandCode + '</span>' : ''}
+                                </div>
+                                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                    <button type="button" onclick="window._refreshCourseAfterSubstrandAction = true; runSubstrandsAction(window.editStrand, ${laId || 'null'}, '${esc(strandCode)}', '${esc(learningAreaName)}', '${esc(strand.strand_name || '')}')" class="btn-secondary btn-small">Edit</button>
+                                    <button type="button" onclick="window._refreshCourseAfterSubstrandAction = true; runSubstrandsAction(window.deleteStrand, ${laId || 'null'}, '${esc(strandCode)}', '${esc(learningAreaName)}')" class="btn-danger btn-small">Delete</button>
+                                    <button type="button" onclick="window._refreshCourseAfterSubstrandAction = true; runSubstrandsAction(window.showAddSubstrandToLearningArea, ${laId || 'null'}, '${esc(learningAreaName)}', '${esc(strandCode)}')" class="btn-primary btn-small">+ Add Sub-strand</button>
+                                </div>
+                            </div>
+                            <div class="substrands-list">
+                                ${subs.length === 0 ? '<div style="text-align: center; padding: 1rem; color: #999; font-size: 0.9rem;">No sub-strands in this strand yet.</div>' : subs.map((ss) => {
+                                    const ssCode = ss.sub_strand_code || '';
+                                    return `
+                                    <div class="substrand-item" style="padding: 0.75rem 1rem; margin-bottom: 0.5rem; background: #f9f9f9; border-radius: 4px; border-left: 4px solid #2196F3;">
+                                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                                            <div style="flex: 1;">
+                                                <h4 style="margin: 0 0 0.25rem 0; color: #333; font-size: 1rem;">${ss.sub_strand_name || 'Unnamed Sub-strand'}</h4>
+                                                ${ssCode ? '<span style="color: #666; font-size: 0.85rem;">Code: ' + ssCode + '</span>' : ''}
+                                                ${ss.indicators && ss.indicators.length > 0 ? '<ul style="margin: 0.25rem 0 0 1.25rem; font-size: 0.85rem; color: #666;">' + ss.indicators.slice(0, 3).map(ind => { const t = (ind.indicator_name || ind.indicator_code || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); return '<li>' + t + '</li>'; }).join('') + (ss.indicators.length > 3 ? '<li style="color:#999;">... and ' + (ss.indicators.length - 3) + ' more</li>' : '') + '</ul>' : ''}
+                                            </div>
+                                            <div style="display: flex; gap: 0.5rem;">
+                                                <button type="button" onclick="window._refreshCourseAfterSubstrandAction = true; runSubstrandsAction(window.editSubstrand, ${laId || 'null'}, '${esc(strandCode)}', '${esc(ssCode)}', '${esc(learningAreaName)}', '${esc(strand.strand_name || '')}')" class="btn-secondary btn-small">Edit</button>
+                                                <button type="button" onclick="window._refreshCourseAfterSubstrandAction = true; runSubstrandsAction(window.deleteSubstrand, ${laId || 'null'}, '${esc(strandCode)}', '${esc(ssCode)}', '${esc(learningAreaName)}')" class="btn-danger btn-small">Delete</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    `;
+                                }).join('')}
+                            </div>
                         </div>
                         `;
                     }).join('')}
@@ -2116,14 +2144,217 @@
         }
 
         async function loadCourseStudents(courseId) {
+            const list = document.getElementById('students-list');
+            if (!list) return;
+            if (!courseId) {
+                list.innerHTML = '<p class="muted">No course selected.</p>';
+                return;
+            }
             try {
-                const enrollments = await apiCall(`/courses/${courseId}`);
-                // Get enrolled students
-                const students = await apiCall(`/admin/enrollments/pending`); // This needs to be updated to get enrolled students
-                const list = document.getElementById('students-list');
-                list.innerHTML = '<p>Student list feature coming soon</p>';
+                const students = await apiCall(`/courses/${courseId}/enrollments`);
+                if (students.length === 0) {
+                    list.innerHTML = '<p class="muted">No students enrolled yet. Use "Enroll Student" below to add students to this course.</p>';
+                    return;
+                }
+                list.innerHTML = `
+                    <table class="attendance-table" style="margin-top: 1rem;">
+                        <thead>
+                            <tr><th>Student</th><th>Username</th><th>Enrolled</th></tr>
+                        </thead>
+                        <tbody>
+                            ${students.map(s => `
+                                <tr>
+                                    <td>${s.first_name} ${s.last_name}</td>
+                                    <td>${s.username || '-'}</td>
+                                    <td>${s.enrollment_date ? new Date(s.enrollment_date).toLocaleDateString() : '-'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
             } catch (error) {
-                document.getElementById('students-list').innerHTML = '<p>Error loading students</p>';
+                const is404 = error.status === 404 || (error.message && error.message.toLowerCase().includes('route not found'));
+                if (is404) {
+                    list.innerHTML = '<p class="muted">Unable to load student list. Restart the server (npm start) if you recently updated the code. The "Enroll Student" button still works.</p>';
+                } else {
+                    list.innerHTML = '<p>Error loading students: ' + (error.message || '') + '</p>';
+                }
+            }
+        }
+
+        let enrollStudentCourseId = null;
+        let enrollStudentSearchTimeout = null;
+
+        async function enrollStudent(courseId) {
+            if (!currentTerm || !currentAcademicYear) {
+                showToast('Please select a term first from the dashboard', 'error');
+                return;
+            }
+            enrollStudentCourseId = courseId;
+            const modal = document.createElement('div');
+            modal.id = 'enroll-student-course-modal';
+            modal.className = 'modal-overlay';
+            modal.onclick = function (e) {
+                if (e.target === modal) closeEnrollStudentCourseModal();
+            };
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 28rem;" onclick="event.stopPropagation();">
+                    <div class="modal-header">
+                        <h2>Enroll Student in Course</h2>
+                        <button type="button" onclick="closeEnrollStudentCourseModal()" class="modal-close">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label>Add by Admission Number</label>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <input type="text" id="enroll-admission-number" class="premium-input" placeholder="Enter admission number" autocomplete="off" style="flex: 1;">
+                                <button type="button" onclick="searchStudentByAdmissionForEnroll()" class="btn-primary">Add</button>
+                            </div>
+                        </div>
+                        <hr style="margin: 1rem 0; border: none; border-top: 1px solid #ddd;">
+                        <p style="margin-bottom: 1rem;">Or search by name or username:</p>
+                        <div class="form-group">
+                            <label>Search</label>
+                            <input type="text" id="enroll-student-search" class="premium-input" placeholder="Type to search..." autocomplete="off">
+                        </div>
+                        <div id="enroll-student-results" style="max-height: 16rem; overflow-y: auto; margin-top: 0.5rem;"></div>
+                        <div id="enroll-student-selected" style="display: none; margin-top: 1rem; padding: 0.75rem; background: #e8f5e9; border-radius: 8px;">
+                            <p style="margin: 0 0 0.5rem;"><strong>Selected:</strong> <span id="enroll-student-name"></span></p>
+                            <button type="button" id="enroll-student-confirm-btn" class="btn-primary">Enroll in this course</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            const admissionInput = document.getElementById('enroll-admission-number');
+            if (admissionInput) {
+                admissionInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        searchStudentByAdmissionForEnroll();
+                    }
+                });
+            }
+            const input = document.getElementById('enroll-student-search');
+            if (input) {
+                input.focus();
+                input.addEventListener('input', function () {
+                    clearTimeout(enrollStudentSearchTimeout);
+                    const q = this.value.trim();
+                    if (q.length < 2) {
+                        document.getElementById('enroll-student-results').innerHTML = '';
+                        return;
+                    }
+                    enrollStudentSearchTimeout = setTimeout(() => searchStudentsForEnroll(q), 300);
+                });
+            }
+            document.getElementById('enroll-student-confirm-btn').addEventListener('click', confirmEnrollStudentInCourse);
+            const escapeHandler = function (e) {
+                if (e.key === 'Escape') {
+                    closeEnrollStudentCourseModal();
+                    document.removeEventListener('keydown', escapeHandler);
+                }
+            };
+            document.addEventListener('keydown', escapeHandler);
+        }
+
+        function closeEnrollStudentCourseModal() {
+            const modal = document.getElementById('enroll-student-course-modal');
+            if (modal) modal.remove();
+            enrollStudentCourseId = null;
+        }
+
+        async function searchStudentByAdmissionForEnroll() {
+            const input = document.getElementById('enroll-admission-number');
+            const resultsDiv = document.getElementById('enroll-student-results');
+            if (!input || !resultsDiv) return;
+            const admissionNumber = input.value.trim();
+            if (!admissionNumber) {
+                showToast('Please enter an admission number', 'error');
+                return;
+            }
+            try {
+                const students = await apiCall(`/student-registration/students?admission_number=${encodeURIComponent(admissionNumber)}`);
+                if (students.length === 0) {
+                    resultsDiv.innerHTML = '<p class="error">No student found with this admission number.</p>';
+                    return;
+                }
+                const s = students[0];
+                const displayName = (s.first_name || '') + ' ' + (s.last_name || '') + (s.admission_number ? ' (' + s.admission_number + ')' : '');
+                selectStudentForEnroll(s.id, displayName);
+                resultsDiv.innerHTML = '<p class="muted">Student found. Click &quot;Enroll in this course&quot; below to confirm.</p>';
+            } catch (e) {
+                resultsDiv.innerHTML = '<p class="error">Error: ' + (e.message || 'Search failed') + '</p>';
+            }
+        }
+
+        async function searchStudentsForEnroll(query) {
+            const resultsDiv = document.getElementById('enroll-student-results');
+            if (!resultsDiv) return;
+            try {
+                const students = await apiCall(`/student-registration/students?search=${encodeURIComponent(query)}`);
+                if (students.length === 0) {
+                    resultsDiv.innerHTML = '<p class="muted">No students found.</p>';
+                    return;
+                }
+                resultsDiv.innerHTML = `
+                    <ul style="list-style: none; padding: 0; margin: 0;">
+                        ${students.map(s => {
+                            const name = (s.first_name || '') + ' ' + (s.last_name || '');
+                            return `<li class="enroll-student-row" style="padding: 0.5rem 0.75rem; border-bottom: 1px solid #eee; cursor: pointer;" data-student-id="${s.id}" data-student-name="${String(name).replace(/"/g, '&quot;')}">
+                                <strong>${s.first_name} ${s.last_name}</strong>
+                                ${s.admission_number ? ` · ${s.admission_number}` : ''}
+                                <br><small>${s.username || ''}</small>
+                            </li>`;
+                        }).join('')}
+                    </ul>
+                `;
+                resultsDiv.querySelectorAll('.enroll-student-row').forEach(li => {
+                    li.addEventListener('click', function () {
+                        selectStudentForEnroll(parseInt(this.getAttribute('data-student-id'), 10), this.getAttribute('data-student-name') || '');
+                    });
+                });
+            } catch (e) {
+                resultsDiv.innerHTML = '<p class="error">Search failed.</p>';
+            }
+        }
+
+        let selectedStudentIdForEnroll = null;
+
+        function selectStudentForEnroll(studentId, displayName) {
+            selectedStudentIdForEnroll = studentId;
+            document.getElementById('enroll-student-name').textContent = displayName;
+            document.getElementById('enroll-student-selected').style.display = 'block';
+        }
+
+        async function confirmEnrollStudentInCourse() {
+            if (!enrollStudentCourseId || !selectedStudentIdForEnroll) {
+                showToast('Please select a student first', 'error');
+                return;
+            }
+            const btn = document.getElementById('enroll-student-confirm-btn');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Enrolling...';
+            }
+            try {
+                await apiCall(`/student-registration/enroll/${selectedStudentIdForEnroll}`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        course_ids: [enrollStudentCourseId],
+                        term: currentTerm,
+                        academic_year: currentAcademicYear
+                    })
+                });
+                showToast('Student enrolled successfully.', 'success');
+                closeEnrollStudentCourseModal();
+                loadCourseStudents(enrollStudentCourseId);
+            } catch (error) {
+                showToast('Error: ' + (error.message || 'Could not enroll'), 'error');
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Enroll in this course';
+                }
             }
         }
 
@@ -2821,6 +3052,17 @@
             } catch (e) { substrandsButtonError(e.message); }
         };
 
+        function refreshSubstrandsView(learningAreaId, learningAreaName) {
+            if (window._refreshCourseAfterSubstrandAction && window.currentCourseData && window.currentCourseData.courseId) {
+                window._refreshCourseAfterSubstrandAction = false;
+                viewCourseDetails(window.currentCourseData.courseId);
+            } else if (typeof window.viewLearningAreaSubstrands === 'function') {
+                window.viewLearningAreaSubstrands(learningAreaId, learningAreaName || 'Learning Area');
+            } else if (window.currentCourseData && window.currentCourseData.courseId) {
+                viewCourseDetails(window.currentCourseData.courseId);
+            }
+        }
+
         // Toast notification logic
         function showToast(message, type = 'success') {
             // Ensure container exists
@@ -2876,21 +3118,33 @@
             }, 220);
         }
 
-        // Register Student - Manage Learning Area Enrollment
+        // Register Student - Manage Learning Area Enrollment (Assign Learning Areas to Students)
         async function loadRegisterStudent() {
+            const content = document.getElementById('dashboardContent');
+
             if (!currentTerm || !currentAcademicYear) {
-                showToast('Please select a term first from the dashboard', 'error');
-                loadView('dashboard');
+                content.innerHTML = `
+                    <div class="view-header">
+                        <div class="view-header-content">
+                            <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
+                            <h1 class="view-title">Assign Learning Areas to Students</h1>
+                            <p class="view-subtitle">Headteacher: search for a student, then manage their learning area enrollments</p>
+                        </div>
+                    </div>
+                    <div class="premium-form-section" style="max-width: 32rem; margin: 2rem auto; padding: 2rem; text-align: center; background: #e3f2fd; border: 2px solid #2196f3; border-radius: 12px;">
+                        <p style="margin: 0 0 1rem; font-size: 1.1rem;"><strong>Select a term first</strong></p>
+                        <p style="margin: 0 0 1.5rem; color: #555;">To assign learning areas to students, choose a term from the dashboard.</p>
+                        <button type="button" onclick="loadView('dashboard')" class="btn-primary">Go to Dashboard to select term</button>
+                    </div>
+                `;
                 return;
             }
-
-            const content = document.getElementById('dashboardContent');
 
             content.innerHTML = `
                 <div class="view-header">
                     <div class="view-header-content">
                     <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
-                        <h1 class="view-title">Register Student</h1>
+                        <h1 class="view-title">Assign Learning Areas to Students</h1>
                         <p class="view-subtitle">Manage student course enrollment for Term ${currentTerm} ${currentAcademicYear}</p>
                     </div>
                 </div>
@@ -2918,6 +3172,21 @@
         let selectedStudentId = null;
         let selectedStudentInfo = null;
         let pendingCourseSelections = new Set(); // Track selected courses before saving
+        let selectedPathwayIdForEnroll = null;
+
+        // Delegated click: Manage Courses button works even if inline handlers are blocked
+        document.addEventListener('click', function manageCoursesDelegated(e) {
+            const btn = e.target && e.target.closest && e.target.closest('#manage-courses-btn, [data-action="manage-courses"]');
+            if (!btn) return;
+            const resultsDiv = document.getElementById('student-search-results');
+            if (!resultsDiv || !resultsDiv.contains(btn)) return;
+            const studentId = btn.getAttribute('data-student-id') || selectedStudentId;
+            if (studentId != null) {
+                e.preventDefault();
+                e.stopPropagation();
+                loadStudentCourseManagement(typeof studentId === 'string' ? parseInt(studentId, 10) : studentId);
+            }
+        }, true);
 
         async function searchStudentByAdmission() {
             const admissionNumber = document.getElementById('admission-number-search').value.trim();
@@ -2945,9 +3214,17 @@
                         <p><strong>Student Found:</strong> ${student.first_name} ${student.last_name}</p>
                         <p>Username: ${student.username} | Email: ${student.email}</p>
                         ${student.pathway_name ? `<p>Pathway: ${student.pathway_name}</p>` : ''}
-                        <button onclick="loadStudentCourseManagement(${student.id})" class="btn-primary">Manage Courses</button>
+                        <button type="button" id="manage-courses-btn" class="btn-primary" data-student-id="${student.id}">Manage Courses</button>
                     </div>
                 `;
+                const manageBtn = resultsDiv.querySelector('#manage-courses-btn');
+                if (manageBtn) {
+                    manageBtn.addEventListener('click', function (ev) {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        loadStudentCourseManagement(student.id);
+                    });
+                }
             } catch (error) {
                 document.getElementById('student-search-results').innerHTML = `<div class="error">Error: ${error.message}</div>`;
             }
@@ -2957,39 +3234,115 @@
             selectedStudentId = studentId;
             pendingCourseSelections.clear();
 
+            if (!authToken) {
+                showToast('Session expired. Please log in again.', 'error');
+                return;
+            }
             if (!currentAcademicYear) {
                 showToast('Please select a term first from the dashboard', 'error');
                 loadView('dashboard');
                 return;
             }
 
+            const student = selectedStudentInfo;
+            if (!student) {
+                showToast('Student info lost. Please search for the student again.', 'error');
+                return;
+            }
+
+            // Show modal IMMEDIATELY so user sees popup right away
+            const modal = document.createElement('div');
+            modal.id = 'course-management-modal';
+            modal.className = 'modal-overlay';
+            modal.style.cssText = 'display: flex !important; position: fixed !important; top: 0; left: 0; right: 0; bottom: 0; z-index: 99999; background: rgba(0,0,0,0.5); align-items: center; justify-content: center;';
+            modal.onclick = function (e) {
+                if (e.target === modal) closeCourseManagementModal();
+            };
+            modal.innerHTML = `
+                <div class="modal-content modal-large" style="background: white; padding: 2rem; border-radius: 8px; max-width: 90%; max-height: 90vh; overflow-y: auto;" onclick="event.stopPropagation();">
+                    <div class="modal-header">
+                        <h2>Manage Learning Areas - ${student.first_name} ${student.last_name}</h2>
+                        <button type="button" class="modal-close" title="Close" aria-label="Close">&times;</button>
+                    </div>
+                    <div class="modal-body" id="course-management-modal-body">
+                        <p>Loading courses and enrollments...</p>
+                        <button type="button" class="btn-secondary course-modal-cancel" style="margin-top: 1rem;">Cancel</button>
+                    </div>
+                </div>
+            `;
+            modal.querySelector('.modal-close').addEventListener('click', closeCourseManagementModal);
+            modal.querySelector('.course-modal-cancel').addEventListener('click', closeCourseManagementModal);
+            document.body.appendChild(modal);
+            // Ensure modal paints before blocking on API
+            await new Promise(r => setTimeout(r, 0));
+
+            const modalBody = document.getElementById('course-management-modal-body');
+            const escapeHandler = (e) => {
+                if (e.key === 'Escape') {
+                    closeCourseManagementModal();
+                    document.removeEventListener('keydown', escapeHandler);
+                }
+            };
+            document.addEventListener('keydown', escapeHandler);
+
             try {
-                const [currentEnrollments, coursesByCategory] = await Promise.all([
-                    apiCall(`/student-registration/students/${studentId}/enrollments?academic_year=${currentAcademicYear}`),
-                    apiCall(`/courses/by-category/${currentAcademicYear}`)
-                ]);
+                const timeoutMs = 15000;
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-                const student = selectedStudentInfo;
-
-                // Create modal popup
-                const modal = document.createElement('div');
-                modal.id = 'course-management-modal';
-                modal.className = 'modal-overlay';
-                modal.onclick = function (e) {
-                    if (e.target === modal) {
-                        closeCourseManagementModal();
+                const fetchWithAuth = async (url) => {
+                    const res = await fetch(`${API_BASE_URL}${url}`, {
+                        signal: controller.signal,
+                        headers: {
+                            'Authorization': `Bearer ${authToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        throw new Error(err.message || `HTTP ${res.status}: ${res.statusText}`);
                     }
+                    return res.json();
                 };
-                modal.innerHTML = `
-                    <div class="modal-content modal-large">
-                        <div class="modal-header">
-                            <h2>Manage Learning Areas - ${student.first_name} ${student.last_name}</h2>
-                            <button onclick="closeCourseManagementModal()" class="modal-close">&times;</button>
+
+                let currentEnrollments, pathways;
+                try {
+                    [currentEnrollments, pathways] = await Promise.all([
+                        fetchWithAuth(`/student-registration/students/${studentId}/enrollments?academic_year=${encodeURIComponent(currentAcademicYear)}`),
+                        fetchWithAuth('/student-registration/pathways')
+                    ]);
+                } catch (fetchErr) {
+                    clearTimeout(timeoutId);
+                    const msg = fetchErr.name === 'AbortError' ? 'Request timed out. Check your connection and that the server is running.' : (fetchErr.message || 'Request failed');
+                    throw new Error(msg);
+                }
+                clearTimeout(timeoutId);
+
+                if (!Array.isArray(currentEnrollments)) currentEnrollments = [];
+                if (!Array.isArray(pathways)) pathways = [];
+
+                const pathwayOptions = pathways.length === 0
+                    ? '<p class="muted">No pathways found. Contact admin to set up pathways (e.g. Science, Arts, Social Sciences).</p>'
+                    : `
+                        <p style="margin-bottom: 1rem;">Select a pathway to enroll this student. This will enroll them in 4 core subjects plus 3 pathway electives (CBC curriculum).</p>
+                        <div class="pathway-selection" style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;">
+                            ${pathways.map(p => `
+                                <button type="button" class="btn-pathway" data-pathway-id="${p.id}" data-pathway-name="${(p.name || '').replace(/"/g, '&quot;')}" onclick="selectPathwayForEnroll(${p.id}, '${(p.name || '').replace(/'/g, "\\'")}')" style="padding: 0.75rem 1.25rem; border: 2px solid #ddd; border-radius: 8px; background: white; cursor: pointer; font-size: 1rem;">
+                                    ${p.name || p.code || 'Pathway ' + p.id}
+                                </button>
+                            `).join('')}
                         </div>
-                        <div class="modal-body">
+                        <div id="pathway-enroll-section" style="display: none; margin-top: 1rem; padding: 1rem; background: #e8f5e9; border: 2px solid #4caf50; border-radius: 8px;">
+                            <p style="margin: 0 0 0.5rem;"><strong>Selected pathway:</strong> <span id="selected-pathway-name"></span></p>
+                            <p style="margin: 0 0 1rem; font-size: 0.9rem;">Will enroll in 4 core + 3 pathway electives.</p>
+                            <button type="button" id="enroll-pathway-btn" class="btn-primary">Enroll in this pathway</button>
+                        </div>
+                    `;
+
+                modalBody.innerHTML = `
                             <div class="student-info-card" style="margin-bottom: 1.5rem;">
                                 <p><strong>Admission Number:</strong> ${student.admission_number || 'N/A'}</p>
-                                <p><strong>Pathway:</strong> ${student.pathway_name || 'Not assigned'}</p>
+                                <p><strong>Current Pathway:</strong> ${student.pathway_name || 'Not assigned'}</p>
                                 <p><strong>Term:</strong> ${currentTerm} ${currentAcademicYear}</p>
                             </div>
 
@@ -3005,45 +3358,74 @@
                                                     <strong>${enrollment.course_name}</strong> (${enrollment.course_code})
                                                     ${enrollment.teacher_first_name ? `<br><small>Teacher: ${enrollment.teacher_first_name} ${enrollment.teacher_last_name}</small>` : ''}
                                                 </div>
-                                                <button onclick="removeEnrollment(${enrollment.id})" class="btn-danger btn-small">Remove</button>
+                                                <button type="button" onclick="removeEnrollment(${enrollment.id})" class="btn-danger btn-small">Remove</button>
                                             </div>
                                         `).join('')}
                                     </div>
                                 `}
                             </div>
 
-                            <div class="courses-by-category">
-                                <h3>Available Learning Areas - Select to Add</h3>
-                                ${renderCoursesByCategory(coursesByCategory, currentEnrollments)}
+                            <div class="pathway-enroll-section" style="margin-top: 1.5rem;">
+                                <h3>Enroll by Pathway</h3>
+                                ${pathwayOptions}
                             </div>
-
-                            <div id="save-enrollments-section" style="margin-top: 2rem; padding: 1.5rem; background: #e3f2fd; border: 2px solid #2196f3; border-radius: 8px; display: none; position: sticky; bottom: 0; z-index: 100;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                                    <p style="margin: 0; font-size: 1.1rem;"><strong>Selected: <span id="selected-count" style="color: #1976d2; font-size: 1.2rem; font-weight: bold;">0</span> learning area(s)</strong></p>
-                                </div>
-                                <div style="display: flex; gap: 0.5rem;">
-                                    <button id="save-enrollments-btn" onclick="saveSelectedEnrollments()" class="btn-primary" style="padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: bold;">Save Enrollments</button>
-                                    <button onclick="clearPendingSelections()" class="btn-secondary" style="padding: 0.75rem 1.5rem;">Clear Selection</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 `;
 
-                document.body.appendChild(modal);
-                updateSaveButton();
-
-                // Close on Escape key
-                const escapeHandler = (e) => {
-                    if (e.key === 'Escape') {
-                        closeCourseManagementModal();
-                        document.removeEventListener('keydown', escapeHandler);
-                    }
-                };
-                document.addEventListener('keydown', escapeHandler);
+                const enrollPathwayBtn = document.getElementById('enroll-pathway-btn');
+                if (enrollPathwayBtn) {
+                    enrollPathwayBtn.addEventListener('click', () => enrollStudentInPathway(selectedPathwayIdForEnroll));
+                }
             } catch (error) {
-                showToast('Error loading course management: ' + error.message, 'error');
+                if (modalBody) {
+                    modalBody.innerHTML = '<p class="error">Error: ' + (error.message || 'Could not load') + '</p><p>Check that the server is running and you have selected a term. Close this and try again.</p><button type="button" onclick="closeCourseManagementModal()" class="btn-primary">Close</button>';
+                }
+                showToast('Error: ' + (error.message || 'Could not load course management'), 'error');
             }
+        }
+
+        function selectPathwayForEnroll(pathwayId, pathwayName) {
+            selectedPathwayIdForEnroll = pathwayId;
+            const section = document.getElementById('pathway-enroll-section');
+            const nameSpan = document.getElementById('selected-pathway-name');
+            if (section) section.style.display = 'block';
+            if (nameSpan) nameSpan.textContent = pathwayName || 'Pathway';
+            document.querySelectorAll('.pathway-selection .btn-pathway').forEach(btn => {
+                btn.style.borderColor = (parseInt(btn.getAttribute('data-pathway-id')) === pathwayId) ? '#2196f3' : '#ddd';
+                btn.style.background = (parseInt(btn.getAttribute('data-pathway-id')) === pathwayId) ? '#e3f2fd' : 'white';
+            });
+        }
+
+        async function enrollStudentInPathway(pathwayId) {
+            if (!selectedStudentId || !pathwayId) {
+                showToast('Please select a pathway first', 'error');
+                return;
+            }
+            const btn = document.getElementById('enroll-pathway-btn');
+            if (btn) { btn.disabled = true; btn.textContent = 'Enrolling...'; }
+            try {
+                const learningAreas = await apiCall(`/student-registration/learning-areas/${pathwayId}?academicYear=${encodeURIComponent(currentAcademicYear)}`);
+                const core = learningAreas.core || [];
+                const pathway = learningAreas.pathway || [];
+                const courseIds = [...core, ...pathway].map(la => la.course_id).filter(id => id != null && !isNaN(id));
+                if (courseIds.length === 0) {
+                    showToast('No courses found for this pathway. Ensure learning areas and courses are set up for this academic year.', 'error');
+                    if (btn) { btn.disabled = false; btn.textContent = 'Enroll in this pathway'; }
+                    return;
+                }
+                await apiCall(`/student-registration/enroll/${selectedStudentId}`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        course_ids: courseIds,
+                        term: currentTerm,
+                        academic_year: currentAcademicYear
+                    })
+                });
+                showToast(`Enrolled in ${courseIds.length} learning area(s) successfully!`, 'success');
+                await loadStudentCourseManagement(selectedStudentId);
+            } catch (err) {
+                showToast(err.message || 'Failed to enroll', 'error');
+            }
+            if (btn) { btn.disabled = false; btn.textContent = 'Enroll in this pathway'; }
         }
 
         function closeCourseManagementModal() {
@@ -3052,6 +3434,7 @@
                 modal.remove();
             }
             pendingCourseSelections.clear();
+            selectedPathwayIdForEnroll = null;
         }
 
         function clearPendingSelections() {
@@ -3084,7 +3467,7 @@
             ];
 
             return categories.map(category => {
-                if (category.courses.length === 0) return '';
+                if (!category.courses || !Array.isArray(category.courses) || category.courses.length === 0) return '';
 
                 return `
                     <div class="course-category">
@@ -3180,13 +3563,11 @@
                 return;
             }
 
-            const courseIds = Array.from(pendingCourseSelections);
-            console.log('Saving enrollments:', {
-                studentId: selectedStudentId,
-                courseIds: courseIds,
-                term: currentTerm,
-                academicYear: currentAcademicYear
-            });
+            const courseIds = Array.from(pendingCourseSelections).map(id => Number(id));
+            if (courseIds.some(isNaN)) {
+                showToast('Invalid course selection. Please try again.', 'error');
+                return;
+            }
 
             // Disable save button to prevent double submission
             const saveBtn = document.getElementById('save-enrollments-btn');
@@ -3198,6 +3579,7 @@
             try {
                 const result = await apiCall(`/student-registration/enroll/${selectedStudentId}`, {
                     method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         course_ids: courseIds,
                         term: currentTerm,
@@ -4488,7 +4870,9 @@
                     alert('Strand added successfully!');
                 }
                 // Reload the view to show the new strand
-                if (window.viewLearningAreaSubstrands) {
+                if (typeof refreshSubstrandsView === 'function') {
+                    refreshSubstrandsView(learningAreaId, learningAreaName);
+                } else if (window.viewLearningAreaSubstrands) {
                     window.viewLearningAreaSubstrands(learningAreaId, learningAreaName);
                 } else {
                     console.warn('viewLearningAreaSubstrands not found, reloading page');
@@ -4653,7 +5037,8 @@
                 window.closeAddSubstrandModal();
                 showToast('Sub-strand added successfully!', 'success');
                 // Reload the view to show the new sub-strand
-                window.viewLearningAreaSubstrands(learningAreaId, learningAreaName);
+                if (typeof refreshSubstrandsView === 'function') refreshSubstrandsView(learningAreaId, learningAreaName);
+                else if (window.viewLearningAreaSubstrands) window.viewLearningAreaSubstrands(learningAreaId, learningAreaName);
             } catch (error) {
                 console.error('Error adding sub-strand:', error);
                 if (typeof showToast === 'function') showToast('Error: ' + (error.message || 'Failed to add sub-strand'), 'error');
@@ -4687,16 +5072,19 @@
                     return;
                 }
                 
-                // Try to find strand - make comparison more robust
-                const normalizedSearchCode = String(strandCode).trim();
-                const strand = strands.find(s => {
+                // Try to find strand by code first, then by name (so Learning Modules works when display code differs from API code)
+                const normalizedSearchCode = String(strandCode || '').trim();
+                let strand = strands.find(s => {
                     const sCode = String(s.strand_code || '').trim();
                     return sCode === normalizedSearchCode || 
                            sCode.toLowerCase() === normalizedSearchCode.toLowerCase() ||
-                           sCode === strandCode || // Also try direct comparison
-                           String(s.strand_code) === String(strandCode); // Type-agnostic comparison
+                           String(s.strand_code) === String(strandCode);
                 });
-                
+                const strandNameOptional = arguments[4];
+                if (!strand && strandNameOptional && String(strandNameOptional).trim()) {
+                    const nameNorm = (n) => String(n || '').trim().toLowerCase();
+                    strand = strands.find(s => nameNorm(s.strand_name) === nameNorm(strandNameOptional));
+                }
                 if (!strand) {
                     console.error('Strand not found. Available strands:', strands.map(s => ({ 
                         code: s.strand_code, 
@@ -4709,6 +5097,7 @@
                     return;
                 }
                 
+                const actualStrandCode = strand.strand_code;
                 const substrand = strand.sub_strands?.find(ss => {
                     const ssCode = String(ss.sub_strand_code || '').trim();
                     const searchCode = String(subStrandCode || '').trim();
@@ -4722,7 +5111,8 @@
                     return;
                 }
                 
-                // Show edit modal (reuse create form but pre-fill)
+                const escCode = (c) => String(c || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                // Show edit modal (reuse create form but pre-fill); use actualStrandCode for API
                 const modal = document.createElement('div');
                 modal.id = 'edit-substrand-modal';
                 modal.className = 'modal-overlay';
@@ -4739,7 +5129,7 @@
                             <button onclick="closeEditSubstrandModal()" class="modal-close">&times;</button>
                         </div>
                         <div class="modal-body">
-                            <form id="edit-substrand-form" onsubmit="saveEditedSubstrand(event, ${learningAreaId}, '${strandCode}', '${subStrandCode}')">
+                            <form id="edit-substrand-form" onsubmit="saveEditedSubstrand(event, ${learningAreaId}, '${escCode(actualStrandCode)}', '${escCode(substrand.sub_strand_code)}')">
                                 <div class="form-group">
                                     <label>Sub-strand Code *</label>
                                     <input type="text" name="sub_strand_code" value="${String(substrand.sub_strand_code || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}" required>
@@ -4852,7 +5242,8 @@
                 
                 alert('Sub-strand updated successfully!');
                 closeEditSubstrandModal();
-                window.viewLearningAreaSubstrands(learningAreaId, 'Learning Area');
+                if (typeof refreshSubstrandsView === 'function') refreshSubstrandsView(learningAreaId, learningAreaName || 'Learning Area');
+                else window.viewLearningAreaSubstrands(learningAreaId, 'Learning Area');
             } catch (error) {
                 console.error('Error updating sub-strand:', error);
                 if (typeof showToast === 'function') showToast('Error: ' + (error.message || 'Failed to update sub-strand'), 'error');
@@ -4888,7 +5279,8 @@
                 });
                 
                 showToast('Sub-strand deleted successfully!', 'success');
-                window.viewLearningAreaSubstrands(learningAreaId, learningAreaName);
+                if (typeof refreshSubstrandsView === 'function') refreshSubstrandsView(learningAreaId, learningAreaName);
+                else if (window.viewLearningAreaSubstrands) window.viewLearningAreaSubstrands(learningAreaId, learningAreaName);
             } catch (error) {
                 console.error('Error deleting sub-strand:', error);
                 if (typeof showToast === 'function') showToast('Error: ' + (error.message || 'Failed to delete sub-strand'), 'error');
@@ -4900,29 +5292,37 @@
         window.deleteSubstrand = deleteSubstrand;
         window.editSubstrand = editSubstrand;
 
-        window.editStrand = async function(learningAreaId, strandCode, learningAreaName) {
-            if (!strandCode || strandCode === 'null' || strandCode === 'undefined') {
-                alert('Error: Strand code is missing. Please refresh the page.');
+        window.editStrand = async function(learningAreaId, strandCode, learningAreaName, strandNameOptional) {
+            const codeOrName = (strandCode && strandCode !== 'null' && strandCode !== 'undefined') || (strandNameOptional && String(strandNameOptional).trim());
+            if (!codeOrName) {
+                alert('Error: Strand code or name is missing. Please refresh the page.');
                 return;
             }
             try {
                 const strandData = await apiCall(`/substrands/learning-area/${learningAreaId}`);
-                const strand = (strandData.strands || []).find(s => String(s.strand_code || '').trim() === String(strandCode).trim());
+                const list = strandData.strands || [];
+                let strand = list.find(s => String(s.strand_code || '').trim() === String(strandCode || '').trim());
+                if (!strand && strandNameOptional && String(strandNameOptional).trim()) {
+                    const nameNorm = (n) => String(n || '').trim().toLowerCase();
+                    strand = list.find(s => nameNorm(s.strand_name) === nameNorm(strandNameOptional));
+                }
                 if (!strand) {
                     if (typeof showToast === 'function') showToast('Strand not found.', 'error');
                     else alert('Strand not found.');
                     return;
                 }
-                const newCode = prompt('Strand code:', strand.strand_code) || strand.strand_code;
+                const actualCode = strand.strand_code;
+                const newCode = prompt('Strand code:', actualCode) || actualCode;
                 const newName = prompt('Strand name:', strand.strand_name) || strand.strand_name;
                 if (!newCode || !newName) return;
-                await apiCall(`/substrands/learning-area/${learningAreaId}/strand/${encodeURIComponent(strandCode)}`, {
+                await apiCall(`/substrands/learning-area/${learningAreaId}/strand/${encodeURIComponent(actualCode)}`, {
                     method: 'PUT',
                     body: JSON.stringify({ strand_code: newCode, strand_name: newName })
                 });
                 if (typeof showToast === 'function') showToast('Strand updated successfully!', 'success');
                 else alert('Strand updated successfully!');
-                viewLearningAreaSubstrands(learningAreaId, learningAreaName);
+                if (typeof refreshSubstrandsView === 'function') refreshSubstrandsView(learningAreaId, learningAreaName);
+                else viewLearningAreaSubstrands(learningAreaId, learningAreaName);
             } catch (e) {
                 if (typeof showToast === 'function') showToast('Error: ' + (e.message || 'Failed to update strand'), 'error');
                 else alert('Error: ' + (e.message || 'Failed to update strand'));
@@ -4939,7 +5339,8 @@
                 await apiCall(`/substrands/learning-area/${learningAreaId}/strand/${encodeURIComponent(strandCode)}`, { method: 'DELETE' });
                 if (typeof showToast === 'function') showToast('Strand deleted successfully!', 'success');
                 else alert('Strand deleted successfully!');
-                viewLearningAreaSubstrands(learningAreaId, learningAreaName);
+                if (typeof refreshSubstrandsView === 'function') refreshSubstrandsView(learningAreaId, learningAreaName);
+                else viewLearningAreaSubstrands(learningAreaId, learningAreaName);
             } catch (e) {
                 if (typeof showToast === 'function') showToast('Error: ' + (e.message || 'Failed to delete strand'), 'error');
                 else alert('Error: ' + (e.message || 'Failed to delete strand'));
@@ -4965,8 +5366,100 @@
         }
 
         function showAddUserForm() {
-            alert('Add user feature coming soon!');
-            // TODO: Implement add user form
+            const existing = document.getElementById('add-user-modal');
+            if (existing) existing.remove();
+            const modal = document.createElement('div');
+            modal.id = 'add-user-modal';
+            modal.className = 'modal-overlay';
+            modal.style.cssText = 'display: flex; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99999; background: rgba(0,0,0,0.5); align-items: center; justify-content: center;';
+            modal.onclick = function(e) { if (e.target === modal) closeAddUserModal(); };
+            modal.innerHTML = `
+                <div class="modal-content" style="background: white; padding: 2rem; border-radius: 8px; max-width: 28rem; width: 90%; max-height: 90vh; overflow-y: auto;" onclick="event.stopPropagation();">
+                    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <h2>Add User</h2>
+                        <button type="button" onclick="closeAddUserModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+                    </div>
+                    <form id="add-user-form" onsubmit="submitAddUser(event)">
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label>First Name *</label>
+                            <input type="text" name="first_name" required class="premium-input" style="width: 100%;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label>Last Name *</label>
+                            <input type="text" name="last_name" required class="premium-input" style="width: 100%;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label>Username *</label>
+                            <input type="text" name="username" required class="premium-input" style="width: 100%;" autocomplete="username">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label>Email *</label>
+                            <input type="email" name="email" required class="premium-input" style="width: 100%;" autocomplete="email">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label>Password *</label>
+                            <input type="password" name="password" required minlength="6" class="premium-input" style="width: 100%;" autocomplete="new-password" placeholder="Min 6 characters">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label>Role *</label>
+                            <select name="role" required class="premium-input" style="width: 100%;">
+                                <option value="">Select role</option>
+                                <option value="superadmin">Superadmin</option>
+                                <option value="headteacher">Headteacher</option>
+                                <option value="deputy_headteacher">Deputy Headteacher</option>
+                                <option value="finance">Finance</option>
+                                <option value="teacher">Teacher</option>
+                                <option value="student">Student</option>
+                                <option value="parent">Parent</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1.5rem;">
+                            <label>Phone</label>
+                            <input type="text" name="phone" class="premium-input" style="width: 100%;" placeholder="Optional">
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                            <button type="button" onclick="closeAddUserModal()" class="btn-secondary">Cancel</button>
+                            <button type="submit" class="btn-primary">Add User</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function closeAddUserModal() {
+            const modal = document.getElementById('add-user-modal');
+            if (modal) modal.remove();
+        }
+
+        async function submitAddUser(e) {
+            e.preventDefault();
+            const form = document.getElementById('add-user-form');
+            if (!form) return;
+            const btn = form.querySelector('button[type="submit"]');
+            const origText = btn ? btn.textContent : 'Add User';
+            if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+            try {
+                const data = {
+                    first_name: (form.querySelector('[name="first_name"]')?.value || '').trim(),
+                    last_name: (form.querySelector('[name="last_name"]')?.value || '').trim(),
+                    username: (form.querySelector('[name="username"]')?.value || '').trim(),
+                    email: (form.querySelector('[name="email"]')?.value || '').trim(),
+                    password: form.querySelector('[name="password"]')?.value || '',
+                    role: form.querySelector('[name="role"]')?.value || '',
+                    phone: (form.querySelector('[name="phone"]')?.value || '').trim() || null
+                };
+                await apiCall('/admin/users', { method: 'POST', body: JSON.stringify(data) });
+                closeAddUserModal();
+                showToast('User added successfully', 'success');
+                loadUsers(currentUserPage, currentUserFilters);
+            } catch (err) {
+                const msg = err.response?.message || err.message || 'Failed to add user';
+                showToast(msg, 'error');
+                console.error('Add user error:', err);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = origText; }
+            }
         }
 
         // Parent: Load children
