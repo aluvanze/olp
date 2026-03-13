@@ -117,6 +117,18 @@ Use **Option 1** if you don't mind the repo being public. Use **Option 2** if th
 
 ---
 
+### Run new migrations (if any)
+
+After pulling new code, run any new migration files on your database:
+
+```bash
+psql -U your_db_user -d olp -f migrations/011_add_student_guardian_grade.sql
+```
+
+This adds guardian phone fields and grade to learner profiles for the headteacher Add Student flow.
+
+---
+
 ### Checklist for `/var/www/olp`
 
 - [ ] Backed up `.env` (e.g. to `/tmp/olp.env.backup`)

@@ -6,9 +6,155 @@ const bcrypt = require('bcryptjs');
 const router = express.Router();
 router.use(authenticate);
 
+// Add Student - simplified flow for headteachers (School ID = primary identifier)
+router.post('/add-student', authorize('headteacher', 'deputy_headteacher', 'superadmin'), async (req, res) => {
+  try {
+    const body = req.body || {};
+    const {
+      school_id,
+      admission_number,
+      first_name,
+      last_name,
+      email,
+      guardian_phone,
+      guardian_phone_2,
+      grade_level_id
+    } = body;
+
+    const sid = (school_id || admission_number || '').toString().trim();
+    const fn = (first_name || '').toString().trim();
+    const ln = (last_name || '').toString().trim();
+    const em = (email || '').toString().trim();
+    const gradeVal = grade_level_id !== undefined && grade_level_id !== null && String(grade_level_id).trim() !== '';
+
+    const missing = [];
+    if (!sid) missing.push('School ID');
+    if (!fn) missing.push('First name');
+    if (!ln) missing.push('Last name');
+    if (!em) missing.push('Email');
+    if (!gradeVal) missing.push('Grade');
+    if (missing.length > 0) {
+      return res.status(400).json({ message: 'Missing: ' + missing.join(', ') });
+    }
+
+    const schoolIdStr = sid;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Check School ID (admission_number) is unique
+      const existing = await client.query(
+        'SELECT id FROM learner_profiles WHERE admission_number = $1',
+        [schoolIdStr]
+      );
+      if (existing.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: `A student with School ID "${schoolIdStr}" already exists` });
+      }
+
+      // Get school_id (schools table) from registering user
+      const schoolResult = await client.query(
+        'SELECT school_id FROM users WHERE id = $1',
+        [req.user.id]
+      );
+      const schoolOrgId = schoolResult.rows[0]?.school_id || null;
+
+      // Username: first letter of first name + last name. Email from form.
+      const userEmail = em;
+      const emailCheck = await client.query('SELECT id FROM users WHERE email = $1', [userEmail]);
+      if (emailCheck.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'This email is already in use. Use a different email.' });
+      }
+      const firstLetter = fn.charAt(0).toLowerCase() || 's';
+      const lastPart = (ln || '').toLowerCase().replace(/[^a-z0-9]/g, '') || 'student';
+      let username = firstLetter + lastPart;
+      let suffix = 0;
+      let usernameCheck = await client.query('SELECT id FROM users WHERE username = $1', [username]);
+      while (usernameCheck.rows.length > 0) {
+        suffix++;
+        username = firstLetter + lastPart + suffix;
+        usernameCheck = await client.query('SELECT id FROM users WHERE username = $1', [username]);
+      }
+      const tempPassword = '123456.ab';
+      const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+      // Create user
+      const userResult = await client.query(
+        `INSERT INTO users (username, email, password_hash, first_name, last_name, role, is_active)
+         VALUES ($1, $2, $3, $4, $5, 'student', true)
+         RETURNING id`,
+        [username, userEmail, passwordHash, fn, ln]
+      );
+      const userId = userResult.rows[0].id;
+
+      // Create learner_profile with School ID, guardian phones, grade
+      const gPhone = guardian_phone ? String(guardian_phone).trim() || null : null;
+      const gPhone2 = guardian_phone_2 ? String(guardian_phone_2).trim() || null : null;
+      const gradeId = parseInt(grade_level_id, 10);
+
+      await client.query(
+        `INSERT INTO learner_profiles (user_id, school_id, admission_number, guardian_phone, guardian_phone_2, grade_level_id)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [userId, schoolOrgId, schoolIdStr, gPhone, gPhone2, gradeId || null]
+      );
+
+      await client.query('COMMIT');
+
+      res.status(201).json({
+        message: 'Student added successfully. Use School ID for identification.',
+        student: {
+          school_id: schoolIdStr,
+          first_name: first_name.trim(),
+          last_name: last_name.trim(),
+          guardian_phone: gPhone,
+          guardian_phone_2: gPhone2,
+          grade_level_id: gradeId || null
+        },
+        credentials: {
+          username,
+          temp_password: tempPassword,
+          note: 'Share these credentials for first login. User should change password.'
+        }
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Add student error:', error);
+    res.status(500).json({
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Get grade levels for Add Student form
+router.get('/grade-levels', authorize('headteacher', 'deputy_headteacher', 'superadmin', 'teacher'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, grade_number, name FROM grade_levels WHERE is_active = true ORDER BY grade_number'
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get grade levels error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Register a new student and enroll in courses for a term
+// Also handles "Add Student" flow when school_id + grade_level_id sent without username/email/password
 router.post('/', authorize('teacher', 'headteacher', 'deputy_headteacher', 'superadmin'), async (req, res) => {
   try {
+    const body = req.body || {};
+    const isAddStudentHeader = req.get('X-Add-Student') === 'true';
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[POST /student-registration] body keys:', Object.keys(body), 'grade_level_id:', body.grade_level_id, 'school_id:', body.school_id, 'X-Add-Student:', isAddStudentHeader);
+    }
     const { 
       username, 
       email, 
@@ -16,16 +162,106 @@ router.post('/', authorize('teacher', 'headteacher', 'deputy_headteacher', 'supe
       first_name, 
       last_name, 
       admission_number,
+      school_id,
       term,
       academic_year,
       course_ids, // Array of course IDs to enroll in
       parent_email, // Optional parent email
-      parent_name // Optional parent name
-    } = req.body;
+      parent_name, // Optional parent name
+      guardian_phone,
+      guardian_phone_2,
+      grade_level_id
+    } = body;
 
-    // Validate required fields
-    if (!username || !email || !password || !first_name || !last_name || !term || !academic_year) {
-      return res.status(400).json({ message: 'Missing required fields' });
+    // Add Student flow: X-Add-Student header OR has school_id+first_name+last_name+email without username+password
+    const sid = (school_id || admission_number || '').toString().trim();
+    const fn = (first_name || '').toString().trim();
+    const ln = (last_name || '').toString().trim();
+    const em = (email || '').toString().trim();
+    const hasAddStudentFields = sid && fn && ln && em;
+    const hasFullRegFields = username && password;
+    const gradeVal = grade_level_id !== undefined && grade_level_id !== null && String(grade_level_id).trim() !== '';
+    const isAddStudentFlow = isAddStudentHeader || (hasAddStudentFields && !hasFullRegFields);
+    if (isAddStudentFlow) {
+      const missing = [];
+      if (!sid) missing.push('School ID');
+      if (!fn) missing.push('First name');
+      if (!ln) missing.push('Last name');
+      if (!em) missing.push('Email');
+      if (!gradeVal) missing.push('Grade');
+      if (missing.length > 0) return res.status(400).json({ message: 'Missing: ' + missing.join(', ') });
+      const schoolIdStr = sid;
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const existing = await client.query('SELECT id FROM learner_profiles WHERE admission_number = $1', [schoolIdStr]);
+        if (existing.rows.length > 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: `A student with School ID "${schoolIdStr}" already exists` });
+        }
+        const schoolResult = await client.query('SELECT school_id FROM users WHERE id = $1', [req.user.id]);
+        const schoolOrgId = schoolResult.rows[0]?.school_id || null;
+        const userEmail = em;
+        if (!userEmail) return res.status(400).json({ message: 'Email is required' });
+        const emailCheck = await client.query('SELECT id FROM users WHERE email = $1', [userEmail]);
+        if (emailCheck.rows.length > 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'This email is already in use. Please use a different email.' });
+        }
+        const firstName = fn;
+        const lastName = ln;
+        const firstLetter = firstName.charAt(0).toLowerCase() || 's';
+        const lastPart = (lastName || '').toLowerCase().replace(/[^a-z0-9]/g, '') || 'student';
+        let autoUsername = firstLetter + lastPart;
+        let suffix = 0;
+        let usernameCheck = await client.query('SELECT id FROM users WHERE username = $1', [autoUsername]);
+        while (usernameCheck.rows.length > 0) {
+          suffix++;
+          autoUsername = firstLetter + lastPart + suffix;
+          usernameCheck = await client.query('SELECT id FROM users WHERE username = $1', [autoUsername]);
+        }
+        const tempPassword = '123456.ab';
+        const passwordHash = await bcrypt.hash(tempPassword, 10);
+        const userResult = await client.query(
+          `INSERT INTO users (username, email, password_hash, first_name, last_name, role, is_active) VALUES ($1, $2, $3, $4, $5, 'student', true) RETURNING id`,
+          [autoUsername, userEmail, passwordHash, firstName, lastName]
+        );
+        const userId = userResult.rows[0].id;
+        const gPhone = guardian_phone ? String(guardian_phone).trim() || null : null;
+        const gPhone2 = guardian_phone_2 ? String(guardian_phone_2).trim() || null : null;
+        const gradeId = parseInt(grade_level_id, 10) || null;
+        await client.query(
+          `INSERT INTO learner_profiles (user_id, school_id, admission_number, guardian_phone, guardian_phone_2, grade_level_id) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [userId, schoolOrgId, schoolIdStr, gPhone, gPhone2, gradeId]
+        );
+        await client.query('COMMIT');
+        return res.status(201).json({
+          message: 'Student added successfully. Use School ID for identification.',
+          student: { school_id: schoolIdStr, first_name: (first_name || '').trim(), last_name: (last_name || '').trim(), guardian_phone: gPhone, guardian_phone_2: gPhone2, grade_level_id: gradeId },
+          academic_year: academic_year || null,
+          term: term || null,
+          credentials: { username: autoUsername, temp_password: tempPassword, note: 'Share these credentials for first login.' }
+        });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    }
+
+    // Full registration flow
+    // Validate required fields and specify which are missing
+    const fullRegMissing = [];
+    if (!username) fullRegMissing.push('username');
+    if (!email) fullRegMissing.push('email');
+    if (!password) fullRegMissing.push('password');
+    if (!first_name) fullRegMissing.push('first name');
+    if (!last_name) fullRegMissing.push('last name');
+    if (!term) fullRegMissing.push('term');
+    if (!academic_year) fullRegMissing.push('academic year');
+    if (fullRegMissing.length > 0) {
+      return res.status(400).json({ message: 'Missing: ' + fullRegMissing.join(', ') });
     }
 
     if (!course_ids || course_ids.length === 0) {
@@ -170,11 +406,12 @@ router.get('/students', authorize('teacher', 'headteacher', 'deputy_headteacher'
     
     let query = `
       SELECT u.id, u.username, u.email, u.first_name, u.last_name, u.is_active,
-             lp.id as learner_id, lp.admission_number, lp.school_id, lp.pathway_id,
-             p.name as pathway_name
+             lp.id as learner_id, lp.admission_number, lp.school_id, lp.pathway_id, lp.guardian_phone, lp.guardian_phone_2, lp.grade_level_id,
+             p.name as pathway_name, gl.name as grade_name
       FROM users u
       LEFT JOIN learner_profiles lp ON u.id = lp.user_id
       LEFT JOIN pathways p ON lp.pathway_id = p.id
+      LEFT JOIN grade_levels gl ON lp.grade_level_id = gl.id
       WHERE u.role = 'student'
     `;
     const params = [];

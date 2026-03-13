@@ -86,7 +86,7 @@ router.get('/', async (req, res) => {
           NULL as teacher_first_name,
           NULL as teacher_last_name
          FROM learning_areas la
-         WHERE (la.is_active = true OR la.is_active IS NULL)
+         WHERE 1=1
       `;
       
       const laParams = [];

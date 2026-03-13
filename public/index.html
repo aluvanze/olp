@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grade 10 OLP System - Online Learner Progress Monitor</title>
+    <title>Senior School OLP System - Online Learner Progress Monitor</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="styles-premium-enhancements.css">
 </head>
@@ -18,7 +18,7 @@
                         <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='42' r='22' fill='%23f3f4f6'/%3E%3Cellipse cx='50' cy='92' rx='32' ry='22' fill='%23f3f4f6'/%3E%3C/svg%3E" alt="Student" class="student-photo" id="studentPhoto" loading="eager" fetchpriority="high">
                     </div>
                     <div class="login-branding">
-                        <h1 class="brand-title">Grade 10 OLP System</h1>
+                        <h1 class="brand-title">Senior School OLP System</h1>
                         <h2 class="brand-subtitle">Online Learner Progress Monitor</h2>
                         <p class="brand-tagline">Unlocking Academic Gates For Future Excellence</p>
                         <p class="brand-description">Competency-Based Curriculum (CBC) Senior School Management Platform
@@ -200,12 +200,25 @@
                         'Authorization': `Bearer ${authToken}`
                     }
                 });
-                if (response.ok) {
-                    currentUser = await response.json();
-                    showDashboard();
-                } else {
+                if (!response.ok) {
                     localStorage.removeItem('authToken');
                     authToken = null;
+                    return;
+                }
+
+                currentUser = await response.json();
+
+                // If no grade has been selected yet, show grade selection first
+                if (!currentUser.current_grade) {
+                    try {
+                        const grades = await apiCall('/auth/grades');
+                        showGradeSelection(grades);
+                    } catch (gradesError) {
+                        console.error('Load grades error:', gradesError);
+                        showDashboard();
+                    }
+                } else {
+                    showDashboard();
                 }
             } catch (error) {
                 console.error('Auth check error:', error);
@@ -248,7 +261,14 @@
                     currentUser = data.user;
                     localStorage.setItem('authToken', authToken);
                     errorDiv.textContent = '';
-                    showDashboard();
+
+                    // If backend says grade selection is required and grades are available, show selector
+                    if (data.requires_grade_selection && Array.isArray(data.available_grades) && data.available_grades.length > 0) {
+                        showGradeSelection(data.available_grades);
+                    } else {
+                        // Fallback: go straight to dashboard
+                        showDashboard();
+                    }
                 } else {
                     errorDiv.textContent = data.message || 'Login failed';
                     console.error('Login error:', data);
@@ -298,6 +318,100 @@
                 'empty': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`
             };
             return icons[iconName] || icons['empty'];
+        }
+
+        // Grade selection screen (shown after login, before dashboard)
+        function showGradeSelection(grades) {
+            const gradeList = Array.isArray(grades) ? grades : [];
+            const rightPanel = document.querySelector('.login-right-panel');
+
+            // If we're still on the login layout (left image + right card), just swap the right side content
+            if (rightPanel) {
+                rightPanel.innerHTML = `
+                    <div class="login-form-container">
+                        <h2 class="login-title">Select Grade / Module</h2>
+                        <p class="login-subtitle">Choose the grade you want to work with (for example, Grade 10). You can change grade later by signing out and back in.</p>
+
+                        ${gradeList.length === 0 ? `
+                            <div class="premium-form-section" style="margin-top: 1.5rem;">
+                                <p class="error-message" style="margin:0;">No grades are configured in the system. Ask your administrator to set up grade levels.</p>
+                            </div>
+                        ` : `
+                            <div class="premium-form-section" style="margin-top: 1.5rem;">
+                                <div class="grade-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem;">
+                                    ${gradeList.map(g => `
+                                        <button 
+                                            type="button"
+                                            onclick="handleGradeSelection(${g.id})"
+                                            class="btn-primary"
+                                            style="width: 100%; padding-block: 0.75rem;">
+                                            <span style="font-weight: 700; display:block;">Grade ${g.grade_number}</span>
+                                            ${g.name && g.name.toLowerCase() !== ('grade ' + g.grade_number).toLowerCase() ? `<span style="opacity: 0.9; font-size: 0.9rem; display:block;">${g.name}</span>` : ''}
+                                        </button>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `}
+
+                        <button type="button" onclick="logout()" class="btn-secondary" style="margin-top: 1rem; width: auto;">Sign out</button>
+                    </div>
+                `;
+                return;
+            }
+
+            // Fallback: if login layout is not present (rare), keep behavior simple
+            const root = document.getElementById('root');
+            if (!root) return;
+            root.innerHTML = `
+                <div class="login-container">
+                    <div class="login-right-panel">
+                        <div class="login-form-container">
+                            <h2 class="login-title">Select Grade / Module</h2>
+                            <p class="login-subtitle">Choose the grade you want to work with.</p>
+                            <div class="premium-form-section" style="margin-top: 1.5rem;">
+                                ${gradeList.length === 0 ? `
+                                    <p class="error-message" style="margin:0;">No grades are configured in the system. Ask your administrator to set up grade levels.</p>
+                                ` : `
+                                    <div class="grade-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem;">
+                                        ${gradeList.map(g => `
+                                            <button 
+                                                type="button"
+                                                onclick="handleGradeSelection(${g.id})"
+                                                class="btn-primary"
+                                                style="width: 100%; padding-block: 0.75rem;">
+                                                <span style="font-weight: 700; margin-right: 0.25rem;">Grade ${g.grade_number}</span>
+                                                ${g.name ? `<span style="opacity: 0.9;">${g.name}</span>` : ''}
+                                            </button>
+                                        `).join('')}
+                                    </div>
+                                `}
+                            </div>
+                            <button type="button" onclick="logout()" class="btn-secondary" style="margin-top: 1rem; width: auto;">Sign out</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function handleGradeSelection(gradeId) {
+            if (!gradeId) return;
+            try {
+                const result = await apiCall('/auth/select-grade', {
+                    method: 'POST',
+                    body: JSON.stringify({ grade_id: gradeId })
+                });
+                if (!result || !result.token) {
+                    showToast('Could not finalize grade selection. Please try again.', 'error');
+                    return;
+                }
+                authToken = result.token;
+                localStorage.setItem('authToken', authToken);
+                // Refresh user profile with new grade info and then show dashboard
+                await checkAuth();
+            } catch (error) {
+                console.error('Grade selection error:', error);
+                showToast(error.message || 'Failed to select grade. Please try again.', 'error');
+            }
         }
 
         // Helper function to get icon for navigation item (backward compatibility)
@@ -401,7 +515,7 @@
                     <aside class="mobile-sidebar" id="mobileSidebar">
                         <div class="sidebar-header">
                             <div class="sidebar-logo" onclick="loadView('dashboard'); toggleSidebar();" style="cursor: pointer;" role="button" tabindex="0" onkeypress="if(event.key==='Enter') {loadView('dashboard'); toggleSidebar();}">
-                                <span class="logo-text">Grade 10 OLP</span>
+                                <span class="logo-text">Senior School OLP</span>
                             </div>
                             <button class="sidebar-close-btn" onclick="toggleSidebar(); event.stopPropagation();" aria-label="Close sidebar">
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -443,8 +557,8 @@
                                     </svg>
                                 </button>
                                 <div class="system-logo-small" onclick="loadView('dashboard')" style="cursor: pointer;" role="button" tabindex="0" onkeypress="if(event.key==='Enter') loadView('dashboard')">
-                                    <span class="logo-text">Grade 10 OLP</span>
-                            </div>
+                                    <span class="logo-text">Senior School OLP</span>
+                                </div>
                                 <nav class="main-nav">
                         ${navButtons}
                     </nav>
@@ -1003,7 +1117,7 @@
                                             <tr>
                                                 <th>Name</th>
                                                 <th>Email</th>
-                                                <th>Admission Number</th>
+                                                <th>School ID</th>
                                                 <th>Enrollment Date</th>
                                             </tr>
                                         </thead>
@@ -2205,9 +2319,9 @@
                     </div>
                     <div class="modal-body">
                         <div class="form-group" style="margin-bottom: 1rem;">
-                            <label>Add by Admission Number</label>
+                            <label>Add by School ID</label>
                             <div style="display: flex; gap: 0.5rem;">
-                                <input type="text" id="enroll-admission-number" class="premium-input" placeholder="Enter admission number" autocomplete="off" style="flex: 1;">
+                                <input type="text" id="enroll-admission-number" class="premium-input" placeholder="Enter School ID" autocomplete="off" style="flex: 1;">
                                 <button type="button" onclick="searchStudentByAdmissionForEnroll()" class="btn-primary">Add</button>
                             </div>
                         </div>
@@ -2270,13 +2384,13 @@
             if (!input || !resultsDiv) return;
             const admissionNumber = input.value.trim();
             if (!admissionNumber) {
-                showToast('Please enter an admission number', 'error');
+                showToast('Please enter a School ID', 'error');
                 return;
             }
             try {
                 const students = await apiCall(`/student-registration/students?admission_number=${encodeURIComponent(admissionNumber)}`);
                 if (students.length === 0) {
-                    resultsDiv.innerHTML = '<p class="error">No student found with this admission number.</p>';
+                    resultsDiv.innerHTML = '<p class="error">No student found with this School ID.</p>';
                     return;
                 }
                 const s = students[0];
@@ -3145,28 +3259,153 @@
                     <div class="view-header-content">
                     <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
                         <h1 class="view-title">Assign Learning Areas to Students</h1>
-                        <p class="view-subtitle">Manage student course enrollment for Term ${currentTerm} ${currentAcademicYear}</p>
+                        <p class="view-subtitle">Manage student course enrollment for Term ${currentTerm || ''} ${currentAcademicYear || ''}</p>
                     </div>
                 </div>
                 
+                ${(currentUser?.role === 'headteacher' || currentUser?.role === 'deputy_headteacher' || currentUser?.role === 'superadmin') ? `
+                <div class="add-student-section premium-form-section" style="margin-bottom: 1.5rem; padding: 1.25rem; background: #e8f5e9; border: 2px solid #4caf50; border-radius: 8px;">
+                    <div class="section-header">
+                        <h2 class="section-title" style="margin-top: 0;">Add New Student</h2>
+                        <p class="section-description">Register a new student here. Use School ID (school's identification number) as primary identifier.</p>
+                    </div>
+                    <button type="button" onclick="toggleAddStudentForm()" class="btn-primary" id="add-student-toggle-btn" style="font-size: 1rem; padding: 0.6rem 1.2rem;">+ Add New Student</button>
+                    <div id="add-student-form" style="display: none; margin-top: 1rem; padding: 1.5rem; background: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6;">
+                        <form id="addStudentForm" action="javascript:void(0)" onsubmit="submitAddStudent(event); return false;">
+                            <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                <div class="form-group">
+                                    <label>School ID * <small>(Primary identifier - school's student number)</small></label>
+                                    <input type="text" name="school_id" required placeholder="e.g. 2024-001">
+                                </div>
+                                <div class="form-group">
+                                    <label>Grade *</label>
+                                    <select name="grade_level_id" required id="add-student-grade-select">
+                                        <option value="">Select grade</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                <div class="form-group">
+                                    <label>First Name *</label>
+                                    <input type="text" name="first_name" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Last Name *</label>
+                                    <input type="text" name="last_name" required>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Email *</label>
+                                <input type="email" name="email" required placeholder="e.g. student@example.com">
+                            </div>
+                            <p class="muted" style="margin: -0.5rem 0 1rem; font-size: 0.9rem;">Username will be auto-generated (first letter of first name + last name). Academic year comes from your current term.</p>
+                            <h4 style="margin: 1rem 0 0.5rem;">Guardian / Parent Contact</h4>
+                            <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                <div class="form-group">
+                                    <label>Guardian Phone 1</label>
+                                    <input type="tel" name="guardian_phone" placeholder="Primary contact">
+                                </div>
+                                <div class="form-group">
+                                    <label>Guardian Phone 2</label>
+                                    <input type="tel" name="guardian_phone_2" placeholder="Secondary contact">
+                                </div>
+                            </div>
+                            <div class="form-actions" style="margin-top: 1rem;">
+                                <button type="submit" class="btn-primary">Add Student</button>
+                                <button type="button" onclick="toggleAddStudentForm()" class="btn-secondary">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                ` : ''}
                 <div class="student-search-section premium-form-section">
                     <div class="section-header">
                         <h2 class="section-title">Search Student</h2>
-                        <p class="section-description">Find a student by admission number to manage their course enrollment</p>
+                        <p class="section-description">Find a student by School ID to manage their course enrollment</p>
                     </div>
                     <div class="premium-search-form">
                     <div class="form-group">
-                        <label>Admission Number *</label>
+                        <label>School ID *</label>
                             <div class="search-input-group">
-                                <input type="text" id="admission-number-search" class="premium-input" placeholder="Enter admission number" autocomplete="off">
+                                <input type="text" id="admission-number-search" class="premium-input" placeholder="Enter School ID (admission number)" autocomplete="off">
                                 <button onclick="searchStudentByAdmission()" class="btn-primary premium-search-btn">Search</button>
                         </div>
                     </div>
                     </div>
                     <div id="student-search-results" class="search-results-container"></div>
                 </div>
-                
+                <div id="course-management-panel"></div>
             `;
+            if (currentUser?.role === 'headteacher' || currentUser?.role === 'deputy_headteacher' || currentUser?.role === 'superadmin') {
+                loadGradeLevelsForAddStudent();
+            }
+        }
+
+        async function loadGradeLevelsForAddStudent() {
+            const sel = document.getElementById('add-student-grade-select');
+            if (!sel) return;
+            if (sel.options.length > 1) return;
+            try {
+                let grades = await apiCall('/auth/grades');
+                if (!Array.isArray(grades)) grades = await apiCall('/student-registration/grade-levels');
+                if (!Array.isArray(grades) || grades.length === 0) return;
+                grades.forEach(g => {
+                    const opt = document.createElement('option');
+                    opt.value = g.id;
+                    opt.textContent = (g.name || ('Grade ' + (g.grade_number ?? g.id))).trim();
+                    sel.appendChild(opt);
+                });
+            } catch (e) { console.warn('Could not load grade levels:', e); }
+        }
+
+        function toggleAddStudentForm() {
+            const form = document.getElementById('add-student-form');
+            const btn = document.getElementById('add-student-toggle-btn');
+            if (!form || !btn) return;
+            const show = form.style.display === 'none';
+            form.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? '− Hide Add Student' : '+ Add New Student';
+            if (show) loadGradeLevelsForAddStudent();
+        }
+
+        async function submitAddStudent(event) {
+            event.preventDefault();
+            const form = document.getElementById('addStudentForm');
+            if (!form) return;
+            const fd = new FormData(form);
+            const gradeVal = fd.get('grade_level_id');
+            const data = {
+                school_id: fd.get('school_id')?.trim(),
+                first_name: fd.get('first_name')?.trim(),
+                last_name: fd.get('last_name')?.trim(),
+                email: fd.get('email')?.trim(),
+                guardian_phone: fd.get('guardian_phone')?.trim() || undefined,
+                guardian_phone_2: fd.get('guardian_phone_2')?.trim() || undefined,
+                grade_level_id: (gradeVal && String(gradeVal).trim()) ? gradeVal : undefined,
+                academic_year: (typeof currentAcademicYear !== 'undefined' && currentAcademicYear) ? currentAcademicYear : undefined,
+                term: (typeof currentTerm !== 'undefined' && currentTerm) ? currentTerm : undefined
+            };
+            if (!data.school_id || !data.first_name || !data.last_name || !data.grade_level_id || !data.email) {
+                showToast('Please fill in School ID, First Name, Last Name, Email, and Grade.', 'error');
+                return;
+            }
+            try {
+                const result = await apiCall('/student-registration/add-student', {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+                showToast('Student added successfully. School ID: ' + (result?.student?.school_id || data.school_id), 'success');
+                if (result?.credentials) {
+                    showToast('Username: ' + result.credentials.username + ' | Temp password: ' + result.credentials.temp_password + ' (share for first login)', 'success');
+                }
+                form.reset();
+                toggleAddStudentForm();
+            } catch (err) {
+                const resp = err.response || {};
+                const msg = resp.message || err.message || 'Failed to add student';
+                showToast(msg, 'error');
+                console.warn('Add Student failed:', msg, 'Response:', resp);
+            }
         }
 
         let selectedStudentId = null;
@@ -3174,17 +3413,25 @@
         let pendingCourseSelections = new Set(); // Track selected courses before saving
         let selectedPathwayIdForEnroll = null;
 
-        // Delegated click: Manage Courses button works even if inline handlers are blocked
-        document.addEventListener('click', function manageCoursesDelegated(e) {
-            const btn = e.target && e.target.closest && e.target.closest('#manage-courses-btn, [data-action="manage-courses"]');
+        // Extra safety: delegated click handler so Manage Courses works even if inline onclick is blocked
+        document.addEventListener('click', function handleManageCoursesClick(e) {
+            let target = e.target;
+            if (target && target.nodeType !== 1) target = target.parentElement;
+            const btn = target && target.closest ? target.closest('#manage-courses-btn') : null;
             if (!btn) return;
-            const resultsDiv = document.getElementById('student-search-results');
-            if (!resultsDiv || !resultsDiv.contains(btn)) return;
-            const studentId = btn.getAttribute('data-student-id') || selectedStudentId;
-            if (studentId != null) {
-                e.preventDefault();
-                e.stopPropagation();
-                loadStudentCourseManagement(typeof studentId === 'string' ? parseInt(studentId, 10) : studentId);
+            e.preventDefault();
+            e.stopPropagation();
+            const idAttr = btn.getAttribute('data-student-id');
+            const studentId = idAttr ? parseInt(idAttr, 10) : selectedStudentId;
+            if (!studentId || Number.isNaN(studentId)) {
+                showToast('Could not determine student. Please search again.', 'error');
+                return;
+            }
+            try {
+                loadStudentCourseManagement(studentId);
+            } catch (err) {
+                console.error('Manage Courses click error:', err);
+                showToast(err.message || 'Could not open Manage Courses', 'error');
             }
         }, true);
 
@@ -3192,7 +3439,7 @@
             const admissionNumber = document.getElementById('admission-number-search').value.trim();
 
             if (!admissionNumber) {
-                showToast('Please enter an admission number', 'error');
+                showToast('Please enter a School ID', 'error');
                 return;
             }
 
@@ -3201,7 +3448,7 @@
                 const resultsDiv = document.getElementById('student-search-results');
 
                 if (students.length === 0) {
-                    resultsDiv.innerHTML = '<div class="error">No student found with this admission number.</div><div style="margin-top: 1rem; padding: 1rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;"><strong>Tip:</strong> If this is a new student, use the "Register New Student" tab to create their account first.</div>';
+                    resultsDiv.innerHTML = '<div class="error">No student found with this School ID.</div><div style="margin-top: 1rem; padding: 1rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;"><strong>Tip:</strong> If this is a new student, use "Add Student" above to create their account first.</div>';
                     return;
                 }
 
@@ -3211,20 +3458,13 @@
 
                 resultsDiv.innerHTML = `
                     <div class="success-message">
-                        <p><strong>Student Found:</strong> ${student.first_name} ${student.last_name}</p>
+                        <p><strong>Student Found:</strong> ${student.first_name} ${student.last_name} <span style="font-weight:600;">(School ID: ${student.admission_number || 'N/A'})</span></p>
                         <p>Username: ${student.username} | Email: ${student.email}</p>
-                        ${student.pathway_name ? `<p>Pathway: ${student.pathway_name}</p>` : ''}
-                        <button type="button" id="manage-courses-btn" class="btn-primary" data-student-id="${student.id}">Manage Courses</button>
+                        ${student.grade_name ? `<p>Grade: ${student.grade_name}</p>` : ''}
+                        ${student.pathway_name ? `<p>Current Pathway: ${student.pathway_name}</p>` : ''}
+                        <button type="button" id="manage-courses-btn" class="btn-primary" data-student-id="${student.id}" onclick="loadStudentCourseManagement(${student.id})">Manage Courses</button>
                     </div>
                 `;
-                const manageBtn = resultsDiv.querySelector('#manage-courses-btn');
-                if (manageBtn) {
-                    manageBtn.addEventListener('click', function (ev) {
-                        ev.preventDefault();
-                        ev.stopPropagation();
-                        loadStudentCourseManagement(student.id);
-                    });
-                }
             } catch (error) {
                 document.getElementById('student-search-results').innerHTML = `<div class="error">Error: ${error.message}</div>`;
             }
@@ -3250,40 +3490,25 @@
                 return;
             }
 
-            // Show modal IMMEDIATELY so user sees popup right away
-            const modal = document.createElement('div');
-            modal.id = 'course-management-modal';
-            modal.className = 'modal-overlay';
-            modal.style.cssText = 'display: flex !important; position: fixed !important; top: 0; left: 0; right: 0; bottom: 0; z-index: 99999; background: rgba(0,0,0,0.5); align-items: center; justify-content: center;';
-            modal.onclick = function (e) {
-                if (e.target === modal) closeCourseManagementModal();
-            };
-            modal.innerHTML = `
-                <div class="modal-content modal-large" style="background: white; padding: 2rem; border-radius: 8px; max-width: 90%; max-height: 90vh; overflow-y: auto;" onclick="event.stopPropagation();">
-                    <div class="modal-header">
-                        <h2>Manage Learning Areas - ${student.first_name} ${student.last_name}</h2>
-                        <button type="button" class="modal-close" title="Close" aria-label="Close">&times;</button>
+            // Render inline management panel instead of full-screen modal
+            const panel = document.getElementById('course-management-panel');
+            if (!panel) {
+                console.error('course-management-panel not found');
+                return;
+            }
+            panel.innerHTML = `
+                <div class="premium-form-section" style="margin-top: 1.5rem;">
+                    <div class="section-header">
+                        <h2 class="section-title">Manage Learning Areas - ${student.first_name} ${student.last_name}</h2>
+                        <p class="section-description">View current enrollments and assign a learning pathway.</p>
                     </div>
-                    <div class="modal-body" id="course-management-modal-body">
+                    <div id="course-management-panel-body">
                         <p>Loading courses and enrollments...</p>
-                        <button type="button" class="btn-secondary course-modal-cancel" style="margin-top: 1rem;">Cancel</button>
                     </div>
                 </div>
             `;
-            modal.querySelector('.modal-close').addEventListener('click', closeCourseManagementModal);
-            modal.querySelector('.course-modal-cancel').addEventListener('click', closeCourseManagementModal);
-            document.body.appendChild(modal);
-            // Ensure modal paints before blocking on API
-            await new Promise(r => setTimeout(r, 0));
 
-            const modalBody = document.getElementById('course-management-modal-body');
-            const escapeHandler = (e) => {
-                if (e.key === 'Escape') {
-                    closeCourseManagementModal();
-                    document.removeEventListener('keydown', escapeHandler);
-                }
-            };
-            document.addEventListener('keydown', escapeHandler);
+            const modalBody = document.getElementById('course-management-panel-body');
 
             try {
                 const timeoutMs = 15000;
@@ -3341,7 +3566,7 @@
 
                 modalBody.innerHTML = `
                             <div class="student-info-card" style="margin-bottom: 1.5rem;">
-                                <p><strong>Admission Number:</strong> ${student.admission_number || 'N/A'}</p>
+                                <p><strong>School ID:</strong> ${student.admission_number || 'N/A'}</p>
                                 <p><strong>Current Pathway:</strong> ${student.pathway_name || 'Not assigned'}</p>
                                 <p><strong>Term:</strong> ${currentTerm} ${currentAcademicYear}</p>
                             </div>
@@ -3376,8 +3601,9 @@
                     enrollPathwayBtn.addEventListener('click', () => enrollStudentInPathway(selectedPathwayIdForEnroll));
                 }
             } catch (error) {
+                console.error('loadStudentCourseManagement error:', error);
                 if (modalBody) {
-                    modalBody.innerHTML = '<p class="error">Error: ' + (error.message || 'Could not load') + '</p><p>Check that the server is running and you have selected a term. Close this and try again.</p><button type="button" onclick="closeCourseManagementModal()" class="btn-primary">Close</button>';
+                    modalBody.innerHTML = '<p class="error">Error: ' + (error.message || 'Could not load') + '</p><p>Check that the server is running and you have selected a term. Try again.</p>';
                 }
                 showToast('Error: ' + (error.message || 'Could not load course management'), 'error');
             }
@@ -3428,10 +3654,11 @@
             if (btn) { btn.disabled = false; btn.textContent = 'Enroll in this pathway'; }
         }
 
+
         function closeCourseManagementModal() {
-            const modal = document.getElementById('course-management-modal');
-            if (modal) {
-                modal.remove();
+            const panel = document.getElementById('course-management-panel');
+            if (panel) {
+                panel.innerHTML = '';
             }
             pendingCourseSelections.clear();
             selectedPathwayIdForEnroll = null;
@@ -3699,8 +3926,8 @@
                             <input type="password" name="password" required minlength="6">
                         </div>
                         <div class="form-group">
-                            <label>Admission Number</label>
-                            <input type="text" name="admission_number" placeholder="Optional">
+                            <label>School ID * <small>(Primary identifier - school's student number)</small></label>
+                            <input type="text" name="admission_number" required placeholder="e.g. 2024-001">
                         </div>
                         
                         <h3>Parent Information (Optional)</h3>
@@ -3766,7 +3993,7 @@
                         <h3>Select Student</h3>
                         <div class="form-group">
                             <label>Search Student</label>
-                            <input type="text" id="student-search" placeholder="Search by name, username, or admission number" onkeyup="searchStudents()">
+                            <input type="text" id="student-search" placeholder="Search by name, username, or School ID" onkeyup="searchStudents()">
                             <div id="student-results" class="student-results"></div>
                         </div>
                         
@@ -3884,7 +4111,7 @@
                             ${students.map(student => `
                                 <div class="student-item" onclick="selectStudent(${student.id}, '${student.first_name}', '${student.last_name}', '${student.admission_number || ''}')">
                                     <strong>${student.first_name} ${student.last_name}</strong>
-                                    ${student.admission_number ? `<br><small>Admission: ${student.admission_number}</small>` : ''}
+                                    ${student.admission_number ? `<br><small>School ID: ${student.admission_number}</small>` : ''}
                                     <br><small>Username: ${student.username}</small>
                                 </div>
                             `).join('')}
@@ -3900,7 +4127,7 @@
             document.getElementById('selected-student-id').value = studentId;
             document.getElementById('selected-student-info').innerHTML = `
                 <p><strong>${firstName} ${lastName}</strong></p>
-                ${admissionNumber ? `<p>Admission Number: ${admissionNumber}</p>` : ''}
+                ${admissionNumber ? `<p>School ID: ${admissionNumber}</p>` : ''}
             `;
             document.getElementById('selected-student').style.display = 'block';
             document.getElementById('student-results').innerHTML = '';
@@ -5476,6 +5703,13 @@
                         <p>No children linked to your account.</p>
                     </div>
                 `;
+
+                // Load pathways for quick assignment directly from this screen
+                try {
+                    await loadPathwayOptionsForStudent(student.id);
+                } catch (loadErr) {
+                    console.error('Load pathways for student error:', loadErr);
+                }
                 return;
             }
 
