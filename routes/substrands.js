@@ -25,7 +25,7 @@ router.use(authenticate);
 
 // Get all learning areas with their substrands (for admin management)
 router.get('/learning-areas', 
-  authorize('teacher', 'headteacher', 'deputy_headteacher', 'superadmin'),
+  authorize('headteacher', 'deputy_headteacher', 'superadmin'),
   async (req, res) => {
     try {
       const result = await pool.query(
@@ -126,7 +126,7 @@ router.get('/learning-area/:id', async (req, res) => {
 
 // Add strand to a learning area
 router.post('/learning-area/:learningAreaId/strand',
-  authorize('teacher', 'headteacher', 'deputy_headteacher', 'superadmin'),
+  authorize('headteacher', 'deputy_headteacher', 'superadmin'),
   async (req, res) => {
     try {
       console.log('=== POST /learning-area/:learningAreaId/strand ===');
@@ -212,7 +212,7 @@ router.post('/learning-area/:learningAreaId/strand',
 
 // Update strand
 router.put('/learning-area/:learningAreaId/strand/:strandCode',
-  authorize('teacher', 'headteacher', 'deputy_headteacher', 'superadmin'),
+  authorize('headteacher', 'deputy_headteacher', 'superadmin'),
   async (req, res) => {
     try {
       const { learningAreaId, strandCode } = req.params;
@@ -280,7 +280,7 @@ router.put('/learning-area/:learningAreaId/strand/:strandCode',
 
 // Delete strand
 router.delete('/learning-area/:learningAreaId/strand/:strandCode',
-  authorize('teacher', 'headteacher', 'deputy_headteacher', 'superadmin'),
+  authorize('headteacher', 'deputy_headteacher', 'superadmin'),
   async (req, res) => {
     try {
       const { learningAreaId, strandCode } = req.params;
@@ -333,7 +333,7 @@ router.delete('/learning-area/:learningAreaId/strand/:strandCode',
 
 // Add sub-strand to a learning area
 router.post('/learning-area/:learningAreaId/strand/:strandCode/substrand', 
-  authorize('teacher', 'headteacher', 'deputy_headteacher', 'superadmin'),
+  authorize('headteacher', 'deputy_headteacher', 'superadmin'),
   async (req, res) => {
     try {
       const { learningAreaId, strandCode } = req.params;
@@ -399,7 +399,7 @@ router.post('/learning-area/:learningAreaId/strand/:strandCode/substrand',
 
 // Update sub-strand
 router.put('/learning-area/:learningAreaId/strand/:strandCode/substrand/:subStrandCode',
-  authorize('teacher', 'headteacher', 'deputy_headteacher', 'superadmin'),
+  authorize('headteacher', 'deputy_headteacher', 'superadmin'),
   async (req, res) => {
     try {
       const { learningAreaId, strandCode, subStrandCode } = req.params;
@@ -470,7 +470,7 @@ router.put('/learning-area/:learningAreaId/strand/:strandCode/substrand/:subStra
 
 // Delete sub-strand
 router.delete('/learning-area/:learningAreaId/strand/:strandCode/substrand/:subStrandCode',
-  authorize('teacher', 'headteacher', 'deputy_headteacher', 'superadmin'),
+  authorize('headteacher', 'deputy_headteacher', 'superadmin'),
   async (req, res) => {
     try {
       const { learningAreaId, strandCode, subStrandCode } = req.params;
@@ -528,7 +528,7 @@ router.delete('/learning-area/:learningAreaId/strand/:strandCode/substrand/:subS
 // Import strands and sub-strands from Excel file
 // Expected columns: Strand (e.g. "1.0 Crop Production"), Sub-strand (e.g. "1.1 Agricultural Land"), Rubrics
 router.post('/learning-area/:learningAreaId/import-excel',
-  authorize('teacher', 'headteacher', 'deputy_headteacher', 'superadmin'),
+  authorize('headteacher', 'deputy_headteacher', 'superadmin'),
   upload.single('file'),
   async (req, res) => {
     try {

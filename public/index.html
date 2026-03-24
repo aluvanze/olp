@@ -419,6 +419,7 @@
             const iconMap = {
                 'dashboard': 'dashboard',
                 'messages': 'messages',
+                'rate-teachers': 'grades',
                 'register-student': 'register-student',
                 'admin-dashboard': 'admin-dashboard',
                 'manage-terms': 'manage-terms',
@@ -453,21 +454,21 @@
             if (role === 'student') {
                 navButtons = `
                     <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
+                    <button onclick="loadView('rate-teachers')" class="nav-btn">Rate Teachers</button>
                     <button onclick="loadView('result-slips')" class="nav-btn">Result Slips</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
                 sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) + 
+                                createSidebarButton('rate-teachers', 'Rate Teachers') +
                                 createSidebarButton('result-slips', 'Result Slips') + 
                                 createSidebarButton('messages', 'Messages');
             } else if (role === 'teacher') {
                 navButtons = `
                     <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
-                    <button onclick="loadView('manage-substrands')" class="nav-btn">Manage Sub-strands</button>
                     <button onclick="loadView('register-student')" class="nav-btn">Register Student</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
                 sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) +
-                    createSidebarButton('manage-substrands', 'Manage Sub-strands') +
                     createSidebarButton('register-student', 'Register Student') +
                     createSidebarButton('messages', 'Messages');
             } else if (role === 'headteacher' || role === 'deputy_headteacher' || role === 'superadmin' || role === 'finance') {
@@ -500,10 +501,10 @@
                     createSidebarButton('messages', 'Messages');
             } else {
                 navButtons = `
-                    <button onclick="loadView('courses')" class="nav-btn">Courses</button>
+                    <button onclick="loadView('courses')" class="nav-btn">Learning Areas</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
-                sidebarButtons = createSidebarButton('courses', 'Courses') + createSidebarButton('messages', 'Messages');
+                sidebarButtons = createSidebarButton('courses', 'Learning Areas') + createSidebarButton('messages', 'Messages');
             }
 
             root.innerHTML = `
@@ -651,6 +652,9 @@
                     case 'courses':
                         await loadCourses();
                         break;
+                    case 'rate-teachers':
+                        await loadRateTeachers();
+                        break;
                     case 'modules':
                         await loadModules();
                         break;
@@ -719,6 +723,9 @@
                         await loadRegisterStudent();
                         break;
                     case 'manage-substrands':
+                        if (!['headteacher', 'deputy_headteacher', 'superadmin'].includes(currentUser.role)) {
+                            throw new Error('Only admin users can manage sub-strands.');
+                        }
                         await loadManageSubstrands();
                         break;
 
@@ -783,7 +790,7 @@
             const content = document.getElementById('dashboardContent');
             content.innerHTML = `
                 <div class="view-header">
-                    <h2>My Courses</h2>
+                    <h2>My Learning Areas</h2>
                 </div>
                 <div class="courses-grid">
                     ${courses.map(course => `
@@ -793,11 +800,73 @@
                             <p>${course.description || ''}</p>
                             <p><strong>Teacher:</strong> ${course.teacher_first_name || ''} ${course.teacher_last_name || ''}</p>
                             <p><strong>Enrolled Students:</strong> ${course.enrolled_students || 0}</p>
-                            <button onclick="viewCourse(${course.id})" class="btn-view">View Course</button>
+                            <button onclick="viewCourse(${course.id})" class="btn-view">View Learning Area</button>
                         </div>
                     `).join('')}
                 </div>
             `;
+        }
+
+        async function loadRateTeachers() {
+            const content = document.getElementById('dashboardContent');
+            const teachers = await apiCall('/teacher-ratings/teachers');
+            const grouped = {};
+            teachers.forEach(t => {
+                if (!grouped[t.teacher_id]) grouped[t.teacher_id] = { ...t, learningAreas: [] };
+                grouped[t.teacher_id].learningAreas.push(`${t.course_name} (${t.course_code})`);
+            });
+            const list = Object.values(grouped);
+            content.innerHTML = `
+                <div class="view-header">
+                    <h2>Rate Teachers</h2>
+                </div>
+                ${list.length === 0 ? `<div class="welcome-message"><p>No teachers available to rate yet.</p></div>` : `
+                    <div class="courses-grid">
+                        ${list.map(t => `
+                            <div class="course-card">
+                                <h3>${t.teacher_first_name} ${t.teacher_last_name}</h3>
+                                <p><strong>Learning Areas:</strong> ${t.learningAreas.join(', ')}</p>
+                                <p><strong>Your Rating:</strong> ${t.rating || '-'}</p>
+                                <div class="form-group">
+                                    <label>Rating (1-5)</label>
+                                    <select id="rating-${t.teacher_id}">
+                                        <option value="">Select rating</option>
+                                        <option value="1" ${t.rating == 1 ? 'selected' : ''}>1</option>
+                                        <option value="2" ${t.rating == 2 ? 'selected' : ''}>2</option>
+                                        <option value="3" ${t.rating == 3 ? 'selected' : ''}>3</option>
+                                        <option value="4" ${t.rating == 4 ? 'selected' : ''}>4</option>
+                                        <option value="5" ${t.rating == 5 ? 'selected' : ''}>5</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Comment</label>
+                                    <textarea id="comment-${t.teacher_id}" rows="2" placeholder="Optional">${t.comments || ''}</textarea>
+                                </div>
+                                <button class="btn-primary" onclick="submitTeacherRating(${t.teacher_id})">Submit Rating</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                `}
+            `;
+        }
+
+        async function submitTeacherRating(teacherId) {
+            const rating = document.getElementById(`rating-${teacherId}`)?.value;
+            const comments = document.getElementById(`comment-${teacherId}`)?.value || '';
+            if (!rating) {
+                showToast('Please select a rating (1-5).', 'error');
+                return;
+            }
+            try {
+                await apiCall('/teacher-ratings', {
+                    method: 'POST',
+                    body: JSON.stringify({ teacher_id: teacherId, rating: parseInt(rating, 10), comments })
+                });
+                showToast('Teacher rated successfully.', 'success');
+                await loadRateTeachers();
+            } catch (error) {
+                showToast(error.message || 'Could not submit rating', 'error');
+            }
         }
 
         async function viewCourse(courseId) {
@@ -862,7 +931,7 @@
                     <div class="course-header-section">
                         <div class="course-header-content">
                             <div class="course-header-left">
-                                <button onclick="(function() { try { if (currentTerm && currentAcademicYear) { loadTermCourses(); } else { loadView('term-courses'); } } catch(e) { loadView('term-courses'); } })()" class="btn-back"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg> Back to Courses</button>
+                                <button onclick="(function() { try { if (currentTerm && currentAcademicYear) { loadTermCourses(); } else { loadView('term-courses'); } } catch(e) { loadView('term-courses'); } })()" class="btn-back"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg> Back to Learning Areas</button>
                                 <div class="course-title-group">
                                     <h1 class="course-title">${course.course_name}</h1>
                                     ${course.course_code ? `<span class="course-code-badge">${course.course_code}</span>` : ''}
@@ -1567,7 +1636,7 @@
                                         <div class="term-stats">
                                             <div class="term-stat-item">
                                                 <span class="term-stat-value">${term.course_count || 0}</span>
-                                                <span class="term-stat-label">Courses</span>
+                                                <span class="term-stat-label">Learning Areas</span>
                                             </div>
                                         </div>
                                     </div>
@@ -1692,7 +1761,7 @@
                             type="text" 
                             id="courseSearchInput" 
                             class="course-search-input" 
-                            placeholder="Search courses by name or code..." 
+                            placeholder="Search learning areas by name or code..."
                             autocomplete="off"
                         />
                         <button class="search-clear-btn" id="searchClearBtn" style="display: none;" onclick="clearCourseSearch()">
@@ -1809,7 +1878,7 @@
                             <path d="M24 44C35.0457 44 44 35.0457 44 24C44 12.9543 35.0457 4 24 4C12.9543 4 4 12.9543 4 24C4 35.0457 12.9543 44 24 44Z" stroke="currentColor" stroke-width="2"/>
                             <path d="M30 18L18 30M18 18L30 30" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
-                        <h3>No courses found</h3>
+                        <h3>No learning areas found</h3>
                         <p>Try adjusting your search terms</p>
                     </div>
                 `;
@@ -1875,7 +1944,7 @@
 
             content.innerHTML = `
                 <div class="view-header">
-                    <button onclick="loadTermCourses()" class="btn-back">← Back to Courses</button>
+                    <button onclick="loadTermCourses()" class="btn-back">← Back to Learning Areas</button>
                     <h2>${course.course_name} - ${termName}</h2>
                 </div>
                 
@@ -2334,7 +2403,7 @@
                         <div id="enroll-student-results" style="max-height: 16rem; overflow-y: auto; margin-top: 0.5rem;"></div>
                         <div id="enroll-student-selected" style="display: none; margin-top: 1rem; padding: 0.75rem; background: #e8f5e9; border-radius: 8px;">
                             <p style="margin: 0 0 0.5rem;"><strong>Selected:</strong> <span id="enroll-student-name"></span></p>
-                            <button type="button" id="enroll-student-confirm-btn" class="btn-primary">Enroll in this course</button>
+                            <button type="button" id="enroll-student-confirm-btn" class="btn-primary">Enroll in this learning area</button>
                         </div>
                     </div>
                 </div>
@@ -2396,7 +2465,7 @@
                 const s = students[0];
                 const displayName = (s.first_name || '') + ' ' + (s.last_name || '') + (s.admission_number ? ' (' + s.admission_number + ')' : '');
                 selectStudentForEnroll(s.id, displayName);
-                resultsDiv.innerHTML = '<p class="muted">Student found. Click &quot;Enroll in this course&quot; below to confirm.</p>';
+                resultsDiv.innerHTML = '<p class="muted">Student found. Click &quot;Enroll in this learning area&quot; below to confirm.</p>';
             } catch (e) {
                 resultsDiv.innerHTML = '<p class="error">Error: ' + (e.message || 'Search failed') + '</p>';
             }
@@ -2467,7 +2536,7 @@
                 showToast('Error: ' + (error.message || 'Could not enroll'), 'error');
                 if (btn) {
                     btn.disabled = false;
-                    btn.textContent = 'Enroll in this course';
+                    btn.textContent = 'Enroll in this learning area';
                 }
             }
         }
@@ -2702,7 +2771,7 @@
                     ${enrollments.map(enrollment => `
                         <div class="enrollment-card">
                             <h4>${enrollment.first_name} ${enrollment.last_name}</h4>
-                            <p><strong>Course:</strong> ${enrollment.course_name} (${enrollment.course_code})</p>
+                            <p><strong>Learning Area:</strong> ${enrollment.course_name} (${enrollment.course_code})</p>
                             <p><strong>Requested:</strong> ${new Date(enrollment.created_at).toLocaleDateString()}</p>
                             <div class="action-buttons">
                                 <button onclick="authorizeEnrollment(${enrollment.id}, 'approved')" class="btn-success">Approve</button>
@@ -3462,7 +3531,7 @@
                         <p>Username: ${student.username} | Email: ${student.email}</p>
                         ${student.grade_name ? `<p>Grade: ${student.grade_name}</p>` : ''}
                         ${student.pathway_name ? `<p>Current Pathway: ${student.pathway_name}</p>` : ''}
-                        <button type="button" id="manage-courses-btn" class="btn-primary" data-student-id="${student.id}" onclick="loadStudentCourseManagement(${student.id})">Manage Courses</button>
+                        <button type="button" id="manage-courses-btn" class="btn-primary" data-student-id="${student.id}" onclick="loadStudentCourseManagement(${student.id})">Manage Learning Areas</button>
                     </div>
                 `;
             } catch (error) {
@@ -3503,7 +3572,7 @@
                         <p class="section-description">View current enrollments and assign a learning pathway.</p>
                     </div>
                     <div id="course-management-panel-body">
-                        <p>Loading courses and enrollments...</p>
+                        <p>Loading learning areas and enrollments...</p>
                     </div>
                 </div>
             `;
@@ -4032,7 +4101,7 @@
                             <input type="hidden" name="academic_year" value="${currentAcademicYear}">
                             
                             <div class="form-actions">
-                                <button type="submit" class="btn-primary">Enroll in Courses</button>
+                                <button type="submit" class="btn-primary">Enroll in Learning Areas</button>
                                 <button type="button" onclick="clearStudentSelection()" class="btn-secondary">Clear Selection</button>
                             </div>
                         </div>
@@ -4212,7 +4281,7 @@
                         
                     <div class="stat-card">
                             <div class="stat-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></div>
-                        <h3>Courses</h3>
+                        <h3>Learning Areas</h3>
                             <div class="stat-value">${stats.courses?.total_courses || 0}</div>
                             <div class="stat-details">
                                 <div class="stat-detail-item">
@@ -4232,7 +4301,7 @@
                             <div class="stat-value">${stats.assignments?.total_assignments || 0}</div>
                             <div class="stat-details">
                                 <div class="stat-detail-item">
-                                    <span class="stat-label">Courses with Assignments:</span>
+                                    <span class="stat-label">Learning Areas with Assignments:</span>
                                     <span class="stat-number">${stats.assignments?.courses_with_assignments || 0}</span>
                     </div>
                             </div>
@@ -4269,7 +4338,7 @@
                         ` : ''}
                         <div class="action-card" onclick="loadView('all-courses')" style="cursor: pointer;">
                             <div class="action-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></div>
-                            <h4>All Courses</h4>
+                            <h4>All Learning Areas</h4>
                             <p>View and manage all courses</p>
                         </div>
                         <div class="action-card" onclick="loadView('teachers-overview')" style="cursor: pointer;">
@@ -4313,7 +4382,7 @@
                         <thead>
                             <tr>
                                 <th>Teacher</th>
-                                <th>Courses</th>
+                                <th>Learning Areas</th>
                                 <th>Students</th>
                                 <th>Assignments</th>
                                 <th>Grades Given</th>
@@ -4433,7 +4502,7 @@
             content.innerHTML = `
                 <div class="view-header">
                     <button onclick="loadView('${backView}')" class="btn-back"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg> Back</button>
-                    <h2>Allocate Courses to Teachers</h2>
+                    <h2>Allocate Learning Areas to Teachers</h2>
                 </div>
                 <div class="courses-grid">
                     ${courses.map(course => `
@@ -4479,7 +4548,7 @@
             content.innerHTML = `
                 <div class="view-header">
                     <button onclick="loadView('${backView}')" class="btn-back"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg> Back</button>
-                    <h2>All Courses</h2>
+                    <h2>All Learning Areas</h2>
                 </div>
                 <div class="courses-grid">
                     ${courses.map(course => `
