@@ -121,11 +121,15 @@ router.get('/course/:courseId/student/:studentId/summary', async (req, res) => {
           if (summative_end_percentage !== null) {
             cbc_final_score = (formative_average * 0.6) + (summative_end_percentage * 0.4);
           }
-          if (cbc_final_score >= 80) cbc_final_grade = 'A';
-          else if (cbc_final_score >= 70) cbc_final_grade = 'B';
-          else if (cbc_final_score >= 60) cbc_final_grade = 'C';
-          else if (cbc_final_score >= 50) cbc_final_grade = 'D';
-          else cbc_final_grade = 'E';
+          if (cbc_final_score >= 90) cbc_final_grade = 'EE1';
+          else if (cbc_final_score >= 75) cbc_final_grade = 'EE2';
+          else if (cbc_final_score >= 58) cbc_final_grade = 'ME1';
+          else if (cbc_final_score >= 41) cbc_final_grade = 'ME2';
+          else if (cbc_final_score >= 31) cbc_final_grade = 'AE1';
+          else if (cbc_final_score >= 21) cbc_final_grade = 'AE2';
+          else if (cbc_final_score >= 11) cbc_final_grade = 'BE1';
+          else if (cbc_final_score >= 1) cbc_final_grade = 'BE2';
+          else cbc_final_grade = '-';
         }
       }
     }
@@ -401,11 +405,15 @@ router.get('/course/:courseId/grading-center', authorize('teacher', 'headteacher
               if (summative_end_percentage !== null) {
                 cbc_final_score = (formative_average * 0.6) + (summative_end_percentage * 0.4);
               }
-              if (cbc_final_score >= 80) cbc_final_grade = 'A';
-              else if (cbc_final_score >= 70) cbc_final_grade = 'B';
-              else if (cbc_final_score >= 60) cbc_final_grade = 'C';
-              else if (cbc_final_score >= 50) cbc_final_grade = 'D';
-              else cbc_final_grade = 'E';
+              if (cbc_final_score >= 90) cbc_final_grade = 'EE1';
+              else if (cbc_final_score >= 75) cbc_final_grade = 'EE2';
+              else if (cbc_final_score >= 58) cbc_final_grade = 'ME1';
+              else if (cbc_final_score >= 41) cbc_final_grade = 'ME2';
+              else if (cbc_final_score >= 31) cbc_final_grade = 'AE1';
+              else if (cbc_final_score >= 21) cbc_final_grade = 'AE2';
+              else if (cbc_final_score >= 11) cbc_final_grade = 'BE1';
+              else if (cbc_final_score >= 1) cbc_final_grade = 'BE2';
+              else cbc_final_grade = '-';
             }
           }
         }

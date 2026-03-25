@@ -1294,13 +1294,17 @@
             }
         }
 
-        function cbcGradeFromPercentage(score) {
+        function expectationBandFromPercentage(score) {
             const s = Number(score || 0);
-            if (s >= 80) return 'A';
-            if (s >= 70) return 'B';
-            if (s >= 60) return 'C';
-            if (s >= 50) return 'D';
-            return 'E';
+            if (s >= 90) return { grade: 'EE1', points: 8 };
+            if (s >= 75) return { grade: 'EE2', points: 7 };
+            if (s >= 58) return { grade: 'ME1', points: 6 };
+            if (s >= 41) return { grade: 'ME2', points: 5 };
+            if (s >= 31) return { grade: 'AE1', points: 4 };
+            if (s >= 21) return { grade: 'AE2', points: 3 };
+            if (s >= 11) return { grade: 'BE1', points: 2 };
+            if (s >= 1) return { grade: 'BE2', points: 1 };
+            return { grade: '-', points: 0 };
         }
 
         async function loadAssessmentManagement() {
@@ -1497,16 +1501,17 @@
                                 </select>
                             </div>
                         </div>
-                        <p class="info">Enter percentage score (0-100). CBC grade is auto-assigned.</p>
+                        <p class="info">Enter percentage score (0-100). Grade and points are auto-assigned.</p>
                         <div style="overflow:auto;">
                             <table class="data-table">
-                                <thead><tr><th>Student</th><th>Score %</th><th>Grade</th></tr></thead>
+                                <thead><tr><th>Student</th><th>Score %</th><th>Grade</th><th>Points</th></tr></thead>
                                 <tbody>
                                     ${students.map(s => `
                                         <tr>
                                             <td>${s.first_name} ${s.last_name}</td>
-                                            <td><input class="sum-score" type="number" min="0" max="100" step="0.01" data-learner="${s.learner_id}" oninput="this.closest('tr').querySelector('.sum-grade').textContent = cbcGradeFromPercentage(this.value)"></td>
+                                            <td><input class="sum-score" type="number" min="0" max="100" step="0.01" data-learner="${s.learner_id}" oninput="(function(tr,val){ const eg = expectationBandFromPercentage(val); tr.querySelector('.sum-grade').textContent = eg.grade; tr.querySelector('.sum-points').textContent = String(eg.points || 0); })(this.closest('tr'), this.value)"></td>
                                             <td class="sum-grade">-</td>
+                                            <td class="sum-points">0</td>
                                         </tr>
                                     `).join('')}
                                 </tbody>
@@ -2268,16 +2273,17 @@
                                 <p><strong>Submitted:</strong> ${new Date(submission.submitted_at).toLocaleString()}</p>
                                 ${submission.submission_text ? `<p>${submission.submission_text}</p>` : ''}
                                 <p><strong>Status:</strong> ${escapeHtml(submission.status || '')}</p>
-                                ${assignmentGrade ? `
+                                ${assignmentGrade ? (() => { const eg = expectationBandFromPercentage(assignmentGrade.percentage); return `
                                     <div class="card" style="margin-top: 12px; padding: 12px;">
                                         <p style="margin:0 0 6px;"><strong>Marked:</strong>
                                             ${Number(assignmentGrade.points_earned).toFixed(2)} / ${Number(assignmentGrade.points_possible).toFixed(2)}
                                             (${assignmentGrade.percentage !== null && assignmentGrade.percentage !== undefined ? Number(assignmentGrade.percentage).toFixed(2) : '-'}%)
                                             ${assignmentGrade.letter_grade ? ` - <strong>${escapeHtml(assignmentGrade.letter_grade)}</strong>` : ''}
+                                            ${eg?.points ? ` - <strong>${Number(eg.points).toFixed(0)} pts</strong>` : ''}
                                         </p>
                                         ${assignmentGrade.comments ? `<p style="margin:0;"><strong>Feedback:</strong> ${escapeHtml(assignmentGrade.comments)}</p>` : ''}
                                     </div>
-                                ` : `<p class="muted" style="margin-top: 10px;">Not marked yet.</p>`}
+                                `; })() : `<p class="muted" style="margin-top: 10px;">Not marked yet.</p>`}
                             ` : `
                                 <form id="submitForm" onsubmit="submitAssignment(event, ${assignmentId})">
                                     <textarea name="submission_text" placeholder="Enter your submission text" rows="10"></textarea>
@@ -7980,6 +7986,7 @@
                                         <th>Summative 3</th>
                                         <th>Final Score</th>
                                         <th>Final Grade</th>
+                                        <th>Points</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -7988,6 +7995,7 @@
                                         const opener = summative.opener;
                                         const mid = summative.mid;
                                         const end = summative.end;
+                                        const eg = expectationBandFromPercentage(detail.final_score);
                                         
                                         return `
                                             <tr>
@@ -7998,6 +8006,7 @@
                                                 <td>${end ? parseFloat(end.percentage).toFixed(0) : '-'}</td>
                                                 <td class="final-score">${detail.final_score ? parseFloat(detail.final_score).toFixed(1) : '-'}</td>
                                                 <td class="final-grade">${detail.final_grade || '-'}</td>
+                                                <td>${eg?.points ? eg.points : '-'}</td>
                                             </tr>
                                         `;
                                     }).join('')}

@@ -5,12 +5,17 @@ const { authenticate, authorize } = require('../middleware/auth');
 const router = express.Router();
 router.use(authenticate);
 
-function cbcGradeFromScore(score) {
-  if (score >= 80) return 'A';
-  if (score >= 70) return 'B';
-  if (score >= 60) return 'C';
-  if (score >= 50) return 'D';
-  return 'E';
+function expectationGradeFromPercentage(score) {
+  const s = Number(score || 0);
+  if (s >= 90) return 'EE1';
+  if (s >= 75) return 'EE2';
+  if (s >= 58) return 'ME1';
+  if (s >= 41) return 'ME2';
+  if (s >= 31) return 'AE1';
+  if (s >= 21) return 'AE2';
+  if (s >= 11) return 'BE1';
+  if (s >= 1) return 'BE2';
+  return '-';
 }
 
 // Get formative entry context for a class/learning area
@@ -299,12 +304,8 @@ router.post('/summative/:assessmentId/results', authorize('teacher', 'headteache
         const { learner_id, score } = result;
         const percentage = (score / totalMarks) * 100;
         
-        // Assign grade based on percentage (CBC scale)
-        let grade = 'E';
-        if (percentage >= 80) grade = 'A';
-        else if (percentage >= 70) grade = 'B';
-        else if (percentage >= 60) grade = 'C';
-        else if (percentage >= 50) grade = 'D';
+        // Assign grade based on percentage (EE/ME/AE/BE scheme)
+        const grade = expectationGradeFromPercentage(percentage);
         
         const resultQuery = await client.query(
           `INSERT INTO summative_results 
@@ -402,17 +403,14 @@ router.post('/synthesize/:term/:academicYear', authorize('teacher', 'headteacher
           
           // Calculate final score (60% formative + 40% summative)
           let finalScore = averageFormativeScore;
-          let finalGrade = 'E';
+          let finalGrade = '-';
           
           if (summativePercentage !== null) {
             finalScore = (averageFormativeScore * 0.6) + (summativePercentage * 0.4);
           }
           
-          // Assign final grade
-          if (finalScore >= 80) finalGrade = 'A';
-          else if (finalScore >= 70) finalGrade = 'B';
-          else if (finalScore >= 60) finalGrade = 'C';
-          else if (finalScore >= 50) finalGrade = 'D';
+          // Assign final grade (EE/ME/AE/BE scheme)
+          finalGrade = expectationGradeFromPercentage(finalScore);
           
           // Insert or update result slip detail
           await client.query(
