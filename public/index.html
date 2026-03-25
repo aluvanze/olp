@@ -419,6 +419,8 @@
             const iconMap = {
                 'dashboard': 'dashboard',
                 'messages': 'messages',
+                'assessment-management': 'grades',
+                'classroom-tools': 'courses',
                 'rate-teachers': 'grades',
                 'register-student': 'register-student',
                 'admin-dashboard': 'admin-dashboard',
@@ -465,16 +467,21 @@
             } else if (role === 'teacher') {
                 navButtons = `
                     <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
+                    <button onclick="loadView('assessment-management')" class="nav-btn">Assessment Management</button>
+                    <button onclick="loadView('classroom-tools')" class="nav-btn">Classroom Tools</button>
                     <button onclick="loadView('register-student')" class="nav-btn">Register Student</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
                 sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) +
+                    createSidebarButton('assessment-management', 'Assessment Management') +
+                    createSidebarButton('classroom-tools', 'Classroom Tools') +
                     createSidebarButton('register-student', 'Register Student') +
                     createSidebarButton('messages', 'Messages');
             } else if (role === 'headteacher' || role === 'deputy_headteacher' || role === 'superadmin' || role === 'finance') {
                 navButtons = `
                     <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
                     ${role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher' ? `<button onclick="loadView('admin-dashboard')" class="nav-btn">System Overview</button>` : ''}
+                    ${role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher' ? `<button onclick="loadView('school-management')" class="nav-btn">School Management</button>` : ''}
                     <button onclick="loadView('manage-substrands')" class="nav-btn">Manage Sub-strands</button>
                     <button onclick="loadView('register-student')" class="nav-btn">Register Student</button>
                     ${role === 'superadmin' || role === 'headteacher' ? `<button onclick="loadView('manage-terms')" class="nav-btn">Manage Terms</button>` : ''}
@@ -483,6 +490,7 @@
                 `;
                 sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) +
                     (role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher' ? createSidebarButton('admin-dashboard', 'System Overview') : '') +
+                    (role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher' ? createSidebarButton('school-management', 'School Management') : '') +
                     createSidebarButton('manage-substrands', 'Manage Sub-strands') +
                     createSidebarButton('register-student', 'Register Student') +
                     (role === 'superadmin' || role === 'headteacher' ? createSidebarButton('manage-terms', 'Manage Terms') : '') +
@@ -490,14 +498,10 @@
                     createSidebarButton('messages', 'Messages');
             } else if (role === 'parent') {
                 navButtons = `
-                    <button onclick="loadView('children')" class="nav-btn">My Children</button>
-                    <button onclick="loadView('grades')" class="nav-btn">Grades</button>
-                    <button onclick="loadView('attendance')" class="nav-btn">Attendance</button>
+                    <button onclick="loadView('children')" class="nav-btn">Parent Dashboard</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
-                sidebarButtons = createSidebarButton('children', 'My Children') +
-                    createSidebarButton('grades', 'Grades') +
-                    createSidebarButton('attendance', 'Attendance') +
+                sidebarButtons = createSidebarButton('children', 'Parent Dashboard') +
                     createSidebarButton('messages', 'Messages');
             } else {
                 navButtons = `
@@ -655,6 +659,12 @@
                     case 'rate-teachers':
                         await loadRateTeachers();
                         break;
+                    case 'assessment-management':
+                        await loadAssessmentManagement();
+                        break;
+                    case 'classroom-tools':
+                        await loadClassroomTools();
+                        break;
                     case 'modules':
                         await loadModules();
                         break;
@@ -697,6 +707,9 @@
                         break;
                     case 'admin-dashboard':
                         await loadAdminDashboard(); // Separate view for System Overview per ADMIN_FEATURES.md
+                        break;
+                    case 'school-management':
+                        await loadSchoolManagement();
                         break;
                     case 'term-courses':
                         await loadTermCourses();
@@ -866,6 +879,483 @@
                 await loadRateTeachers();
             } catch (error) {
                 showToast(error.message || 'Could not submit rating', 'error');
+            }
+        }
+
+        function cbcGradeFromPercentage(score) {
+            const s = Number(score || 0);
+            if (s >= 80) return 'A';
+            if (s >= 70) return 'B';
+            if (s >= 60) return 'C';
+            if (s >= 50) return 'D';
+            return 'E';
+        }
+
+        async function loadAssessmentManagement() {
+            const content = document.getElementById('dashboardContent');
+            if (!currentTerm || !currentAcademicYear) {
+                content.innerHTML = `
+                    <div class="view-header">
+                        <h2>Assessment Management</h2>
+                    </div>
+                    <div class="welcome-message">
+                        <p>Please select a term first from Dashboard to manage assessments.</p>
+                        <button class="btn-primary" onclick="loadView('dashboard')">Go to Dashboard</button>
+                    </div>
+                `;
+                return;
+            }
+
+            const courses = await apiCall(`/courses/term/${currentTerm}/${currentAcademicYear}`);
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadTermCourses()" class="btn-back">← Back</button>
+                    <h2>Assessment Management</h2>
+                </div>
+                <div class="form-container">
+                    <div class="form-group">
+                        <label>Learning Area</label>
+                        <select id="assessment-course-select">
+                            <option value="">Select learning area...</option>
+                            ${courses.map(c => `<option value="${c.id}" data-la="${c.learning_area_id || ''}">${c.course_name} (${c.course_code || ''})</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn-primary" onclick="loadFormativeEntry()">Formative Entry</button>
+                        <button class="btn-secondary" onclick="loadSummativeEntry()">Summative Entry</button>
+                    </div>
+                </div>
+                <div id="assessment-entry-container"></div>
+            `;
+        }
+
+        async function loadFormativeEntry() {
+            const courseId = document.getElementById('assessment-course-select')?.value;
+            if (!courseId) {
+                showToast('Select a learning area first.', 'error');
+                return;
+            }
+            const box = document.getElementById('assessment-entry-container');
+            box.innerHTML = '<div class="loading">Loading formative context...</div>';
+            try {
+                const ctx = await apiCall(`/assessments/formative/context/${courseId}?term=${currentTerm}&academic_year=${encodeURIComponent(currentAcademicYear)}`);
+                const students = ctx.students || [];
+                const indicators = ctx.indicators || [];
+                if (students.length === 0) {
+                    box.innerHTML = '<div class="welcome-message"><p>No students enrolled in this learning area.</p></div>';
+                    return;
+                }
+                if (indicators.length === 0) {
+                    box.innerHTML = '<div class="welcome-message"><p>No indicators found. Please set up strands/sub-strands and indicators first.</p></div>';
+                    return;
+                }
+
+                // Build grouped indicator list by strand/sub-strand
+                const grouped = {};
+                indicators.forEach(i => {
+                    const key = `${i.strand_code}||${i.sub_strand_code}`;
+                    if (!grouped[key]) grouped[key] = { strand: i.strand_name, strand_code: i.strand_code, sub: i.sub_strand_name, sub_code: i.sub_strand_code, list: [] };
+                    grouped[key].list.push(i);
+                });
+                const groups = Object.values(grouped);
+
+                box.innerHTML = `
+                    <div class="form-container" style="margin-top: 1rem;">
+                        <h3>Formative Entry (Rubric 1-4)</h3>
+                        <p class="info">Select rubric level for each student and indicator. System auto-calculates average score and CBC grade on save.</p>
+                        ${groups.map(g => `
+                            <div class="premium-form-section" style="margin-bottom: 1rem;">
+                                <h4>${g.strand_code} - ${g.strand} / ${g.sub_code} - ${g.sub}</h4>
+                                <div style="overflow:auto;">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Student</th>
+                                                ${g.list.map(ind => `<th>${ind.indicator_name}</th>`).join('')}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${students.map(s => `
+                                                <tr>
+                                                    <td>${s.first_name} ${s.last_name}</td>
+                                                    ${g.list.map(ind => `
+                                                        <td>
+                                                            <select class="rubric-input"
+                                                                data-learner="${s.learner_id}"
+                                                                data-la="${ctx.course.learning_area_id}"
+                                                                data-strand="${g.strand_code}"
+                                                                data-sub="${g.sub_code}"
+                                                                data-ind="${ind.indicator_code}">
+                                                                <option value="">-</option>
+                                                                <option value="1">1</option>
+                                                                <option value="2">2</option>
+                                                                <option value="3">3</option>
+                                                                <option value="4">4</option>
+                                                            </select>
+                                                        </td>
+                                                    `).join('')}
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        `).join('')}
+                        <div class="form-actions">
+                            <button class="btn-primary" onclick="saveFormativeBulk()">Save Formative Assessments</button>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                box.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function saveFormativeBulk() {
+            const inputs = Array.from(document.querySelectorAll('.rubric-input'));
+            const assessments = inputs
+                .filter(i => i.value)
+                .map(i => ({
+                    learner_id: parseInt(i.dataset.learner, 10),
+                    learning_area_id: parseInt(i.dataset.la, 10),
+                    strand_code: i.dataset.strand,
+                    sub_strand_code: i.dataset.sub,
+                    indicator_code: i.dataset.ind,
+                    rubric_level: parseInt(i.value, 10),
+                    term: currentTerm,
+                    academic_year: currentAcademicYear
+                }));
+            if (assessments.length === 0) {
+                showToast('No rubric levels selected.', 'error');
+                return;
+            }
+            try {
+                const result = await apiCall('/assessments/formative/bulk', {
+                    method: 'POST',
+                    body: JSON.stringify({ assessments })
+                });
+                const sample = (result.learner_summaries || []).slice(0, 3).map(s => `L${s.learner_id}: ${Number(s.average_score || 0).toFixed(1)}% (${s.cbc_grade})`).join(', ');
+                showToast(`Saved ${result.assessments?.length || 0} formative entries.${sample ? ' Avg: ' + sample : ''}`, 'success');
+            } catch (error) {
+                showToast(error.message || 'Failed to save formative entries', 'error');
+            }
+        }
+
+        async function loadSummativeEntry() {
+            const courseSel = document.getElementById('assessment-course-select');
+            const courseId = courseSel?.value;
+            if (!courseId) {
+                showToast('Select a learning area first.', 'error');
+                return;
+            }
+            const learningAreaId = courseSel.options[courseSel.selectedIndex]?.dataset?.la;
+            const box = document.getElementById('assessment-entry-container');
+            box.innerHTML = '<div class="loading">Loading summative entry...</div>';
+            try {
+                const [ctx, exams] = await Promise.all([
+                    apiCall(`/assessments/formative/context/${courseId}?term=${currentTerm}&academic_year=${encodeURIComponent(currentAcademicYear)}`),
+                    apiCall(`/assessments/summative?learning_area_id=${learningAreaId}&term=${currentTerm}&academic_year=${encodeURIComponent(currentAcademicYear)}`)
+                ]);
+                const students = ctx.students || [];
+                if (students.length === 0) {
+                    box.innerHTML = '<div class="welcome-message"><p>No students enrolled in this learning area.</p></div>';
+                    return;
+                }
+                box.innerHTML = `
+                    <div class="form-container" style="margin-top: 1rem;">
+                        <h3>Summative Entry</h3>
+                        <div class="form-group">
+                            <label>Create New Exam</label>
+                            <input id="sum-name" type="text" placeholder="e.g. End Term - Mathematics">
+                        </div>
+                        <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                            <div class="form-group">
+                                <label>Type</label>
+                                <select id="sum-type">
+                                    <option value="Opener">Opener</option>
+                                    <option value="Mid">Mid</option>
+                                    <option value="End" selected>End</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Or Select Existing Exam</label>
+                                <select id="sum-existing">
+                                    <option value="">-- Select existing --</option>
+                                    ${(exams || []).map(e => `<option value="${e.id}">${e.name} (${e.type})</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <p class="info">Enter percentage score (0-100). CBC grade is auto-assigned.</p>
+                        <div style="overflow:auto;">
+                            <table class="data-table">
+                                <thead><tr><th>Student</th><th>Score %</th><th>Grade</th></tr></thead>
+                                <tbody>
+                                    ${students.map(s => `
+                                        <tr>
+                                            <td>${s.first_name} ${s.last_name}</td>
+                                            <td><input class="sum-score" type="number" min="0" max="100" step="0.01" data-learner="${s.learner_id}" oninput="this.closest('tr').querySelector('.sum-grade').textContent = cbcGradeFromPercentage(this.value)"></td>
+                                            <td class="sum-grade">-</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn-primary" onclick="saveSummativeResults(${learningAreaId})">Save Summative Results</button>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                box.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function saveSummativeResults(learningAreaId) {
+            try {
+                let assessmentId = document.getElementById('sum-existing')?.value;
+                if (!assessmentId) {
+                    const name = document.getElementById('sum-name')?.value?.trim();
+                    const type = document.getElementById('sum-type')?.value || 'End';
+                    if (!name) {
+                        showToast('Enter exam name or select an existing exam.', 'error');
+                        return;
+                    }
+                    const created = await apiCall('/assessments/summative', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            name,
+                            type,
+                            term: currentTerm,
+                            academic_year: currentAcademicYear,
+                            learning_area_id: parseInt(learningAreaId, 10),
+                            total_marks: 100
+                        })
+                    });
+                    assessmentId = created.id;
+                }
+
+                const results = Array.from(document.querySelectorAll('.sum-score'))
+                    .filter(i => i.value !== '')
+                    .map(i => ({ learner_id: parseInt(i.dataset.learner, 10), score: parseFloat(i.value) }));
+                if (results.length === 0) {
+                    showToast('Enter at least one score.', 'error');
+                    return;
+                }
+
+                await apiCall(`/assessments/summative/${assessmentId}/results`, {
+                    method: 'POST',
+                    body: JSON.stringify({ results })
+                });
+                showToast('Summative results saved. Grades auto-assigned.', 'success');
+            } catch (error) {
+                showToast(error.message || 'Failed to save summative results', 'error');
+            }
+        }
+
+        async function loadClassroomTools() {
+            const content = document.getElementById('dashboardContent');
+            if (!currentTerm || !currentAcademicYear) {
+                content.innerHTML = `
+                    <div class="view-header"><h2>Classroom Tools</h2></div>
+                    <div class="welcome-message">
+                        <p>Select a term first from Dashboard.</p>
+                        <button class="btn-primary" onclick="loadView('dashboard')">Go to Dashboard</button>
+                    </div>`;
+                return;
+            }
+
+            const courses = await apiCall(`/courses/term/${currentTerm}/${currentAcademicYear}`);
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadTermCourses()" class="btn-back">← Back</button>
+                    <h2>Classroom Tools</h2>
+                </div>
+                <div class="form-container">
+                    <div class="form-group">
+                        <label>Class / Learning Area</label>
+                        <select id="classroom-course-select">
+                            <option value="">Select class...</option>
+                            ${courses.map(c => `<option value="${c.id}">${c.course_name} (${c.course_code || ''})</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn-primary" onclick="openAttendanceRegister()">Attendance Register</button>
+                        <button class="btn-secondary" onclick="openAssignmentUpload()">Assignment Upload</button>
+                        <button class="btn-secondary" onclick="openBookIssuance()">Book Issuance</button>
+                    </div>
+                </div>
+                <div id="classroom-tools-container"></div>
+            `;
+        }
+
+        async function openAttendanceRegister() {
+            const courseId = document.getElementById('classroom-course-select')?.value;
+            if (!courseId) return showToast('Select class first.', 'error');
+            const box = document.getElementById('classroom-tools-container');
+            box.innerHTML = '<div class="loading">Loading attendance register...</div>';
+
+            const today = new Date().toISOString().slice(0, 10);
+            const [students, existing] = await Promise.all([
+                apiCall(`/courses/${courseId}/enrollments`),
+                apiCall(`/attendance/course/${courseId}?start_date=${today}&end_date=${today}`).catch(() => [])
+            ]);
+            const map = {};
+            (existing || []).forEach(r => { map[r.student_id] = r; });
+
+            box.innerHTML = `
+                <div class="form-container" style="margin-top:1rem;">
+                    <h3>Attendance Register</h3>
+                    <p class="info">Mark daily attendance in bulk: Present, Absent, Late, or Excused.</p>
+                    <div style="overflow:auto;">
+                        <table class="data-table">
+                            <thead><tr><th>Student</th><th>Status</th><th>Notes</th></tr></thead>
+                            <tbody>
+                                ${(students || []).map(s => `
+                                    <tr>
+                                        <td>${s.first_name} ${s.last_name}</td>
+                                        <td>
+                                            <select class="att-status" data-student="${s.id}">
+                                                ${['Present','Absent','Late','Excused'].map(st => `<option value="${st}" ${(map[s.id]?.status || 'Present') === st ? 'selected' : ''}>${st}</option>`).join('')}
+                                            </select>
+                                        </td>
+                                        <td><input class="att-notes" data-student="${s.id}" value="${(map[s.id]?.notes || '').replace(/"/g, '&quot;')}"></td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn-primary" onclick="saveAttendanceBulk(${courseId})">Save Attendance</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function saveAttendanceBulk(courseId) {
+            const statusEls = Array.from(document.querySelectorAll('.att-status'));
+            const records = statusEls.map(el => {
+                const sid = parseInt(el.dataset.student, 10);
+                const notes = document.querySelector(`.att-notes[data-student="${sid}"]`)?.value || '';
+                return { student_id: sid, status: el.value, notes };
+            });
+            try {
+                await apiCall('/attendance/bulk-mark', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        course_id: parseInt(courseId, 10),
+                        attendance_date: new Date().toISOString().slice(0, 10),
+                        records
+                    })
+                });
+                showToast('Attendance saved successfully.', 'success');
+            } catch (error) {
+                showToast(error.message || 'Failed to save attendance', 'error');
+            }
+        }
+
+        async function openAssignmentUpload() {
+            const courseId = document.getElementById('classroom-course-select')?.value;
+            if (!courseId) return showToast('Select class first.', 'error');
+            const box = document.getElementById('classroom-tools-container');
+            box.innerHTML = `
+                <div class="form-container" style="margin-top:1rem;">
+                    <h3>Assignment Upload</h3>
+                    <form id="assignmentUploadForm">
+                        <div class="form-group"><label>Title *</label><input name="title" required></div>
+                        <div class="form-group"><label>Description</label><textarea name="description" rows="3"></textarea></div>
+                        <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                            <div class="form-group"><label>Due Date</label><input name="due_date" type="date"></div>
+                            <div class="form-group"><label>Total Points</label><input name="total_points" type="number" min="1" value="100"></div>
+                        </div>
+                        <div class="form-group"><label>Resources / Sheets</label><input name="attachments" type="file" multiple></div>
+                        <div class="form-actions"><button type="button" class="btn-primary" onclick="submitAssignmentUpload(${courseId})">Upload Assignment</button></div>
+                    </form>
+                </div>
+            `;
+        }
+
+        async function submitAssignmentUpload(courseId) {
+            const form = document.getElementById('assignmentUploadForm');
+            if (!form) return;
+            const fd = new FormData(form);
+            fd.append('course_id', String(courseId));
+            fd.append('assignment_type', 'homework');
+            try {
+                const res = await fetch(`${API_BASE_URL}/assignments`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` },
+                    body: fd
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.message || `HTTP ${res.status}`);
+                }
+                showToast('Assignment uploaded successfully.', 'success');
+                form.reset();
+            } catch (error) {
+                showToast(error.message || 'Failed to upload assignment', 'error');
+            }
+        }
+
+        async function openBookIssuance() {
+            const box = document.getElementById('classroom-tools-container');
+            box.innerHTML = '<div class="loading">Loading book issuance...</div>';
+            try {
+                const [books, students] = await Promise.all([
+                    apiCall('/finance/inventory/books'),
+                    apiCall('/student-registration/students')
+                ]);
+                const availableBooks = (books || []).filter(b => Number(b.available_copies || 0) > 0);
+                box.innerHTML = `
+                    <div class="form-container" style="margin-top:1rem;">
+                        <h3>Book Issuance</h3>
+                        <p class="info">Issue school books to students. Inventory updates in real-time.</p>
+                        <div class="form-group">
+                            <label>Book *</label>
+                            <select id="issue-book-id">
+                                <option value="">Select book...</option>
+                                ${availableBooks.map(b => `<option value="${b.id}">${b.title} (${b.available_copies} available)</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Student *</label>
+                            <select id="issue-learner-id">
+                                <option value="">Select student...</option>
+                                ${students.map(s => `<option value="${s.learner_id}">${s.first_name} ${s.last_name} - ${s.admission_number || 'No School ID'}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                            <div class="form-group"><label>Due Date</label><input id="issue-due-date" type="date"></div>
+                            <div class="form-group"><label>Condition Notes</label><input id="issue-condition-notes"></div>
+                        </div>
+                        <div class="form-actions"><button class="btn-primary" onclick="submitBookIssuance()">Issue Book</button></div>
+                    </div>
+                `;
+            } catch (error) {
+                box.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function submitBookIssuance() {
+            const book_id = document.getElementById('issue-book-id')?.value;
+            const learner_id = document.getElementById('issue-learner-id')?.value;
+            const due_date = document.getElementById('issue-due-date')?.value;
+            const condition_notes = document.getElementById('issue-condition-notes')?.value;
+            if (!book_id || !learner_id) return showToast('Select book and student.', 'error');
+            try {
+                await apiCall('/finance/inventory/issuances', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        book_id: parseInt(book_id, 10),
+                        learner_id: parseInt(learner_id, 10),
+                        due_date: due_date || undefined,
+                        condition_notes: condition_notes || undefined
+                    })
+                });
+                showToast('Book issued and inventory updated.', 'success');
+                await openBookIssuance();
+            } catch (error) {
+                showToast(error.message || 'Failed to issue book', 'error');
             }
         }
 
@@ -1576,10 +2066,149 @@
         // Load dashboard with term selection - PRIMARY DASHBOARD VIEW
         // Per TERM_BASED_NAVIGATION.md: Dashboard should show term selection cards
         // This applies to ALL users: Teachers, Students, Headteachers, Superadmin, etc.
+        async function loadTeacherLandingDashboard() {
+            const content = document.getElementById('dashboardContent');
+            const currentYear = new Date().getFullYear();
+            try {
+                const [terms, classes, inbox] = await Promise.all([
+                    apiCall(`/courses/terms?academic_year=${currentYear}`),
+                    apiCall('/courses'),
+                    apiCall('/email/inbox').catch(() => [])
+                ]);
+
+                // My Classes widget data
+                const classRows = (Array.isArray(classes) ? classes : []).map(c => ({
+                    id: c.id,
+                    name: c.course_name || 'Learning Area',
+                    code: c.course_code || '',
+                    studentCount: Number(c.enrolled_students || 0)
+                }));
+
+                // Pending tasks: attendance not marked for today, and learning areas with no assignments yet
+                const today = new Date().toISOString().slice(0, 10);
+                let attendancePending = 0;
+                let assessmentsPending = 0;
+                for (const cls of classRows) {
+                    try {
+                        const [attendance, assignments] = await Promise.all([
+                            apiCall(`/attendance/course/${cls.id}`).catch(() => []),
+                            apiCall(`/assignments/course/${cls.id}`).catch(() => [])
+                        ]);
+                        const hasTodayAttendance = Array.isArray(attendance) && attendance.some(a => {
+                            const d = a && a.attendance_date ? String(a.attendance_date).slice(0, 10) : '';
+                            return d === today;
+                        });
+                        if (!hasTodayAttendance) attendancePending++;
+                        if (!Array.isArray(assignments) || assignments.length === 0) assessmentsPending++;
+                    } catch (_) {
+                        attendancePending++;
+                        assessmentsPending++;
+                    }
+                }
+
+                const notifications = (Array.isArray(inbox) ? inbox : []).slice(0, 5);
+
+                content.innerHTML = `
+                    <div class="dashboard-welcome-hero">
+                        <div class="hero-badge">Teacher Dashboard</div>
+                        <div class="hero-main">
+                            <div class="hero-icon-wrapper">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
+                            </div>
+                            <div class="hero-text-content">
+                                <h1>Welcome back, ${currentUser.first_name || 'Teacher'}.</h1>
+                                <p>Manage your classroom activities, monitor learner progress, and stay updated.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid premium-stats-grid" style="margin-top: 1rem;">
+                        <div class="stat-card">
+                            <h3>My Classes</h3>
+                            <div class="stat-value">${classRows.length}</div>
+                            <div class="stat-details">
+                                ${classRows.length === 0 ? `<div class="stat-detail-item"><span class="stat-label">No assigned classes yet</span></div>` : classRows.map(c => `
+                                    <div class="stat-detail-item">
+                                        <span class="stat-label">${c.name}${c.code ? ` (${c.code})` : ''}</span>
+                                        <span class="stat-number">${c.studentCount}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div class="stat-card">
+                            <h3>Pending Tasks</h3>
+                            <div class="stat-value">${assessmentsPending + attendancePending}</div>
+                            <div class="stat-details">
+                                <div class="stat-detail-item">
+                                    <span class="stat-label">Assessments needing entry</span>
+                                    <span class="stat-number">${assessmentsPending}</span>
+                                </div>
+                                <div class="stat-detail-item">
+                                    <span class="stat-label">Attendance to be marked</span>
+                                    <span class="stat-number">${attendancePending}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="stat-card">
+                            <h3>Recent Notifications</h3>
+                            <div class="stat-details">
+                                ${notifications.length === 0 ? `<div class="stat-detail-item"><span class="stat-label">No recent notifications</span></div>` : notifications.map(n => `
+                                    <div class="stat-detail-item" style="display:block;">
+                                        <span class="stat-label" style="display:block; font-weight:600;">${n.subject || '(No Subject)'}</span>
+                                        <span style="color: var(--text-secondary); font-size: 0.85rem;">${n.sender_first_name || ''} ${n.sender_last_name || ''} · ${n.created_at ? new Date(n.created_at).toLocaleDateString() : ''}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <div style="margin-top: 0.75rem;">
+                                <button class="btn-secondary" onclick="loadView('messages')">Open Notifications</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="terms-section" style="margin-top: 1.5rem;">
+                        <div class="section-header">
+                            <h2 class="section-title">Academic Terms</h2>
+                            <p class="section-description">Select a term to continue to your learning areas and activities</p>
+                        </div>
+                        <div class="terms-grid">
+                            ${terms.length === 0 ? `
+                                <div class="welcome-message academic-welcome">
+                                    <h3>No Terms Available</h3>
+                                    <p>Contact administrator to set up academic terms.</p>
+                                </div>
+                            ` : terms.map(term => `
+                                <div class="term-card" onclick="selectTerm(${term.term}, '${term.academic_year}')" role="button" tabindex="0" onkeypress="if(event.key==='Enter') selectTerm(${term.term}, '${term.academic_year}')">
+                                    <div class="term-card-content">
+                                        <div class="term-card-header"><h3 class="term-name">${term.name}</h3></div>
+                                        <p class="term-date-range">${term.dateRange || 'Date range not set'}</p>
+                                    </div>
+                                    <div class="term-card-action">
+                                        <button onclick="event.stopPropagation(); selectTerm(${term.term}, '${term.academic_year}')" class="term-select-btn">Select Term</button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                content.innerHTML = `<div class="error">Error loading teacher dashboard: ${error.message}</div>`;
+            }
+        }
+
         async function loadDashboard() {
             const content = document.getElementById('dashboardContent');
             const currentYear = new Date().getFullYear();
             const role = currentUser.role;
+            if (role === 'teacher') {
+                await loadTeacherLandingDashboard();
+                return;
+            }
+            if (role === 'parent') {
+                await loadChildren();
+                return;
+            }
             const roleName = role === 'teacher' ? 'Teacher' :
                 role === 'student' ? 'Student' :
                     role === 'headteacher' ? 'Headteacher' :
@@ -4351,6 +4980,11 @@
                             <h4>Manage Terms</h4>
                             <p>Configure academic terms and periods</p>
                         </div>
+                        <div class="action-card" onclick="loadView('school-management')" style="cursor: pointer;">
+                            <div class="action-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 9h6"/><path d="M9 13h6"/></svg></div>
+                            <h4>School Management</h4>
+                            <p>Configure school profile, pathways, teachers, and analytics</p>
+                        </div>
                     </div>
                 `;
             } catch (error) {
@@ -4363,6 +4997,226 @@
                         Error loading dashboard: ${error.message}
                 </div>
             `;
+            }
+        }
+
+        async function loadSchoolManagement() {
+            const content = document.getElementById('dashboardContent');
+            try {
+                const [profile, curriculum, analytics, verificationQueue] = await Promise.all([
+                    apiCall('/admin/school-profile'),
+                    apiCall('/admin/curriculum/progress').catch(() => []),
+                    apiCall('/admin/performance-analytics').catch(() => ({ overall: {}, by_learning_area: [] })),
+                    apiCall('/admin/teachers/verification-queue').catch(() => [])
+                ]);
+
+                const school = profile.school || {};
+                const pathways = profile.pathways || [];
+                const selected = new Set(profile.selected_pathway_ids || []);
+
+                content.innerHTML = `
+                    <div class="view-header">
+                        <button onclick="loadView('admin-dashboard')" class="btn-back"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg> Back</button>
+                        <h2>School Management</h2>
+                    </div>
+
+                    <div class="form-container" style="margin-bottom: 1.5rem;">
+                        <h3>School Setup</h3>
+                        <form id="schoolProfileForm" onsubmit="saveSchoolProfile(event)">
+                            <input type="hidden" name="id" value="${school.id || ''}">
+                            <div class="form-group"><label>School Name *</label><input type="text" name="name" required value="${school.name || ''}"></div>
+                            <div class="form-group"><label>School Code *</label><input type="text" name="code" required value="${school.code || ''}"></div>
+                            <div class="form-group"><label>County</label><input type="text" name="county" value="${school.county || ''}"></div>
+                            <div class="form-group"><label>Sub-county</label><input type="text" name="sub_county" value="${school.sub_county || ''}"></div>
+                            <div class="form-group"><label>Address</label><textarea name="address">${school.address || ''}</textarea></div>
+                            <div class="form-group"><label>Logo URL</label><input type="url" name="logo_url" value="${school.logo_url || ''}" placeholder="https://..."></div>
+                            <div class="form-group">
+                                <label>Offered Pathways</label>
+                                <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+                                    ${pathways.map(p => `
+                                        <label style="display:flex; align-items:center; gap:0.4rem; background:#f8fafc; padding:0.4rem 0.6rem; border-radius:6px;">
+                                            <input type="checkbox" name="pathway_ids" value="${p.id}" ${selected.has(p.id) ? 'checked' : ''}> ${p.name}
+                                        </label>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            <button type="submit" class="btn-primary">Save School Configuration</button>
+                        </form>
+                    </div>
+
+                    <div class="form-container" style="margin-bottom: 1.5rem;">
+                        <h3>Teacher Registration & Verification</h3>
+                        <p style="color:#6b7280; margin-bottom:0.8rem;">Use <strong>Add New Teacher</strong> to capture Name, ID Number, TSC Number, Contacts, and active email. Activation links are emailed automatically where SMTP is configured.</p>
+                        <button class="btn-primary" onclick="loadView('add-teacher')">Open Teacher Registration</button>
+                        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center; margin-top:1rem; margin-bottom:0.8rem;">
+                            <input id="teacher-queue-search" class="premium-input" style="max-width:320px;" type="text" placeholder="Search by name, email, ID, or TSC..." oninput="renderTeacherVerificationQueue()">
+                            <select id="teacher-queue-filter" class="premium-input" style="max-width:220px;" onchange="renderTeacherVerificationQueue()">
+                                <option value="all">All</option>
+                                <option value="verified">Verified</option>
+                                <option value="unverified">Unverified</option>
+                                <option value="token_expired">Token Expired</option>
+                            </select>
+                        </div>
+                        <div class="teachers-table" style="margin-top: 1rem;">
+                            <table id="teacher-verification-queue-table"></table>
+                        </div>
+                    </div>
+
+                    <div class="form-container" style="margin-bottom: 1.5rem;">
+                        <h3>Curriculum Progress by Learning Area</h3>
+                        <div class="teachers-table">
+                            <table>
+                                <thead><tr><th>Learning Area</th><th>Coverage</th><th>Last Rubric</th><th>Last Updated</th></tr></thead>
+                                <tbody>
+                                    ${(curriculum || []).map(c => `
+                                        <tr>
+                                            <td>${c.learning_area_name}</td>
+                                            <td>
+                                                <div style="background:#e5e7eb;height:8px;border-radius:999px;overflow:hidden;max-width:220px;">
+                                                    <div style="height:8px;background:#2563eb;width:${Math.max(0, Math.min(100, Number(c.progress_percentage || 0)))}%;"></div>
+                                                </div>
+                                                <small>${Number(c.progress_percentage || 0).toFixed(2)}% (${c.covered_sub_strands}/${c.total_sub_strands})</small>
+                                            </td>
+                                            <td>${c.last_updated_rubric_level || '-'}</td>
+                                            <td>${c.last_updated_at ? new Date(c.last_updated_at).toLocaleString() : '-'}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="form-container">
+                        <h3>Performance Analytics</h3>
+                        <div class="stats-grid">
+                            <div class="stat-card"><h4>Avg Formative Score</h4><div class="stat-value">${Number(analytics.overall?.avg_formative_score || 0).toFixed(2)}%</div></div>
+                            <div class="stat-card"><h4>Avg Summative Score</h4><div class="stat-value">${Number(analytics.overall?.avg_summative_percentage || 0).toFixed(2)}%</div></div>
+                            <div class="stat-card"><h4>Learners (Formative)</h4><div class="stat-value">${analytics.overall?.learners_with_formative || 0}</div></div>
+                            <div class="stat-card"><h4>Learners (Summative)</h4><div class="stat-value">${analytics.overall?.learners_with_summative || 0}</div></div>
+                        </div>
+                    </div>
+                `;
+                window.teacherVerificationQueueData = (verificationQueue || []).map((t) => ({
+                    id: t.id,
+                    first_name: t.first_name || '',
+                    last_name: t.last_name || '',
+                    email: t.email || '',
+                    id_number: t.id_number || '',
+                    tsc_number: t.tsc_number || '',
+                    is_verified: !!t.is_verified,
+                    verification_token_expires: t.verification_token_expires || null
+                }));
+                renderTeacherVerificationQueue();
+            } catch (error) {
+                content.innerHTML = `<div class="error">Error loading school management: ${error.message}</div>`;
+            }
+        }
+
+        function renderTeacherVerificationQueue() {
+            const table = document.getElementById('teacher-verification-queue-table');
+            if (!table) return;
+            const search = (document.getElementById('teacher-queue-search')?.value || '').trim().toLowerCase();
+            const filter = (document.getElementById('teacher-queue-filter')?.value || 'all').trim();
+            const now = new Date();
+            const rows = Array.isArray(window.teacherVerificationQueueData) ? window.teacherVerificationQueueData : [];
+
+            const filtered = rows.filter((t) => {
+                const tokenExpired = !!t.verification_token_expires && new Date(t.verification_token_expires) < now;
+                if (filter === 'verified' && !t.is_verified) return false;
+                if (filter === 'unverified' && t.is_verified) return false;
+                if (filter === 'token_expired' && !tokenExpired) return false;
+
+                if (!search) return true;
+                const blob = `${t.first_name} ${t.last_name} ${t.email} ${t.id_number} ${t.tsc_number}`.toLowerCase();
+                return blob.includes(search);
+            });
+
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>Teacher</th>
+                        <th>ID Number</th>
+                        <th>TSC Number</th>
+                        <th>Status</th>
+                        <th>Activation</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${filtered.length === 0 ? `<tr><td colspan="6">No teachers match current filters.</td></tr>` : filtered.map(t => `
+                        <tr>
+                            <td>
+                                <strong>${t.first_name || ''} ${t.last_name || ''}</strong><br>
+                                <small>${t.email || 'No email'}</small>
+                            </td>
+                            <td>${t.id_number || '-'}</td>
+                            <td>${t.tsc_number || '-'}</td>
+                            <td>${t.is_verified ? '<span style="color:#15803d;">Verified</span>' : '<span style="color:#b45309;">Unverified</span>'}</td>
+                            <td>${t.verification_token_expires ? ('Token expires: ' + new Date(t.verification_token_expires).toLocaleString()) : '-'}</td>
+                            <td style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                                <button class="btn-secondary btn-small" onclick="resendTeacherActivationLink(${t.id})">Resend Activation</button>
+                                ${t.is_verified
+                                    ? `<button class="btn-danger btn-small" onclick="toggleTeacherVerification(${t.id}, false)">Mark Unverified</button>`
+                                    : `<button class="btn-primary btn-small" onclick="toggleTeacherVerification(${t.id}, true)">Mark Verified</button>`
+                                }
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            `;
+        }
+
+        async function saveSchoolProfile(event) {
+            event.preventDefault();
+            const form = event.target;
+            const fd = new FormData(form);
+            const pathwayIds = fd.getAll('pathway_ids').map(v => parseInt(v, 10)).filter(v => !Number.isNaN(v));
+            const body = {
+                id: fd.get('id') || undefined,
+                name: (fd.get('name') || '').trim(),
+                code: (fd.get('code') || '').trim(),
+                county: (fd.get('county') || '').trim() || null,
+                sub_county: (fd.get('sub_county') || '').trim() || null,
+                address: (fd.get('address') || '').trim() || null,
+                logo_url: (fd.get('logo_url') || '').trim() || null,
+                pathway_ids: pathwayIds
+            };
+            try {
+                await apiCall('/admin/school-profile', {
+                    method: 'POST',
+                    body: JSON.stringify(body)
+                });
+                showToast('School profile saved successfully', 'success');
+                loadSchoolManagement();
+            } catch (error) {
+                showToast('Failed to save school profile: ' + error.message, 'error');
+            }
+        }
+
+        async function resendTeacherActivationLink(teacherId) {
+            try {
+                const res = await apiCall(`/admin/teachers/${teacherId}/send-activation`, { method: 'POST' });
+                if (res.activation_link && !res.email_sent) {
+                    showToast('Activation link generated (email not sent). Check server email config.', 'success');
+                } else {
+                    showToast('Activation link sent successfully', 'success');
+                }
+                loadSchoolManagement();
+            } catch (error) {
+                showToast('Failed to resend activation link: ' + error.message, 'error');
+            }
+        }
+
+        async function toggleTeacherVerification(teacherId, verify) {
+            try {
+                await apiCall(`/admin/teachers/${teacherId}/verification`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ verify: !!verify })
+                });
+                showToast(verify ? 'Teacher marked as verified' : 'Teacher marked as unverified', 'success');
+                loadSchoolManagement();
+            } catch (error) {
+                showToast('Failed to update verification: ' + error.message, 'error');
             }
         }
 
@@ -4451,8 +5305,16 @@
                             <input type="email" name="email" required>
                         </div>
                         <div class="form-group">
+                            <label>ID Number *</label>
+                            <input type="text" name="id_number" required>
+                        </div>
+                        <div class="form-group">
+                            <label>TSC Number *</label>
+                            <input type="text" name="tsc_number" required>
+                        </div>
+                        <div class="form-group">
                             <label>Password *</label>
-                            <input type="password" name="password" required>
+                            <input type="password" name="password" required value="123456.ab">
                         </div>
                         <div class="form-group">
                             <label>First Name *</label>
@@ -4466,7 +5328,7 @@
                             <label>Phone</label>
                             <input type="text" name="phone">
                         </div>
-                        <button type="submit" class="btn-primary">Add Teacher</button>
+                        <button type="submit" class="btn-primary">Register Teacher</button>
                     </form>
                 </div>
             `;
@@ -4478,11 +5340,12 @@
             const data = Object.fromEntries(formData);
 
             try {
-                await apiCall('/admin/teachers', {
+                const created = await apiCall('/admin/teachers', {
                     method: 'POST',
                     body: JSON.stringify(data)
                 });
-                alert('Teacher added successfully!');
+                const act = await apiCall(`/admin/teachers/${created.id}/send-activation`, { method: 'POST' });
+                alert('Teacher registered and activation link generated' + (act.email_sent ? ' (sent by email).' : '.') );
                 e.target.reset();
             } catch (error) {
                 alert('Error: ' + error.message);
@@ -5758,44 +6621,199 @@
             }
         }
 
-        // Parent: Load children
+        let parentDashboardChildren = [];
+        let parentDashboardSelectedChildIndex = 0;
+
+        // Parent: Multi-child dashboard
         async function loadChildren() {
-            const children = await apiCall(`/users/parent/${currentUser.id}/students`);
             const content = document.getElementById('dashboardContent');
+            const children = await apiCall(`/users/parent/${currentUser.id}/students`);
+            parentDashboardChildren = children || [];
+            parentDashboardSelectedChildIndex = 0;
 
-            if (children.length === 0) {
+            if (!children || children.length === 0) {
                 content.innerHTML = `
-                    <div class="view-header">
-                        <h2>My Children</h2>
-                    </div>
-                    <div class="welcome-message">
-                        <p>No children linked to your account.</p>
-                    </div>
+                    <div class="view-header"><h2>Parent Dashboard</h2></div>
+                    <div class="welcome-message"><p>No children linked to your account.</p></div>
                 `;
-
-                // Load pathways for quick assignment directly from this screen
-                try {
-                    await loadPathwayOptionsForStudent(student.id);
-                } catch (loadErr) {
-                    console.error('Load pathways for student error:', loadErr);
-                }
                 return;
             }
 
             content.innerHTML = `
                 <div class="view-header">
-                    <h2>My Children</h2>
+                    <h2>Parent Dashboard</h2>
+                    <p>Track academic, financial and school updates for your children.</p>
                 </div>
-                <div class="children-list">
-                    ${children.map(child => `
-                        <div class="child-card">
-                            <h3>${child.first_name} ${child.last_name}</h3>
-                            <p>Email: ${child.email}</p>
-                            <button onclick="viewChildProgress(${child.id})" class="btn-view">View Progress</button>
-                        </div>
+                <div class="course-tabs" id="parent-children-tabs">
+                    ${children.map((child, idx) => `
+                        <button class="tab-btn ${idx === 0 ? 'active' : ''}" onclick="switchParentChildTab(${idx})">
+                            ${child.first_name} ${child.last_name}
+                        </button>
                     `).join('')}
                 </div>
+                <div id="parent-dashboard-child-content" class="child-details"></div>
             `;
+
+            await renderParentDashboardForChild(children[0]);
+        }
+
+        async function switchParentChildTab(index) {
+            parentDashboardSelectedChildIndex = index;
+            const tabs = document.querySelectorAll('#parent-children-tabs .tab-btn');
+            tabs.forEach((btn, idx) => btn.classList.toggle('active', idx === index));
+            const child = parentDashboardChildren[index];
+            if (child) await renderParentDashboardForChild(child);
+        }
+
+        async function renderParentDashboardForChild(child) {
+            const target = document.getElementById('parent-dashboard-child-content');
+            if (!target) return;
+            target.innerHTML = `<p>Loading dashboard for ${child.first_name} ${child.last_name}...</p>`;
+
+            const learnerId = child.learner_id;
+            const today = new Date();
+            const ymd = today.toISOString().split('T')[0];
+
+            const [courses, financeData, calendarEvents, teacherList] = await Promise.all([
+                apiCall('/courses').catch(() => []),
+                learnerId ? apiCall(`/finance/parent/transactions/${learnerId}`).catch(() => ({ transactions: [], totals: { total_paid: 0, total_fees: 100000, percentage_paid: 0 } })) : Promise.resolve({ transactions: [], totals: { total_paid: 0, total_fees: 100000, percentage_paid: 0 } }),
+                apiCall('/calendar/events').catch(() => []),
+                learnerId ? apiCall(`/teacher-ratings/parent/teachers/${learnerId}`).catch(() => []) : Promise.resolve([])
+            ]);
+
+            const assignmentLists = await Promise.all((courses || []).slice(0, 8).map(c => apiCall(`/assignments/course/${c.id}`).catch(() => [])));
+            const allAssignments = assignmentLists.flat().map(a => ({ ...a, course_name: a.course_name || (courses.find(c => c.id === a.course_id) || {}).course_name || '' }));
+            const upcomingAssignments = allAssignments
+                .filter(a => a.due_date && String(a.due_date).slice(0, 10) >= ymd)
+                .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))
+                .slice(0, 8);
+
+            const pastAssignments = allAssignments
+                .filter(a => a.due_date && String(a.due_date).slice(0, 10) < ymd)
+                .sort((a, b) => new Date(b.due_date) - new Date(a.due_date))
+                .slice(0, 8);
+
+            const submissionChecks = await Promise.all(
+                pastAssignments.map(a => apiCall(`/assignments/${a.id}/submission?student_id=${child.id}`).then(() => true).catch(() => false))
+            );
+            const submittedCount = submissionChecks.filter(Boolean).length;
+
+            const slips = learnerId ? await apiCall(`/assessments/result-slip/${learnerId}`).then(r => [r]).catch(() => []) : [];
+            const upcomingEvents = (calendarEvents || []).filter(e => String(e.event_date).slice(0, 10) >= ymd).slice(0, 6);
+            const tx = financeData.transactions || [];
+            const totals = financeData.totals || { total_paid: 0, total_fees: 100000, percentage_paid: 0 };
+
+            target.innerHTML = `
+                <div class="card-grid">
+                    <div class="metric-card">
+                        <h3>Academic Progress</h3>
+                        <p><strong>Result Slips:</strong> ${slips.length}</p>
+                        <p><strong>Upcoming Assignments:</strong> ${upcomingAssignments.length}</p>
+                        <p><strong>Past Submissions:</strong> ${submittedCount} / ${pastAssignments.length}</p>
+                    </div>
+                    <div class="metric-card">
+                        <h3>Financial Management</h3>
+                        <p><strong>Total Paid:</strong> KES ${Number(totals.total_paid || 0).toLocaleString()}</p>
+                        <p><strong>Total Fees:</strong> KES ${Number(totals.total_fees || 0).toLocaleString()}</p>
+                        <div style="background:#e5e7eb;border-radius:999px;height:10px;overflow:hidden;margin-top:8px;">
+                            <div style="height:10px;background:#2563eb;width:${Math.max(0, Math.min(100, Number(totals.percentage_paid || 0)))}%;"></div>
+                        </div>
+                        <small>${Number(totals.percentage_paid || 0).toFixed(2)}% paid</small>
+                    </div>
+                </div>
+
+                <div class="course-tabs" style="margin-top: 1rem;">
+                    <button class="tab-btn active" onclick="showParentPanel('academic')">Academic</button>
+                    <button class="tab-btn" onclick="showParentPanel('finance')">Fees & Bursary</button>
+                    <button class="tab-btn" onclick="showParentPanel('communication')">Communication</button>
+                    <button class="tab-btn" onclick="showParentPanel('calendar')">School Calendar</button>
+                </div>
+
+                <div id="parent-panel-academic" class="parent-panel">
+                    <h3>Performance Reports & Result Slips</h3>
+                    ${slips.length === 0 ? '<p>No result slip available yet.</p>' : slips.map(s => `<div class="course-card"><p><strong>Term:</strong> ${s.term_number || '-'} / ${s.academic_year || '-'}</p><p><strong>Overall:</strong> ${s.overall_grade || '-'}</p><p><strong>Remarks:</strong> ${s.remarks || '-'}</p></div>`).join('')}
+                    <h3 style="margin-top:1rem;">Upcoming Assignments</h3>
+                    ${upcomingAssignments.length === 0 ? '<p>No upcoming assignments.</p>' : upcomingAssignments.map(a => `<div class="course-card"><p><strong>${a.title || 'Assignment'}</strong></p><p>${a.course_name || ''}</p><p>Due: ${a.due_date ? new Date(a.due_date).toLocaleDateString() : '-'}</p></div>`).join('')}
+                </div>
+
+                <div id="parent-panel-finance" class="parent-panel" style="display:none;">
+                    <h3>Fee Payment History</h3>
+                    ${tx.length === 0 ? '<p>No fee transactions found.</p>' : tx.map(t => `<div class="course-card"><p><strong>${t.transaction_type}</strong> - KES ${Number(t.amount || 0).toLocaleString()}</p><p>Date: ${t.transaction_date ? new Date(t.transaction_date).toLocaleDateString() : '-'}</p><p>Method: ${t.payment_method || 'N/A'}</p></div>`).join('')}
+                    <h3 style="margin-top:1rem;">Apply for Bursary</h3>
+                    <form id="parent-bursary-form" onsubmit="submitParentBursaryApplication(event, ${learnerId || 0})">
+                        <div class="form-group"><label>Amount Requested *</label><input type="number" name="amount_requested" min="1" step="0.01" required></div>
+                        <div class="form-group"><label>Reason *</label><textarea name="reason" required placeholder="Explain financial need and supporting context"></textarea></div>
+                        <div class="form-group"><label>Supporting Documents (scanned/stamped)</label><input type="file" name="documents" multiple accept=".pdf,.jpg,.jpeg,.png"></div>
+                        <button type="submit" class="btn-primary">Submit Bursary Application</button>
+                    </form>
+                </div>
+
+                <div id="parent-panel-communication" class="parent-panel" style="display:none;">
+                    <h3>Messages</h3>
+                    <p>Open the <strong>Messages</strong> section from navigation to view school and teacher communications.</p>
+                    <h3 style="margin-top:1rem;">Rate Teachers</h3>
+                    ${teacherList.length === 0 ? '<p>No teachers found for this child yet.</p>' : teacherList.map(t => `
+                        <form onsubmit="submitParentTeacherRating(event, ${t.teacher_id})" class="course-card">
+                            <p><strong>${t.teacher_first_name} ${t.teacher_last_name}</strong> (${t.course_name || 'Learning Area'})</p>
+                            <div class="form-group"><label>Rating (1-5)</label><input type="number" name="rating" min="1" max="5" value="${t.rating || 5}" required></div>
+                            <div class="form-group"><label>Comments</label><textarea name="comments" placeholder="Optional feedback">${t.comments || ''}</textarea></div>
+                            <button type="submit" class="btn-primary">Save Rating</button>
+                        </form>
+                    `).join('')}
+                </div>
+
+                <div id="parent-panel-calendar" class="parent-panel" style="display:none;">
+                    <h3>Upcoming School Events & Important Dates</h3>
+                    ${upcomingEvents.length === 0 ? '<p>No upcoming events available.</p>' : upcomingEvents.map(e => `<div class="course-card"><p><strong>${e.title}</strong></p><p>${e.description || ''}</p><p>${e.event_date ? new Date(e.event_date).toLocaleDateString() : '-'}</p></div>`).join('')}
+                </div>
+            `;
+        }
+
+        function showParentPanel(panel) {
+            ['academic', 'finance', 'communication', 'calendar'].forEach((name) => {
+                const el = document.getElementById(`parent-panel-${name}`);
+                if (el) el.style.display = name === panel ? '' : 'none';
+            });
+        }
+
+        async function submitParentBursaryApplication(event, learnerId) {
+            event.preventDefault();
+            if (!learnerId) {
+                showToast('Missing learner profile for bursary application.', 'error');
+                return;
+            }
+            const form = event.target;
+            const formData = new FormData(form);
+            formData.append('learner_id', learnerId);
+            try {
+                const response = await fetch(`${API_BASE_URL}/bursaries/apply`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` },
+                    body: formData
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.message || 'Failed to submit bursary application');
+                showToast('Bursary application submitted successfully.', 'success');
+                form.reset();
+            } catch (error) {
+                showToast(error.message || 'Failed to submit bursary application', 'error');
+            }
+        }
+
+        async function submitParentTeacherRating(event, teacherId) {
+            event.preventDefault();
+            const form = event.target;
+            const rating = parseInt(form.querySelector('[name="rating"]')?.value || '0', 10);
+            const comments = form.querySelector('[name="comments"]')?.value || '';
+            try {
+                await apiCall('/teacher-ratings', {
+                    method: 'POST',
+                    body: JSON.stringify({ teacher_id: teacherId, rating, comments })
+                });
+                showToast('Teacher rating saved.', 'success');
+            } catch (error) {
+                showToast(error.message || 'Failed to save teacher rating', 'error');
+            }
         }
 
         async function viewChildProgress(studentId) {

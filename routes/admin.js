@@ -1,10 +1,22 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const { pool } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authenticate);
+
+const emailTransporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST,
+  port: process.env.EMAIL_PORT,
+  secure: false,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
 
 // Get system overview/dashboard (Headteacher and Superadmin)
 router.get('/dashboard', authorize('headteacher', 'superadmin', 'deputy_headteacher'), async (req, res) => {
@@ -73,6 +85,316 @@ router.get('/dashboard', authorize('headteacher', 'superadmin', 'deputy_headteac
     res.json(stats);
   } catch (error) {
     console.error('Get dashboard error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// School profile + configured pathways
+router.get('/school-profile', authorize('headteacher', 'superadmin', 'deputy_headteacher'), async (_req, res) => {
+  try {
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS school_pathways (
+        id SERIAL PRIMARY KEY,
+        school_id INTEGER REFERENCES schools(id) ON DELETE CASCADE,
+        pathway_id INTEGER REFERENCES pathways(id) ON DELETE CASCADE,
+        UNIQUE(school_id, pathway_id)
+      )`
+    );
+
+    const schoolResult = await pool.query('SELECT * FROM schools ORDER BY id ASC LIMIT 1');
+    const pathwaysResult = await pool.query('SELECT id, name, code, description, is_active FROM pathways WHERE is_active = true ORDER BY name');
+    let selectedPathwayIds = [];
+    if (schoolResult.rows.length > 0) {
+      const selected = await pool.query('SELECT pathway_id FROM school_pathways WHERE school_id = $1', [schoolResult.rows[0].id]);
+      selectedPathwayIds = selected.rows.map(r => r.pathway_id);
+    }
+
+    res.json({
+      school: schoolResult.rows[0] || null,
+      pathways: pathwaysResult.rows,
+      selected_pathway_ids: selectedPathwayIds
+    });
+  } catch (error) {
+    console.error('Get school profile error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.post('/school-profile', authorize('headteacher', 'superadmin'), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `CREATE TABLE IF NOT EXISTS school_pathways (
+        id SERIAL PRIMARY KEY,
+        school_id INTEGER REFERENCES schools(id) ON DELETE CASCADE,
+        pathway_id INTEGER REFERENCES pathways(id) ON DELETE CASCADE,
+        UNIQUE(school_id, pathway_id)
+      )`
+    );
+
+    const { id, name, code, county, sub_county, address, logo_url, pathway_ids } = req.body;
+    if (!name || !code) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'School name and code are required' });
+    }
+
+    let school;
+    if (id) {
+      const updated = await client.query(
+        `UPDATE schools
+         SET name = $1, code = $2, county = $3, sub_county = $4, address = $5, logo_url = $6, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $7
+         RETURNING *`,
+        [name, code, county || null, sub_county || null, address || null, logo_url || null, id]
+      );
+      school = updated.rows[0];
+    } else {
+      const inserted = await client.query(
+        `INSERT INTO schools (name, code, county, sub_county, address, logo_url, headteacher_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [name, code, county || null, sub_county || null, address || null, logo_url || null, req.user.id]
+      );
+      school = inserted.rows[0];
+    }
+
+    await client.query('DELETE FROM school_pathways WHERE school_id = $1', [school.id]);
+    const selected = Array.isArray(pathway_ids) ? pathway_ids : [];
+    for (const pathwayId of selected) {
+      await client.query(
+        'INSERT INTO school_pathways (school_id, pathway_id) VALUES ($1, $2) ON CONFLICT (school_id, pathway_id) DO NOTHING',
+        [school.id, pathwayId]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ message: 'School profile saved', school, selected_pathway_ids: selected });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Save school profile error:', error);
+    res.status(500).json({ message: 'Server error' });
+  } finally {
+    client.release();
+  }
+});
+
+// Curriculum coverage by learning area using latest formative rubric updates
+router.get('/curriculum/progress', authorize('headteacher', 'superadmin', 'deputy_headteacher'), async (req, res) => {
+  try {
+    const { term, academic_year } = req.query;
+    const laResult = await pool.query('SELECT id, name, code, strands FROM learning_areas ORDER BY name');
+
+    const progress = [];
+    for (const la of laResult.rows) {
+      let strands = la.strands;
+      if (typeof strands === 'string') {
+        try { strands = JSON.parse(strands); } catch (_) { strands = []; }
+      }
+      if (!Array.isArray(strands)) strands = [];
+
+      const totalSubStrands = strands.reduce((sum, s) => {
+        const sub = Array.isArray(s?.sub_strands) ? s.sub_strands : [];
+        return sum + sub.length;
+      }, 0);
+
+      let coverageQuery = `SELECT COUNT(DISTINCT sub_strand_code) AS covered,
+                                  MAX(rubric_level) AS last_updated_rubric_level,
+                                  MAX(created_at) AS last_updated_at
+                           FROM formative_assessments
+                           WHERE learning_area_id = $1`;
+      const params = [la.id];
+      let p = 2;
+      if (term) { coverageQuery += ` AND term = $${p++}`; params.push(term); }
+      if (academic_year) { coverageQuery += ` AND academic_year = $${p++}`; params.push(academic_year); }
+
+      const cov = await pool.query(coverageQuery, params);
+      const covered = parseInt(cov.rows[0]?.covered || 0, 10);
+      const pct = totalSubStrands > 0 ? Math.round((covered / totalSubStrands) * 10000) / 100 : 0;
+
+      progress.push({
+        learning_area_id: la.id,
+        learning_area_name: la.name,
+        learning_area_code: la.code,
+        total_sub_strands: totalSubStrands,
+        covered_sub_strands: covered,
+        progress_percentage: pct,
+        last_updated_rubric_level: cov.rows[0]?.last_updated_rubric_level || null,
+        last_updated_at: cov.rows[0]?.last_updated_at || null
+      });
+    }
+
+    res.json(progress);
+  } catch (error) {
+    console.error('Get curriculum progress error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Performance analytics (school-wide and by learning area)
+router.get('/performance-analytics', authorize('headteacher', 'superadmin', 'deputy_headteacher'), async (req, res) => {
+  try {
+    const { term, academic_year } = req.query;
+
+    let whereF = 'WHERE 1=1';
+    let whereS = 'WHERE 1=1';
+    const fParams = [];
+    const sParams = [];
+    let fp = 1;
+    let sp = 1;
+    if (term) {
+      whereF += ` AND fa.term = $${fp++}`;
+      whereS += ` AND sa.term = $${sp++}`;
+      fParams.push(term);
+      sParams.push(term);
+    }
+    if (academic_year) {
+      whereF += ` AND fa.academic_year = $${fp++}`;
+      whereS += ` AND sa.academic_year = $${sp++}`;
+      fParams.push(academic_year);
+      sParams.push(academic_year);
+    }
+
+    const overallFormative = await pool.query(
+      `SELECT AVG(fa.score) AS avg_formative_score,
+              COUNT(DISTINCT fa.learner_id) AS learners_with_formative
+       FROM formative_assessments fa
+       ${whereF}`,
+      fParams
+    );
+
+    const overallSummative = await pool.query(
+      `SELECT AVG(sr.percentage) AS avg_summative_percentage,
+              COUNT(DISTINCT sr.learner_id) AS learners_with_summative
+       FROM summative_results sr
+       INNER JOIN summative_assessments sa ON sa.id = sr.assessment_id
+       ${whereS}`,
+      sParams
+    );
+
+    const byLearningArea = await pool.query(
+      `SELECT la.id AS learning_area_id, la.name AS learning_area_name, la.code AS learning_area_code,
+              AVG(fa.score) AS avg_formative_score,
+              AVG(sr.percentage) AS avg_summative_percentage,
+              COUNT(DISTINCT fa.learner_id) AS formative_learners,
+              COUNT(DISTINCT sr.learner_id) AS summative_learners
+       FROM learning_areas la
+       LEFT JOIN formative_assessments fa ON fa.learning_area_id = la.id
+         ${term ? 'AND fa.term = $1' : ''} ${academic_year ? `AND fa.academic_year = $${term ? 2 : 1}` : ''}
+       LEFT JOIN summative_assessments sa ON sa.learning_area_id = la.id
+         ${term ? 'AND sa.term = $1' : ''} ${academic_year ? `AND sa.academic_year = $${term ? 2 : 1}` : ''}
+       LEFT JOIN summative_results sr ON sr.assessment_id = sa.id
+       GROUP BY la.id, la.name, la.code
+       ORDER BY la.name`,
+      [...(term ? [term] : []), ...(academic_year ? [academic_year] : [])]
+    );
+
+    res.json({
+      overall: {
+        avg_formative_score: parseFloat(overallFormative.rows[0]?.avg_formative_score || 0),
+        learners_with_formative: parseInt(overallFormative.rows[0]?.learners_with_formative || 0, 10),
+        avg_summative_percentage: parseFloat(overallSummative.rows[0]?.avg_summative_percentage || 0),
+        learners_with_summative: parseInt(overallSummative.rows[0]?.learners_with_summative || 0, 10)
+      },
+      by_learning_area: byLearningArea.rows
+    });
+  } catch (error) {
+    console.error('Get performance analytics error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Send/re-send activation link to teacher
+router.post('/teachers/:id/send-activation', authorize('headteacher', 'superadmin'), async (req, res) => {
+  try {
+    const teacherId = parseInt(req.params.id, 10);
+    if (Number.isNaN(teacherId)) return res.status(400).json({ message: 'Invalid teacher ID' });
+
+    const teacherResult = await pool.query(
+      `SELECT id, email, first_name, last_name
+       FROM users
+       WHERE id = $1 AND role = 'teacher'`,
+      [teacherId]
+    );
+    if (teacherResult.rows.length === 0) return res.status(404).json({ message: 'Teacher not found' });
+    const teacher = teacherResult.rows[0];
+
+    const token = crypto.randomBytes(24).toString('hex');
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 3); // 72h
+    await pool.query(
+      `UPDATE users
+       SET verification_token = $1, verification_token_expires = $2
+       WHERE id = $3`,
+      [token, expiresAt, teacherId]
+    );
+
+    const baseUrl = process.env.FRONTEND_URL || req.protocol + '://' + req.get('host');
+    const activationLink = `${baseUrl}/?activate_token=${encodeURIComponent(token)}`;
+
+    let emailSent = false;
+    if (process.env.EMAIL_USER && process.env.EMAIL_PASS && teacher.email) {
+      try {
+        await emailTransporter.sendMail({
+          from: `"${process.env.EMAIL_FROM || 'Senior School OLP'}" <${process.env.EMAIL_USER}>`,
+          to: teacher.email,
+          subject: 'Activate your teacher account',
+          html: `<p>Hello ${teacher.first_name || 'Teacher'},</p>
+                 <p>Your teacher account is ready. Use the link below to activate and set your password:</p>
+                 <p><a href="${activationLink}">${activationLink}</a></p>
+                 <p>This link expires in 72 hours.</p>`
+        });
+        emailSent = true;
+      } catch (emailError) {
+        console.error('Send activation email error:', emailError);
+      }
+    }
+
+    res.json({ message: emailSent ? 'Activation link sent' : 'Activation link generated', activation_link: activationLink, email_sent: emailSent });
+  } catch (error) {
+    console.error('Send activation link error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Teacher verification queue (verified/unverified + activation status)
+router.get('/teachers/verification-queue', authorize('headteacher', 'superadmin', 'deputy_headteacher'), async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, first_name, last_name, email, phone, id_number, tsc_number,
+              is_active, is_verified, verification_token_expires, created_at
+       FROM users
+       WHERE role = 'teacher'
+       ORDER BY is_verified ASC, created_at DESC`
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get teacher verification queue error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Manual verification toggle for teacher
+router.put('/teachers/:id/verification', authorize('headteacher', 'superadmin'), async (req, res) => {
+  try {
+    const teacherId = parseInt(req.params.id, 10);
+    const verify = req.body.verify === true;
+    if (Number.isNaN(teacherId)) return res.status(400).json({ message: 'Invalid teacher ID' });
+
+    const result = await pool.query(
+      `UPDATE users
+       SET is_verified = $1,
+           is_active = CASE WHEN $1 = true THEN true ELSE is_active END,
+           verification_token = CASE WHEN $1 = true THEN NULL ELSE verification_token END,
+           verification_token_expires = CASE WHEN $1 = true THEN NULL ELSE verification_token_expires END,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2 AND role = 'teacher'
+       RETURNING id, first_name, last_name, email, is_verified, is_active`,
+      [verify, teacherId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ message: 'Teacher not found' });
+    res.json({ message: verify ? 'Teacher marked as verified' : 'Teacher marked as unverified', teacher: result.rows[0] });
+  } catch (error) {
+    console.error('Manual teacher verification update error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -167,7 +489,7 @@ router.get('/teachers/:teacherId/classes', authorize('headteacher', 'superadmin'
 // Add new teacher (Headteacher/Superadmin)
 router.post('/teachers', authorize('headteacher', 'superadmin'), async (req, res) => {
   try {
-    const { username, email, password, first_name, last_name, phone } = req.body;
+    const { username, email, password, first_name, last_name, phone, id_number, tsc_number } = req.body;
     
     if (!username || !email || !password || !first_name || !last_name) {
       return res.status(400).json({ message: 'Username, email, password, first_name, and last_name are required' });
@@ -188,10 +510,10 @@ router.post('/teachers', authorize('headteacher', 'superadmin'), async (req, res
     
     // Create teacher
     const result = await pool.query(
-      `INSERT INTO users (username, email, password_hash, first_name, last_name, role, phone)
-       VALUES ($1, $2, $3, $4, $5, 'teacher', $6)
-       RETURNING id, username, email, first_name, last_name, role, phone, created_at`,
-      [username, email, passwordHash, first_name, last_name, phone || null]
+      `INSERT INTO users (username, email, password_hash, first_name, last_name, role, phone, id_number, tsc_number, is_verified)
+       VALUES ($1, $2, $3, $4, $5, 'teacher', $6, $7, $8, false)
+       RETURNING id, username, email, first_name, last_name, role, phone, id_number, tsc_number, is_verified, created_at`,
+      [username, email, passwordHash, first_name, last_name, phone || null, id_number || null, tsc_number || null]
     );
     
     res.status(201).json(result.rows[0]);

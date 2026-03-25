@@ -5,6 +5,109 @@ const { authenticate, authorize } = require('../middleware/auth');
 const router = express.Router();
 router.use(authenticate);
 
+function cbcGradeFromScore(score) {
+  if (score >= 80) return 'A';
+  if (score >= 70) return 'B';
+  if (score >= 60) return 'C';
+  if (score >= 50) return 'D';
+  return 'E';
+}
+
+// Get formative entry context for a class/learning area
+router.get('/formative/context/:courseId', authorize('teacher', 'headteacher', 'superadmin'), async (req, res) => {
+  try {
+    const courseId = parseInt(req.params.courseId, 10);
+    const term = req.query.term;
+    const academicYear = req.query.academic_year;
+    if (Number.isNaN(courseId)) return res.status(400).json({ message: 'Invalid course ID' });
+
+    // Course + learning area
+    const courseResult = await pool.query(
+      `SELECT c.id, c.course_name, c.course_code, c.learning_area_id, la.name AS learning_area_name, la.strands
+       FROM courses c
+       LEFT JOIN learning_areas la ON c.learning_area_id = la.id
+       WHERE c.id = $1`,
+      [courseId]
+    );
+    if (courseResult.rows.length === 0) return res.status(404).json({ message: 'Course not found' });
+    const course = courseResult.rows[0];
+
+    // Enrolled students with learner_profile id required by formative API
+    const studentsResult = await pool.query(
+      `SELECT lp.id AS learner_id, u.id AS user_id, u.first_name, u.last_name
+       FROM course_enrollments ce
+       INNER JOIN users u ON ce.student_id = u.id
+       INNER JOIN learner_profiles lp ON lp.user_id = u.id
+       WHERE ce.course_id = $1 AND ce.status = 'active'
+       ORDER BY u.first_name, u.last_name`,
+      [courseId]
+    );
+
+    let strands = [];
+    if (course.strands) {
+      if (typeof course.strands === 'string') {
+        try { strands = JSON.parse(course.strands); } catch (_) { strands = []; }
+      } else {
+        strands = course.strands;
+      }
+    }
+    if (!Array.isArray(strands)) strands = [];
+
+    // Flatten indicators for structured entry
+    const indicators = [];
+    strands.forEach((s) => {
+      const strandCode = s?.strand_code || '';
+      const strandName = s?.strand_name || '';
+      const sub = Array.isArray(s?.sub_strands) ? s.sub_strands : [];
+      sub.forEach((ss) => {
+        const subCode = ss?.sub_strand_code || '';
+        const subName = ss?.sub_strand_name || '';
+        const list = Array.isArray(ss?.indicators) ? ss.indicators : [];
+        list.forEach((ind, idx) => {
+          const code = ind?.indicator_code || `IND-${idx + 1}`;
+          const name = ind?.indicator_name || ind?.name || String(ind || '');
+          if (name) indicators.push({
+            strand_code: strandCode,
+            strand_name: strandName,
+            sub_strand_code: subCode,
+            sub_strand_name: subName,
+            indicator_code: code,
+            indicator_name: name
+          });
+        });
+      });
+    });
+
+    // Existing entries for prefill
+    let existing = [];
+    if (term && academicYear) {
+      const existingResult = await pool.query(
+        `SELECT learner_id, strand_code, sub_strand_code, indicator_code, rubric_level, score
+         FROM formative_assessments
+         WHERE learning_area_id = $1 AND term = $2 AND academic_year = $3`,
+        [course.learning_area_id, term, academicYear]
+      );
+      existing = existingResult.rows;
+    }
+
+    res.json({
+      course: {
+        id: course.id,
+        name: course.course_name,
+        code: course.course_code,
+        learning_area_id: course.learning_area_id,
+        learning_area_name: course.learning_area_name
+      },
+      students: studentsResult.rows,
+      indicators,
+      existing
+    });
+  } catch (error) {
+    console.error('Get formative context error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Enter formative assessment (rubric level 1-4)
 router.post('/formative', authorize('teacher', 'headteacher', 'superadmin'), async (req, res) => {
   try {
@@ -38,7 +141,19 @@ router.post('/formative', authorize('teacher', 'headteacher', 'superadmin'), asy
       [learner_id, learning_area_id, strand_code, sub_strand_code, indicator_code, rubric_level, score, term, academic_year, req.user.id, notes || null]
     );
     
-    res.status(201).json(result.rows[0]);
+    // Return updated average + CBC grade for this learner/learning area/term
+    const avgResult = await pool.query(
+      `SELECT AVG(score) AS avg_score
+       FROM formative_assessments
+       WHERE learner_id = $1 AND learning_area_id = $2 AND term = $3 AND academic_year = $4`,
+      [learner_id, learning_area_id, term, academic_year]
+    );
+    const average_score = parseFloat(avgResult.rows[0]?.avg_score || 0);
+    res.status(201).json({
+      ...result.rows[0],
+      average_score,
+      cbc_grade: cbcGradeFromScore(average_score)
+    });
   } catch (error) {
     console.error('Enter formative assessment error:', error);
     res.status(500).json({ message: 'Server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
@@ -74,8 +189,34 @@ router.post('/formative/bulk', authorize('teacher', 'headteacher', 'superadmin')
         results.push(result.rows[0]);
       }
       
+      // Build per-learner summary (average + CBC grade) for the saved context
+      const first = assessments[0] || {};
+      const learningAreaId = first.learning_area_id;
+      const term = first.term;
+      const academicYear = first.academic_year;
+      const learnerIds = [...new Set(assessments.map(a => a.learner_id).filter(Boolean))];
+      let learner_summaries = [];
+      if (learningAreaId && term && academicYear && learnerIds.length > 0) {
+        const summaryResult = await client.query(
+          `SELECT learner_id, AVG(score) AS avg_score
+           FROM formative_assessments
+           WHERE learning_area_id = $1 AND term = $2 AND academic_year = $3
+             AND learner_id = ANY($4)
+           GROUP BY learner_id`,
+          [learningAreaId, term, academicYear, learnerIds]
+        );
+        learner_summaries = summaryResult.rows.map(r => {
+          const avg = parseFloat(r.avg_score || 0);
+          return { learner_id: r.learner_id, average_score: avg, cbc_grade: cbcGradeFromScore(avg) };
+        });
+      }
+
       await client.query('COMMIT');
-      res.status(201).json({ message: 'Formative assessments entered successfully', assessments: results });
+      res.status(201).json({
+        message: 'Formative assessments entered successfully',
+        assessments: results,
+        learner_summaries
+      });
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -84,6 +225,25 @@ router.post('/formative/bulk', authorize('teacher', 'headteacher', 'superadmin')
     }
   } catch (error) {
     console.error('Bulk enter formative assessments error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// List summative assessments for selection
+router.get('/summative', authorize('teacher', 'headteacher', 'superadmin'), async (req, res) => {
+  try {
+    const { learning_area_id, term, academic_year } = req.query;
+    let query = 'SELECT id, name, type, term, academic_year, learning_area_id, total_marks FROM summative_assessments WHERE 1=1';
+    const params = [];
+    let p = 1;
+    if (learning_area_id) { query += ` AND learning_area_id = $${p++}`; params.push(learning_area_id); }
+    if (term) { query += ` AND term = $${p++}`; params.push(term); }
+    if (academic_year) { query += ` AND academic_year = $${p++}`; params.push(academic_year); }
+    query += ' ORDER BY created_at DESC, id DESC';
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('List summative assessments error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

@@ -7,6 +7,46 @@ const router = express.Router();
 // All routes require authentication
 router.use(authenticate);
 
+// Get students for a parent (must be before /:id route)
+router.get('/parent/:parentId/students', async (req, res) => {
+  try {
+    // Parent can only access own children; admins can access any
+    if (req.user.role === 'parent' && req.user.id !== parseInt(req.params.parentId, 10)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    if (req.user.role !== 'parent' && !['headteacher', 'deputy_headteacher', 'superadmin'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Prefer learner_profiles.parent_id relationship; fallback to legacy parent_student_relationships
+    const primary = await pool.query(
+      `SELECT u.id, u.username, u.email, u.first_name, u.last_name, u.role, u.phone, u.date_of_birth,
+              lp.id AS learner_id, lp.admission_number
+       FROM learner_profiles lp
+       INNER JOIN users u ON lp.user_id = u.id
+       WHERE lp.parent_id = $1
+       ORDER BY u.first_name, u.last_name`,
+      [req.params.parentId]
+    );
+    if (primary.rows.length > 0) return res.json(primary.rows);
+
+    const legacy = await pool.query(
+      `SELECT u.id, u.username, u.email, u.first_name, u.last_name, u.role, u.phone, u.date_of_birth,
+              lp.id AS learner_id, lp.admission_number
+       FROM users u
+       INNER JOIN parent_student_relationships psr ON u.id = psr.student_id
+       LEFT JOIN learner_profiles lp ON lp.user_id = u.id
+       WHERE psr.parent_id = $1
+       ORDER BY u.first_name, u.last_name`,
+      [req.params.parentId]
+    );
+    res.json(legacy.rows);
+  } catch (error) {
+    console.error('Get parent students error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Get all users (admin only)
 router.get('/', authorize('headteacher', 'deputy_headteacher'), async (req, res) => {
   try {
@@ -62,31 +102,6 @@ router.get('/:id', async (req, res) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Get user error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Get students for a parent
-router.get('/parent/:parentId/students', async (req, res) => {
-  try {
-    // Verify parent access
-    if (req.user.role !== 'parent' && req.user.id !== parseInt(req.params.parentId)) {
-      if (!['headteacher', 'deputy_headteacher'].includes(req.user.role)) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
-    }
-    
-    const result = await pool.query(
-      `SELECT u.id, u.username, u.email, u.first_name, u.last_name, u.role, u.phone, u.date_of_birth
-       FROM users u
-       INNER JOIN parent_student_relationships psr ON u.id = psr.student_id
-       WHERE psr.parent_id = $1`,
-      [req.params.parentId]
-    );
-    
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Get parent students error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

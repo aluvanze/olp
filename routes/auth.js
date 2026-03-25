@@ -223,5 +223,50 @@ router.post('/change-password',
   }
 );
 
+// Activate account using emailed activation token
+router.post('/activate-account', [
+  body('token').notEmpty().withMessage('Activation token is required'),
+  body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { token, newPassword } = req.body;
+    const userResult = await pool.query(
+      `SELECT id, verification_token_expires
+       FROM users
+       WHERE verification_token = $1 AND role = 'teacher'`,
+      [token]
+    );
+    if (userResult.rows.length === 0) {
+      return res.status(400).json({ message: 'Invalid activation token' });
+    }
+
+    const user = userResult.rows[0];
+    if (user.verification_token_expires && new Date(user.verification_token_expires) < new Date()) {
+      return res.status(400).json({ message: 'Activation token has expired' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await pool.query(
+      `UPDATE users
+       SET password_hash = $1,
+           is_verified = true,
+           is_active = true,
+           verification_token = NULL,
+           verification_token_expires = NULL,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [passwordHash, user.id]
+    );
+
+    res.json({ message: 'Account activated successfully. You can now log in.' });
+  } catch (error) {
+    console.error('Activate account error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;
 

@@ -102,6 +102,41 @@ router.post('/transactions', authorize('finance', 'headteacher', 'superadmin'), 
   }
 });
 
+// Parent: view child's fee transactions + progress
+router.get('/parent/transactions/:learnerId', authorize('parent', 'headteacher', 'deputy_headteacher', 'superadmin', 'finance'), async (req, res) => {
+  try {
+    const learnerId = parseInt(req.params.learnerId, 10);
+    if (Number.isNaN(learnerId)) return res.status(400).json({ message: 'Invalid learner ID' });
+
+    if (req.user.role === 'parent') {
+      const check = await pool.query('SELECT id FROM learner_profiles WHERE id = $1 AND parent_id = $2', [learnerId, req.user.id]);
+      if (check.rows.length === 0) return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const tx = await pool.query(
+      `SELECT id, transaction_type, amount, payment_method, mpesa_confirmation_code, reference_number, transaction_date, notes
+       FROM financial_transactions
+       WHERE learner_id = $1
+       ORDER BY transaction_date DESC, created_at DESC`,
+      [learnerId]
+    );
+
+    const totalPaid = tx.rows
+      .filter(r => String(r.transaction_type || '').toLowerCase() === 'fee_payment')
+      .reduce((sum, r) => sum + Number(r.amount || 0), 0);
+    const totalFees = Number(req.query.total_fees || process.env.DEFAULT_TOTAL_FEES || 100000);
+    const percentagePaid = totalFees > 0 ? Math.min(100, Math.round((totalPaid / totalFees) * 10000) / 100) : 0;
+
+    res.json({
+      transactions: tx.rows,
+      totals: { total_paid: totalPaid, total_fees: totalFees, percentage_paid: percentagePaid }
+    });
+  } catch (error) {
+    console.error('Get parent transactions error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Update transaction (verify, edit)
 router.put('/transactions/:id', authorize('finance', 'headteacher', 'superadmin'), async (req, res) => {
   try {
@@ -147,7 +182,7 @@ router.put('/transactions/:id', authorize('finance', 'headteacher', 'superadmin'
 });
 
 // Get books inventory
-router.get('/inventory/books', authorize('finance', 'headteacher', 'superadmin', 'deputy_headteacher'), async (req, res) => {
+router.get('/inventory/books', authorize('finance', 'headteacher', 'superadmin', 'deputy_headteacher', 'teacher'), async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT b.*, la.name as learning_area_name, la.code as learning_area_code
@@ -238,6 +273,73 @@ router.get('/inventory/issuances', authorize('finance', 'headteacher', 'superadm
     res.json(result.rows);
   } catch (error) {
     console.error('Get book issuances error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Issue a book to a learner and update inventory in real-time
+router.post('/inventory/issuances', authorize('teacher', 'finance', 'headteacher', 'superadmin', 'deputy_headteacher'), async (req, res) => {
+  try {
+    const { book_id, learner_id, due_date, condition_notes } = req.body;
+    if (!book_id || !learner_id) {
+      return res.status(400).json({ message: 'Book and learner are required' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const bookResult = await client.query(
+        'SELECT id, title, available_copies FROM books WHERE id = $1 FOR UPDATE',
+        [book_id]
+      );
+      if (bookResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'Book not found' });
+      }
+      const book = bookResult.rows[0];
+      if (Number(book.available_copies || 0) <= 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'No available copies for this book' });
+      }
+
+      const learnerCheck = await client.query(
+        'SELECT id FROM learner_profiles WHERE id = $1',
+        [learner_id]
+      );
+      if (learnerCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'Learner not found' });
+      }
+
+      const issuance = await client.query(
+        `INSERT INTO book_issuances (book_id, learner_id, issued_by, issue_date, due_date, status, condition_notes)
+         VALUES ($1, $2, $3, CURRENT_DATE, $4, 'issued', $5)
+         RETURNING *`,
+        [book_id, learner_id, req.user.id, due_date || null, condition_notes || null]
+      );
+
+      await client.query(
+        `UPDATE books
+         SET available_copies = available_copies - 1, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [book_id]
+      );
+
+      await client.query('COMMIT');
+      res.status(201).json({
+        message: 'Book issued successfully',
+        issuance: issuance.rows[0],
+        inventory: { book_id, available_copies: Number(book.available_copies) - 1 }
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Issue book error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

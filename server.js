@@ -20,6 +20,8 @@ const substrandRoutes = require('./routes/substrands');
 const gradeLevelsRoutes = require('./routes/grades-management');
 const financeRoutes = require('./routes/finance');
 const teacherRatingsRoutes = require('./routes/teacher-ratings');
+const bursaryRoutes = require('./routes/bursaries');
+const calendarRoutes = require('./routes/calendar');
 const { pool } = require('./config/database');
 
 const app = express();
@@ -105,6 +107,8 @@ app.use('/api/substrands', substrandRoutes);
 app.use('/api/admin/grade-levels', gradeLevelsRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/teacher-ratings', teacherRatingsRoutes);
+app.use('/api/bursaries', bursaryRoutes);
+app.use('/api/calendar', calendarRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
