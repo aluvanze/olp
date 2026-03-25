@@ -322,7 +322,8 @@ router.get('/term/:term/:academicYear', async (req, res) => {
   try {
     const { term, academicYear } = req.params;
     
-    // For teachers, check both teacher_course_assignments (term-specific) and courses.teacher_id (general)
+    // For teachers, check both teacher_course_assignments (term-specific) and courses.teacher_id (general).
+    // Important: filter by academic year so teachers don't see old-year courses when selecting a term.
     if (req.user.role === 'teacher') {
       const query = `
         SELECT DISTINCT c.*, 
@@ -338,6 +339,7 @@ router.get('/term/:term/:academicYear', async (req, res) => {
         LEFT JOIN course_enrollments ce ON c.id = ce.course_id AND ce.status = 'active'
         LEFT JOIN teacher_course_assignments tca ON c.id = tca.course_id AND tca.teacher_id = $1 AND tca.is_active = true
         WHERE c.is_active = true
+          AND c.academic_year = $3
           AND (
             -- Course assigned via teacher_course_assignments for this term
             (tca.id IS NOT NULL AND tca.term_number = $2 AND tca.academic_year = $3)

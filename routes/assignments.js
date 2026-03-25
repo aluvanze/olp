@@ -102,13 +102,33 @@ router.get('/:id', async (req, res) => {
 // Create assignment (teachers and admins)
 router.post('/', authorize('teacher', 'headteacher', 'deputy_headteacher'), upload.array('attachments', 10), async (req, res) => {
   try {
-    const { course_id, module_id, title, description, assignment_type, total_points, due_date, allow_late_submission, late_penalty_percent, instructions } = req.body;
+    const { course_id, module_id, title, description, assignment_type, total_points, due_date, allow_late_submission, late_penalty_percent, instructions, term_number, academic_year } = req.body;
     
     // Verify course access for teachers
     if (req.user.role === 'teacher') {
-      const courseCheck = await pool.query('SELECT teacher_id FROM courses WHERE id = $1', [course_id]);
-      if (courseCheck.rows.length === 0 || courseCheck.rows[0].teacher_id !== req.user.id) {
-        return res.status(403).json({ message: 'Access denied' });
+      const courseCheck = await pool.query('SELECT id, teacher_id FROM courses WHERE id = $1', [course_id]);
+      if (courseCheck.rows.length === 0) {
+        return res.status(404).json({ message: 'Course not found' });
+      }
+
+      const teacherId = String(req.user.id);
+      const directTeacherId = courseCheck.rows[0].teacher_id != null ? String(courseCheck.rows[0].teacher_id) : null;
+
+      // Allow either the legacy direct assignment (courses.teacher_id)
+      // OR the term-based assignment table (teacher_course_assignments).
+      if (directTeacherId !== teacherId) {
+        const hasTerm = term_number != null && String(term_number).trim() !== '' && academic_year != null && String(academic_year).trim() !== '';
+        const tca = await pool.query(
+          `SELECT id
+           FROM teacher_course_assignments
+           WHERE course_id = $1 AND teacher_id = $2 AND is_active = true
+             AND ($3::boolean = false OR (term_number = $4 AND academic_year = $5))
+           LIMIT 1`,
+          [course_id, req.user.id, hasTerm, hasTerm ? parseInt(term_number, 10) : null, hasTerm ? String(academic_year) : null]
+        );
+        if (tca.rows.length === 0) {
+          return res.status(403).json({ message: 'Access denied: you are not assigned to this class for the selected term.' });
+        }
       }
     }
     

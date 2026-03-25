@@ -67,8 +67,9 @@ router.post('/login',
         { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
       );
       
-      // Always require grade selection if grades are available
-      const requiresGradeSelection = gradesResult.rows.length > 0;
+      // Require grade selection only for roles that need grade context
+      // Parents/Finance should not be blocked by grade selection
+      const requiresGradeSelection = gradesResult.rows.length > 0 && !['parent', 'finance', 'sub_county_office', 'county_office', 'national_office'].includes(user.role);
       
       res.json({
         message: 'Login successful',

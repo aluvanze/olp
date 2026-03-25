@@ -22,6 +22,7 @@ const financeRoutes = require('./routes/finance');
 const teacherRatingsRoutes = require('./routes/teacher-ratings');
 const bursaryRoutes = require('./routes/bursaries');
 const calendarRoutes = require('./routes/calendar');
+const officeRoutes = require('./routes/office');
 const { pool } = require('./config/database');
 
 const app = express();
@@ -109,6 +110,7 @@ app.use('/api/finance', financeRoutes);
 app.use('/api/teacher-ratings', teacherRatingsRoutes);
 app.use('/api/bursaries', bursaryRoutes);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/office', officeRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -91,6 +91,34 @@
         let currentUser = null;
         let authToken = null;
         let substrandsViewContext = null; // { learningAreaId, learningAreaName } for event delegation
+        let parentSelectedLearnerId = null;
+        let parentSelectedStudentUserId = null;
+        let _parentPickerInProgress = false;
+
+        function loadParentSelectionFromStorage() {
+            const l = localStorage.getItem('parentSelectedLearnerId');
+            const s = localStorage.getItem('parentSelectedStudentUserId');
+            parentSelectedLearnerId = l ? parseInt(l, 10) : null;
+            parentSelectedStudentUserId = s ? parseInt(s, 10) : null;
+            if (Number.isNaN(parentSelectedLearnerId)) parentSelectedLearnerId = null;
+            if (Number.isNaN(parentSelectedStudentUserId)) parentSelectedStudentUserId = null;
+        }
+
+        function setParentSelectedChild(child) {
+            const learnerId = child?.learner_id ? parseInt(child.learner_id, 10) : null;
+            const studentUserId = child?.id ? parseInt(child.id, 10) : null;
+            parentSelectedLearnerId = (!Number.isNaN(learnerId) && learnerId) ? learnerId : null;
+            parentSelectedStudentUserId = (!Number.isNaN(studentUserId) && studentUserId) ? studentUserId : null;
+            if (parentSelectedLearnerId) localStorage.setItem('parentSelectedLearnerId', String(parentSelectedLearnerId));
+            if (parentSelectedStudentUserId) localStorage.setItem('parentSelectedStudentUserId', String(parentSelectedStudentUserId));
+        }
+
+        function clearParentSelectedChild() {
+            parentSelectedLearnerId = null;
+            parentSelectedStudentUserId = null;
+            localStorage.removeItem('parentSelectedLearnerId');
+            localStorage.removeItem('parentSelectedStudentUserId');
+        }
 
         function handleSubstrandsClick(e) {
             // Only handle clicks that originated inside main content or a modal (not nav, sidebar, user menu)
@@ -166,6 +194,7 @@
         // Check if user is already logged in
         window.addEventListener('DOMContentLoaded', () => {
             const token = localStorage.getItem('authToken');
+            loadParentSelectionFromStorage();
             if (token) {
                 authToken = token;
                 checkAuth();
@@ -207,9 +236,10 @@
                 }
 
                 currentUser = await response.json();
+                loadParentSelectionFromStorage();
 
-                // If no grade has been selected yet, show grade selection first
-                if (!currentUser.current_grade) {
+                // If no grade has been selected yet, show grade selection first (except parent/finance)
+                if (!currentUser.current_grade && !['parent', 'finance'].includes(currentUser.role)) {
                     try {
                         const grades = await apiCall('/auth/grades');
                         showGradeSelection(grades);
@@ -224,6 +254,71 @@
                 console.error('Auth check error:', error);
             }
         }
+
+        async function ensureParentChildSelected() {
+            loadParentSelectionFromStorage();
+            const children = await apiCall(`/users/parent/${currentUser.id}/students`);
+            if (!Array.isArray(children) || children.length === 0) {
+                clearParentSelectedChild();
+                return { children: [], selected: null, requiresSelection: false };
+            }
+            if (children.length === 1) {
+                setParentSelectedChild(children[0]);
+                return { children, selected: children[0], requiresSelection: false };
+            }
+            const match = parentSelectedLearnerId
+                ? children.find(c => parseInt(c.learner_id || c.id, 10) === parentSelectedLearnerId)
+                : null;
+            if (match) return { children, selected: match, requiresSelection: false };
+            return { children, selected: null, requiresSelection: true };
+        }
+
+        function showParentChildSelection(children) {
+            const root = document.getElementById('root');
+            if (!root) return;
+            const list = Array.isArray(children) ? children : [];
+            window._parentChildSelectionList = list;
+            root.innerHTML = `
+                <div class="login-container">
+                    <div class="login-left-panel">
+                        <div class="login-content-wrapper">
+                            <div class="login-branding">
+                                <h1 class="brand-title">Senior School OLP System</h1>
+                                <h2 class="brand-subtitle">Parent Access</h2>
+                                <p class="brand-description">Select the learner you want to view. If you have one learner, the system will continue automatically.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="login-right-panel">
+                        <div class="login-form-container">
+                            <h2 class="login-title">Select Learner</h2>
+                            <p class="login-subtitle">Choose a student linked to your parent account.</p>
+                            <div class="premium-form-section" style="margin-top: 1.25rem;">
+                                <div class="grade-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;">
+                                    ${list.map((c, idx) => `
+                                        <button type="button" class="btn-primary" style="width:100%; padding: 0.85rem 1rem;"
+                                            onclick="handleParentChildSelection(${idx})">
+                                            <span style="font-weight: 800; display:block;">${c.first_name || ''} ${c.last_name || ''}</span>
+                                            <span style="opacity: 0.9; font-size: 0.9rem; display:block;">School ID: ${c.admission_number || 'N/A'}</span>
+                                        </button>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            <button type="button" onclick="logout()" class="btn-secondary" style="margin-top: 1rem; width: auto;">Sign out</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.handleParentChildSelection = function(index) {
+            const list = Array.isArray(window._parentChildSelectionList) ? window._parentChildSelectionList : [];
+            const child = list[index];
+            if (!child) return;
+            setParentSelectedChild(child);
+            _parentPickerInProgress = false;
+            showDashboard();
+        };
 
         // Login form handler
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -449,6 +544,28 @@
             const root = document.getElementById('root');
             const role = currentUser.role;
 
+            // Parent: choose learner after login if multiple linked
+            if (role === 'parent' && !_parentPickerInProgress) {
+                _parentPickerInProgress = true;
+                ensureParentChildSelected()
+                    .then(({ children, requiresSelection }) => {
+                        if (requiresSelection) {
+                            showParentChildSelection(children);
+                            return;
+                        }
+                        // Selection resolved (auto or stored) → render dashboard fresh
+                        _parentPickerInProgress = true; // prevent re-entry during render
+                        showDashboard();
+                    })
+                    .catch((e) => {
+                        console.error('Parent child selection error:', e);
+                    })
+                    .finally(() => {
+                        _parentPickerInProgress = false;
+                    });
+                return;
+            }
+
             // Role-specific navigation (desktop)
             let navButtons = '';
             let sidebarButtons = '';
@@ -469,13 +586,22 @@
                     <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
                     <button onclick="loadView('assessment-management')" class="nav-btn">Assessment Management</button>
                     <button onclick="loadView('classroom-tools')" class="nav-btn">Classroom Tools</button>
+                    <button onclick="loadView('grading-center')" class="nav-btn">Grading Center</button>
                     <button onclick="loadView('register-student')" class="nav-btn">Register Student</button>
                     <button onclick="loadView('messages')" class="nav-btn">Messages</button>
                 `;
                 sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) +
                     createSidebarButton('assessment-management', 'Assessment Management') +
                     createSidebarButton('classroom-tools', 'Classroom Tools') +
+                    createSidebarButton('grading-center', 'Grading Center') +
                     createSidebarButton('register-student', 'Register Student') +
+                    createSidebarButton('messages', 'Messages');
+            } else if (role === 'sub_county_office' || role === 'county_office' || role === 'national_office') {
+                navButtons = `
+                    <button onclick="loadView('office-dashboard')" class="nav-btn active">Office Dashboard</button>
+                    <button onclick="loadView('messages')" class="nav-btn">Messages</button>
+                `;
+                sidebarButtons = createSidebarButton('office-dashboard', 'Office Dashboard', true) +
                     createSidebarButton('messages', 'Messages');
             } else if (role === 'headteacher' || role === 'deputy_headteacher' || role === 'superadmin' || role === 'finance') {
                 navButtons = `
@@ -613,9 +739,10 @@
                 </div>
             `;
 
-            // Headteachers land on Register Student (assign learning areas) by default
-            const leadToAssignLearningAreas = role === 'headteacher' || role === 'deputy_headteacher' || role === 'superadmin';
-            loadView(leadToAssignLearningAreas ? 'register-student' : 'dashboard');
+            // Default landing page by role
+            // Term selection lives on Dashboard, so admin roles should land there first.
+            const isOfficeRole = ['sub_county_office', 'county_office', 'national_office'].includes(role);
+            loadView(isOfficeRole ? 'office-dashboard' : 'dashboard');
         }
 
         async function loadView(viewName) {
@@ -754,11 +881,287 @@
                     case 'result-slip':
                         await loadResultSlip();
                         break;
+                    case 'office-dashboard':
+                        await loadOfficeDashboard();
+                        break;
                 }
             } catch (error) {
                 content.innerHTML = `<div class="error">Error loading ${viewName}: ${error.message}</div>`;
                 console.error('Load view error:', error);
             }
+        }
+
+        async function loadOfficeDashboard() {
+            const content = document.getElementById('dashboardContent');
+            const role = currentUser?.role;
+            if (!['sub_county_office', 'county_office', 'national_office', 'superadmin'].includes(role)) {
+                content.innerHTML = `<div class="error">Access denied.</div>`;
+                return;
+            }
+
+            content.innerHTML = `
+                <div class="view-header">
+                    <h2>Administrative Office Dashboard</h2>
+                </div>
+
+                <div class="card" style="margin-bottom: 16px;">
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+                        <div style="min-width:200px;">
+                            <label>Scope</label>
+                            <select id="officeScope" class="form-control">
+                                <option value="national">National</option>
+                                <option value="county">County</option>
+                                <option value="sub_county">Sub-County</option>
+                            </select>
+                        </div>
+                        <div style="min-width:200px;">
+                            <label>County (optional)</label>
+                            <input id="officeCounty" class="form-control" placeholder="e.g. Nairobi" />
+                        </div>
+                        <div style="min-width:200px;">
+                            <label>Sub-County (optional)</label>
+                            <input id="officeSubCounty" class="form-control" placeholder="e.g. Westlands" />
+                        </div>
+                        <div style="min-width:140px;">
+                            <label>Term (optional)</label>
+                            <input id="officeTerm" class="form-control" placeholder="1" />
+                        </div>
+                        <div style="min-width:180px;">
+                            <label>Academic Year (optional)</label>
+                            <input id="officeYear" class="form-control" placeholder="2026" />
+                        </div>
+                        <button class="btn-primary" onclick="officeRefreshAll()">Refresh</button>
+                    </div>
+                </div>
+
+                <div class="grid-2" style="margin-bottom:16px;">
+                    <div class="card">
+                        <h3>Analytics & Insights</h3>
+                        <div id="officeAnalytics"></div>
+                    </div>
+                    <div class="card">
+                        <h3>Bursary & Capitation Oversight</h3>
+                        <div id="officeFunds"></div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-bottom:16px;">
+                    <h3>Transfer Management</h3>
+                    <div id="officeTransfers"></div>
+                </div>
+
+                <div class="card">
+                    <h3>School Classification / Tagging</h3>
+                    <div id="officeTags"></div>
+                </div>
+            `;
+
+            // preload
+            await officeRefreshAll();
+        }
+
+        function _officeFilters() {
+            const scope = document.getElementById('officeScope')?.value || 'national';
+            const county = (document.getElementById('officeCounty')?.value || '').trim();
+            const sub_county = (document.getElementById('officeSubCounty')?.value || '').trim();
+            const term = (document.getElementById('officeTerm')?.value || '').trim();
+            const academic_year = (document.getElementById('officeYear')?.value || '').trim();
+            return { scope, county, sub_county, term, academic_year };
+        }
+
+        async function officeRefreshAll() {
+            await Promise.allSettled([
+                officeLoadAnalytics(),
+                officeLoadFunds(),
+                officeLoadTransfers(),
+                officeLoadTags()
+            ]);
+        }
+
+        async function officeLoadAnalytics() {
+            const el = document.getElementById('officeAnalytics');
+            if (!el) return;
+            el.innerHTML = '<div class="loading">Loading analytics...</div>';
+            const f = _officeFilters();
+
+            const qs = new URLSearchParams();
+            Object.entries(f).forEach(([k, v]) => { if (v) qs.set(k, v); });
+            const data = await apiCall(`/office/analytics/overview?${qs.toString()}`);
+
+            const laRows = (data.by_learning_area || []).slice(0, 10).map(r => `
+                <tr>
+                    <td>${escapeHtml(r.learning_area_name || '')}</td>
+                    <td>${r.avg_final_score ? Number(r.avg_final_score).toFixed(2) : '-'}</td>
+                    <td>${r.learners_count || 0}</td>
+                    <td>${r.schools_count || 0}</td>
+                </tr>
+            `).join('');
+
+            const topSchools = (data.school_heatmap || []).slice(0, 10).map(r => `
+                <tr>
+                    <td>${escapeHtml(r.school_name || '')}</td>
+                    <td>${escapeHtml(r.county || '')}</td>
+                    <td>${escapeHtml(r.sub_county || '')}</td>
+                    <td>${r.avg_final_score ? Number(r.avg_final_score).toFixed(2) : '-'}</td>
+                    <td>${r.learners_count || 0}</td>
+                </tr>
+            `).join('');
+
+            el.innerHTML = `
+                <div style="margin-bottom:10px; opacity:0.85;">
+                    Scope: <b>${escapeHtml(data.scope || '')}</b>
+                </div>
+                <h4 style="margin: 10px 0;">Top Learning Areas (Avg Final Score)</h4>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead><tr><th>Learning Area</th><th>Avg</th><th>Learners</th><th>Schools</th></tr></thead>
+                        <tbody>${laRows || '<tr><td colspan="4">No data</td></tr>'}</tbody>
+                    </table>
+                </div>
+                <h4 style="margin: 14px 0 10px;">Top Schools (Avg Final Score)</h4>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead><tr><th>School</th><th>County</th><th>Sub-County</th><th>Avg</th><th>Learners</th></tr></thead>
+                        <tbody>${topSchools || '<tr><td colspan="5">No data</td></tr>'}</tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        async function officeLoadFunds() {
+            const el = document.getElementById('officeFunds');
+            if (!el) return;
+            el.innerHTML = '<div class="loading">Loading funds...</div>';
+            const data = await apiCall('/office/funds/overview');
+
+            const bursaryRows = (data.bursary || []).map(r => `
+                <tr>
+                    <td>${escapeHtml(r.status || '')}</td>
+                    <td>${r.applications_count || 0}</td>
+                    <td>${r.total_requested ? Number(r.total_requested).toFixed(2) : '0.00'}</td>
+                </tr>
+            `).join('');
+
+            el.innerHTML = `
+                <h4 style="margin: 0 0 10px;">Bursaries</h4>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead><tr><th>Status</th><th>Applications</th><th>Total Requested</th></tr></thead>
+                        <tbody>${bursaryRows || '<tr><td colspan="3">No data</td></tr>'}</tbody>
+                    </table>
+                </div>
+                <h4 style="margin: 14px 0 10px;">Capitation</h4>
+                <div>
+                    <p><b>Total received:</b> ${data.capitation?.total_received ? Number(data.capitation.total_received).toFixed(2) : '0.00'}</p>
+                    <p><b>Records:</b> ${data.capitation?.records_count || 0}</p>
+                </div>
+            `;
+        }
+
+        async function officeLoadTransfers() {
+            const el = document.getElementById('officeTransfers');
+            if (!el) return;
+            el.innerHTML = '<div class="loading">Loading transfers...</div>';
+            const transfers = await apiCall('/office/transfers?status=pending');
+
+            const rows = (transfers || []).map(t => `
+                <tr>
+                    <td>${escapeHtml(t.school_id || '')}</td>
+                    <td>${escapeHtml(`${t.learner_first_name || ''} ${t.learner_last_name || ''}`.trim())}</td>
+                    <td>${escapeHtml(t.from_school_name || '')}</td>
+                    <td>${escapeHtml(t.to_school_name || '')}</td>
+                    <td>${escapeHtml(t.status || '')}</td>
+                    <td style="white-space:nowrap;">
+                        <button class="btn-secondary" onclick="officeTransferDecision(${t.id}, 'approved')">Approve</button>
+                        <button class="btn-danger" onclick="officeTransferDecision(${t.id}, 'rejected')">Reject</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            el.innerHTML = `
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead><tr><th>School ID</th><th>Learner</th><th>From</th><th>To</th><th>Status</th><th>Action</th></tr></thead>
+                        <tbody>${rows || '<tr><td colspan="6">No pending transfers</td></tr>'}</tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        async function officeTransferDecision(id, decision) {
+            try {
+                await apiCall(`/office/transfers/${id}/decision`, {
+                    method: 'POST',
+                    body: JSON.stringify({ decision })
+                });
+                showToast(`Transfer ${decision}.`, 'success');
+                await officeLoadTransfers();
+            } catch (e) {
+                showToast(e.message || 'Transfer update failed.', 'error');
+            }
+        }
+
+        async function officeLoadTags() {
+            const el = document.getElementById('officeTags');
+            if (!el) return;
+            el.innerHTML = '<div class="loading">Loading tags...</div>';
+
+            const tags = await apiCall('/office/schools/tags');
+            const rows = (tags || []).slice(0, 30).map(t => `
+                <tr>
+                    <td>${escapeHtml(t.school_name || '')}</td>
+                    <td>${escapeHtml(t.tag_type || '')}</td>
+                    <td>${escapeHtml(t.tag_value || '')}</td>
+                    <td>${escapeHtml(t.notes || '')}</td>
+                </tr>
+            `).join('');
+
+            el.innerHTML = `
+                <div class="card" style="margin-bottom:12px; padding:12px;">
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+                        <div style="min-width:160px;">
+                            <label>School ID</label>
+                            <input id="tagSchoolId" class="form-control" placeholder="e.g. 1" />
+                        </div>
+                        <div style="min-width:200px;">
+                            <label>Tag Type</label>
+                            <input id="tagType" class="form-control" placeholder="performance / infrastructure / pathway_focus" />
+                        </div>
+                        <div style="min-width:220px;">
+                            <label>Tag Value</label>
+                            <input id="tagValue" class="form-control" placeholder="e.g. STEM Center of Excellence" />
+                        </div>
+                        <div style="min-width:240px; flex:1;">
+                            <label>Notes (optional)</label>
+                            <input id="tagNotes" class="form-control" placeholder="Optional notes" />
+                        </div>
+                        <button class="btn-primary" onclick="officeCreateTag()">Save Tag</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead><tr><th>School</th><th>Type</th><th>Value</th><th>Notes</th></tr></thead>
+                        <tbody>${rows || '<tr><td colspan="4">No tags</td></tr>'}</tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        async function officeCreateTag() {
+            const school_id = (document.getElementById('tagSchoolId')?.value || '').trim();
+            const tag_type = (document.getElementById('tagType')?.value || '').trim();
+            const tag_value = (document.getElementById('tagValue')?.value || '').trim();
+            const notes = (document.getElementById('tagNotes')?.value || '').trim();
+            if (!school_id || !tag_type || !tag_value) {
+                showToast('School ID, Tag Type, and Tag Value are required.', 'error');
+                return;
+            }
+            await apiCall('/office/schools/tags', {
+                method: 'POST',
+                body: JSON.stringify({ school_id, tag_type, tag_value, notes })
+            });
+            showToast('Tag saved.', 'success');
+            await officeLoadTags();
         }
 
         async function apiCall(endpoint, options = {}) {
@@ -796,6 +1199,15 @@
                 });
                 throw error;
             }
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         async function loadCourses() {
@@ -1181,11 +1593,54 @@
                     <div class="form-actions">
                         <button class="btn-primary" onclick="openAttendanceRegister()">Attendance Register</button>
                         <button class="btn-secondary" onclick="openAssignmentUpload()">Assignment Upload</button>
+                        <button class="btn-secondary" onclick="openMarkAssignments()">Mark Assignments</button>
                         <button class="btn-secondary" onclick="openBookIssuance()">Book Issuance</button>
                     </div>
                 </div>
                 <div id="classroom-tools-container"></div>
             `;
+        }
+
+        async function openMarkAssignments() {
+            const courseId = document.getElementById('classroom-course-select')?.value;
+            if (!courseId) return showToast('Select class first.', 'error');
+            const box = document.getElementById('classroom-tools-container');
+            box.innerHTML = '<div class="loading">Loading assignments...</div>';
+            try {
+                const assignments = await apiCall(`/assignments/course/${courseId}`).catch(() => []);
+                box.innerHTML = `
+                    <div class="form-container" style="margin-top:1rem;">
+                        <h3>Mark Assignments</h3>
+                        <p class="info">Open an assignment to view submissions and record marks.</p>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Title</th>
+                                        <th>Due Date</th>
+                                        <th>Points</th>
+                                        <th>Submissions</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${(assignments || []).length > 0 ? (assignments || []).map(a => `
+                                        <tr>
+                                            <td>${escapeHtml(a.title || '')}</td>
+                                            <td>${a.due_date ? new Date(a.due_date).toLocaleString() : '-'}</td>
+                                            <td>${a.total_points ?? '-'}</td>
+                                            <td>${a.submission_count ?? 0}</td>
+                                            <td><button class="btn-primary" onclick="viewAssignment(${a.id})">View Submissions</button></td>
+                                        </tr>
+                                    `).join('') : `<tr><td colspan="5">No assignments yet for this class.</td></tr>`}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                box.innerHTML = `<div class="error">Failed to load assignments: ${escapeHtml(e.message || 'Unknown error')}</div>`;
+            }
         }
 
         async function openAttendanceRegister() {
@@ -1280,6 +1735,8 @@
             const fd = new FormData(form);
             fd.append('course_id', String(courseId));
             fd.append('assignment_type', 'homework');
+            if (currentTerm) fd.append('term_number', String(currentTerm));
+            if (currentAcademicYear) fd.append('academic_year', String(currentAcademicYear));
             try {
                 const res = await fetch(`${API_BASE_URL}/assignments`, {
                     method: 'POST',
@@ -1726,16 +2183,32 @@
         async function viewAssignment(assignmentId) {
             const assignment = await apiCall(`/assignments/${assignmentId}`);
             let submission = null;
-            try {
-                submission = await apiCall(`/assignments/${assignmentId}/submission`);
-            } catch (e) {
-                // No submission yet
+            let assignmentGrade = null;
+            let submissions = [];
+            if (currentUser.role === 'student') {
+                try {
+                    submission = await apiCall(`/assignments/${assignmentId}/submission`);
+                } catch (e) {
+                    // No submission yet
+                }
+                try {
+                    const grades = await apiCall(`/grades/course/${assignment.course_id}?grade_type=assignment`);
+                    assignmentGrade = (grades || []).find(g => Number(g.assignment_id) === Number(assignmentId)) || null;
+                } catch (e) {
+                    assignmentGrade = null;
+                }
+            } else if (['teacher', 'headteacher', 'deputy_headteacher', 'superadmin'].includes(currentUser.role)) {
+                try {
+                    submissions = await apiCall(`/assignments/${assignmentId}/submissions`);
+                } catch (e) {
+                    submissions = [];
+                }
             }
 
             const content = document.getElementById('dashboardContent');
             content.innerHTML = `
                 <div class="view-header">
-                    <button onclick="loadView('assignments')" class="btn-back"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg> Back</button>
+                    <button onclick="loadView('${['teacher','headteacher','deputy_headteacher','superadmin'].includes(currentUser.role) ? 'classroom-tools' : 'assignments'}')" class="btn-back"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg> Back</button>
                     <h2>${assignment.title}</h2>
                 </div>
                 <div class="assignment-details">
@@ -1744,13 +2217,67 @@
                     <p><strong>Points:</strong> ${assignment.total_points}</p>
                     <p><strong>Due Date:</strong> ${assignment.due_date ? new Date(assignment.due_date).toLocaleString() : 'No due date'}</p>
                     ${assignment.instructions ? `<p><strong>Instructions:</strong><br>${assignment.instructions}</p>` : ''}
+                    ${['teacher', 'headteacher', 'deputy_headteacher', 'superadmin'].includes(currentUser.role) ? `
+                        <div class="submission-section" style="margin-top: 1.25rem;">
+                            <h3>Student Submissions</h3>
+                            ${Array.isArray(submissions) && submissions.length > 0 ? `
+                                <div style="overflow:auto;">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Student</th>
+                                                <th>Submitted</th>
+                                                <th>Status</th>
+                                                <th>Submission</th>
+                                                <th>Files</th>
+                                                <th style="min-width: 240px;">Mark</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${submissions.map(s => {
+                                                let files = [];
+                                                try { files = s.submission_files ? JSON.parse(s.submission_files) : []; } catch(e) { files = []; }
+                                                const filesHtml = (files || []).map(f => `<a href="${escapeHtml(f.path || '')}" target="_blank" rel="noopener">${escapeHtml(f.filename || 'file')}</a>`).join('<br>');
+                                                return `
+                                                    <tr>
+                                                        <td>${escapeHtml(`${s.first_name || ''} ${s.last_name || ''}`.trim())}</td>
+                                                        <td>${s.submitted_at ? new Date(s.submitted_at).toLocaleString() : '-'}</td>
+                                                        <td>${escapeHtml(s.status || '')}</td>
+                                                        <td>${s.submission_text ? `<div style="max-width: 360px; white-space: pre-wrap;">${escapeHtml(s.submission_text)}</div>` : '-'}</td>
+                                                        <td>${filesHtml || '-'}</td>
+                                                        <td>
+                                                            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                                                <input class="mark-points" data-student="${s.student_id}" type="number" min="0" max="${Number(assignment.total_points || 100)}" step="0.01" placeholder="Score" style="width:110px;" />
+                                                                <button class="btn-primary" onclick="gradeAssignmentSubmission(${assignmentId}, ${assignment.course_id}, ${s.student_id}, ${Number(assignment.total_points || 100)})">Save</button>
+                                                            </div>
+                                                            <input class="mark-comments" data-student="${s.student_id}" type="text" placeholder="Feedback (optional)" style="width:100%; margin-top:6px;" />
+                                                        </td>
+                                                    </tr>
+                                                `;
+                                            }).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ` : `<p class="muted">No submissions yet.</p>`}
+                        </div>
+                    ` : ''}
                     ${currentUser.role === 'student' ? `
                         <div class="submission-section">
                             <h3>Your Submission</h3>
                             ${submission ? `
                                 <p><strong>Submitted:</strong> ${new Date(submission.submitted_at).toLocaleString()}</p>
                                 ${submission.submission_text ? `<p>${submission.submission_text}</p>` : ''}
-                                <p>Status: ${submission.status}</p>
+                                <p><strong>Status:</strong> ${escapeHtml(submission.status || '')}</p>
+                                ${assignmentGrade ? `
+                                    <div class="card" style="margin-top: 12px; padding: 12px;">
+                                        <p style="margin:0 0 6px;"><strong>Marked:</strong>
+                                            ${Number(assignmentGrade.points_earned).toFixed(2)} / ${Number(assignmentGrade.points_possible).toFixed(2)}
+                                            (${assignmentGrade.percentage !== null && assignmentGrade.percentage !== undefined ? Number(assignmentGrade.percentage).toFixed(2) : '-'}%)
+                                            ${assignmentGrade.letter_grade ? ` - <strong>${escapeHtml(assignmentGrade.letter_grade)}</strong>` : ''}
+                                        </p>
+                                        ${assignmentGrade.comments ? `<p style="margin:0;"><strong>Feedback:</strong> ${escapeHtml(assignmentGrade.comments)}</p>` : ''}
+                                    </div>
+                                ` : `<p class="muted" style="margin-top: 10px;">Not marked yet.</p>`}
                             ` : `
                                 <form id="submitForm" onsubmit="submitAssignment(event, ${assignmentId})">
                                     <textarea name="submission_text" placeholder="Enter your submission text" rows="10"></textarea>
@@ -1764,10 +2291,55 @@
             `;
         }
 
+        async function gradeAssignmentSubmission(assignmentId, courseId, studentId, pointsPossible) {
+            try {
+                const pointsEl = document.querySelector(`.mark-points[data-student="${studentId}"]`);
+                const commentsEl = document.querySelector(`.mark-comments[data-student="${studentId}"]`);
+                const pointsEarned = pointsEl ? Number(pointsEl.value) : NaN;
+                const comments = commentsEl ? commentsEl.value : '';
+                if (!Number.isFinite(pointsEarned)) {
+                    showToast('Enter a valid score.', 'error');
+                    return;
+                }
+                await apiCall('/grades/grade', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        student_id: studentId,
+                        course_id: courseId,
+                        assignment_id: assignmentId,
+                        points_earned: pointsEarned,
+                        points_possible: Number(pointsPossible || 100),
+                        comments: comments || null,
+                        grade_type: 'assignment'
+                    })
+                });
+                showToast('Saved. Submission marked as graded.', 'success');
+                await viewAssignment(assignmentId);
+            } catch (e) {
+                showToast(e.message || 'Failed to save grade', 'error');
+            }
+        }
+
         async function submitAssignment(e, assignmentId) {
             e.preventDefault();
-            // Simplified - would need FormData for file uploads
-            alert('File upload submission requires FormData. This is a simplified demo.');
+            const form = document.getElementById('submitForm');
+            if (!form) return;
+            try {
+                const fd = new FormData(form);
+                const res = await fetch(`${API_BASE_URL}/assignments/${assignmentId}/submit`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` },
+                    body: fd
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.message || `HTTP ${res.status}`);
+                }
+                showToast('Assignment submitted successfully.', 'success');
+                await viewAssignment(assignmentId);
+            } catch (error) {
+                showToast(error.message || 'Failed to submit assignment', 'error');
+            }
         }
 
         async function loadModules() {
@@ -3429,6 +4001,11 @@
 
         // Teacher: Load grading center
         async function loadGradingCenter() {
+            if (!currentTerm || !currentAcademicYear) {
+                showToast('Please select a term first from the dashboard to view CBC (formative/summative) values.', 'error');
+                loadView('dashboard');
+                return;
+            }
             const courses = await apiCall('/courses');
             const content = document.getElementById('dashboardContent');
             content.innerHTML = `
@@ -3447,7 +4024,13 @@
         }
 
         async function viewGradingCenter(courseId) {
-            const gradingData = await apiCall(`/grades/course/${courseId}/grading-center`);
+            if (!currentTerm || !currentAcademicYear) {
+                showToast('Please select a term first from the dashboard to view CBC (formative/summative) values.', 'error');
+                loadView('dashboard');
+                return;
+            }
+            const qp = (currentTerm && currentAcademicYear) ? `?term=${encodeURIComponent(currentTerm)}&academic_year=${encodeURIComponent(currentAcademicYear)}` : '';
+            const gradingData = await apiCall(`/grades/course/${courseId}/grading-center${qp}`);
             const content = document.getElementById('dashboardContent');
             content.innerHTML = `
                 <div class="view-header">
@@ -3460,6 +4043,9 @@
                             <tr>
                                 <th>Student</th>
                                 <th>Current Average</th>
+                                <th>Formative Avg</th>
+                                <th>Summative (End %)</th>
+                                <th>CBC Final</th>
                                 <th>Final Grade</th>
                                 <th>Actions</th>
                             </tr>
@@ -3469,6 +4055,9 @@
                                 <tr>
                                     <td>${student.first_name} ${student.last_name}</td>
                                     <td>${student.currentAverage}%</td>
+                                    <td>${student.cbc?.formative_average !== null && student.cbc?.formative_average !== undefined ? student.cbc.formative_average + '%' : '-'}</td>
+                                    <td>${student.cbc?.summative_end_percentage !== null && student.cbc?.summative_end_percentage !== undefined ? student.cbc.summative_end_percentage + '%' : '-'}</td>
+                                    <td>${student.cbc?.final_score !== null && student.cbc?.final_score !== undefined ? (student.cbc.final_score + '% (' + (student.cbc.final_grade || '-') + ')') : '-'}</td>
                                     <td>${student.finalGrade ? student.finalGrade.letter_grade : 'N/A'}</td>
                                     <td>
                                         <button onclick="viewStudentGrades(${courseId}, ${student.id})" class="btn-view">View Details</button>
@@ -3482,7 +4071,8 @@
         }
 
         async function viewStudentGrades(courseId, studentId) {
-            const summary = await apiCall(`/grades/course/${courseId}/student/${studentId}/summary`);
+            const qp = (currentTerm && currentAcademicYear) ? `?term=${encodeURIComponent(currentTerm)}&academic_year=${encodeURIComponent(currentAcademicYear)}` : '';
+            const summary = await apiCall(`/grades/course/${courseId}/student/${studentId}/summary${qp}`);
             const content = document.getElementById('dashboardContent');
             content.innerHTML = `
                 <div class="view-header">
@@ -3491,6 +4081,9 @@
                 </div>
                 <div class="grades-table">
                     <p><strong>Current Average:</strong> ${summary.currentAverage}%</p>
+                    <p><strong>Formative Average (CBC):</strong> ${summary.cbc?.formative_average !== null && summary.cbc?.formative_average !== undefined ? summary.cbc.formative_average + '%' : 'N/A'}</p>
+                    <p><strong>Summative End Exam (CBC):</strong> ${summary.cbc?.summative_end_percentage !== null && summary.cbc?.summative_end_percentage !== undefined ? summary.cbc.summative_end_percentage + '%' : 'N/A'}</p>
+                    <p><strong>CBC Final:</strong> ${summary.cbc?.final_score !== null && summary.cbc?.final_score !== undefined ? (summary.cbc.final_score + '% (' + (summary.cbc.final_grade || '-') + ')') : 'N/A'}</p>
                     <p><strong>Final Grade:</strong> ${summary.finalGrade ? summary.finalGrade.letter_grade : 'N/A'}</p>
                     <table>
                         <thead>
@@ -3935,20 +4528,9 @@
             const content = document.getElementById('dashboardContent');
 
             if (!currentTerm || !currentAcademicYear) {
-                content.innerHTML = `
-                    <div class="view-header">
-                        <div class="view-header-content">
-                            <button onclick="loadView('dashboard')" class="btn-back">← Back to Dashboard</button>
-                            <h1 class="view-title">Assign Learning Areas to Students</h1>
-                            <p class="view-subtitle">Headteacher: search for a student, then manage their learning area enrollments</p>
-                        </div>
-                    </div>
-                    <div class="premium-form-section" style="max-width: 32rem; margin: 2rem auto; padding: 2rem; text-align: center; background: #e3f2fd; border: 2px solid #2196f3; border-radius: 12px;">
-                        <p style="margin: 0 0 1rem; font-size: 1.1rem;"><strong>Select a term first</strong></p>
-                        <p style="margin: 0 0 1.5rem; color: #555;">To assign learning areas to students, choose a term from the dashboard.</p>
-                        <button type="button" onclick="loadView('dashboard')" class="btn-primary">Go to Dashboard to select term</button>
-                    </div>
-                `;
+                // Automatically redirect to Dashboard term picker to avoid dead-end screen.
+                showToast('Please select a term first.', 'info');
+                await loadView('dashboard');
                 return;
             }
 
@@ -4006,6 +4588,18 @@
                                 <div class="form-group">
                                     <label>Guardian Phone 2</label>
                                     <input type="tel" name="guardian_phone_2" placeholder="Secondary contact">
+                                </div>
+                            </div>
+                            <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.5rem;">
+                                <div class="form-group">
+                                    <label>Parent / Guardian Name</label>
+                                    <input type="text" name="parent_name" placeholder="e.g. Mary Wanjiku (optional)">
+                                    <small style="color:#666; font-size:0.85rem;">Optional: used when creating the parent login</small>
+                                </div>
+                                <div class="form-group">
+                                    <label>Parent / Guardian Email</label>
+                                    <input type="email" name="parent_email" placeholder="e.g. parent@example.com (optional)">
+                                    <small style="color:#666; font-size:0.85rem;">If provided, system will create/link the parent login</small>
                                 </div>
                             </div>
                             <div class="form-actions" style="margin-top: 1rem;">
@@ -4079,6 +4673,8 @@
                 email: fd.get('email')?.trim(),
                 guardian_phone: fd.get('guardian_phone')?.trim() || undefined,
                 guardian_phone_2: fd.get('guardian_phone_2')?.trim() || undefined,
+                parent_name: fd.get('parent_name')?.trim() || undefined,
+                parent_email: fd.get('parent_email')?.trim() || undefined,
                 grade_level_id: (gradeVal && String(gradeVal).trim()) ? gradeVal : undefined,
                 academic_year: (typeof currentAcademicYear !== 'undefined' && currentAcademicYear) ? currentAcademicYear : undefined,
                 term: (typeof currentTerm !== 'undefined' && currentTerm) ? currentTerm : undefined
@@ -4095,6 +4691,9 @@
                 showToast('Student added successfully. School ID: ' + (result?.student?.school_id || data.school_id), 'success');
                 if (result?.credentials) {
                     showToast('Username: ' + result.credentials.username + ' | Temp password: ' + result.credentials.temp_password + ' (share for first login)', 'success');
+                }
+                if (result?.parent_credentials) {
+                    showToast('Parent login created. Username: ' + result.parent_credentials.username + ' | Temp password: ' + result.parent_credentials.temp_password, 'success');
                 }
                 form.reset();
                 toggleAddStudentForm();
@@ -6629,7 +7228,11 @@
             const content = document.getElementById('dashboardContent');
             const children = await apiCall(`/users/parent/${currentUser.id}/students`);
             parentDashboardChildren = children || [];
-            parentDashboardSelectedChildIndex = 0;
+            loadParentSelectionFromStorage();
+            const preferredIdx = (parentSelectedLearnerId && Array.isArray(children))
+                ? children.findIndex(c => parseInt(c.learner_id || c.id, 10) === parentSelectedLearnerId)
+                : -1;
+            parentDashboardSelectedChildIndex = preferredIdx >= 0 ? preferredIdx : 0;
 
             if (!children || children.length === 0) {
                 content.innerHTML = `
@@ -6643,10 +7246,13 @@
                 <div class="view-header">
                     <h2>Parent Dashboard</h2>
                     <p>Track academic, financial and school updates for your children.</p>
+                    <div style="margin-top: 0.75rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+                        <button type="button" class="btn-secondary" onclick="openParentLearnerPicker()">Change Learner</button>
+                    </div>
                 </div>
                 <div class="course-tabs" id="parent-children-tabs">
                     ${children.map((child, idx) => `
-                        <button class="tab-btn ${idx === 0 ? 'active' : ''}" onclick="switchParentChildTab(${idx})">
+                        <button class="tab-btn ${idx === parentDashboardSelectedChildIndex ? 'active' : ''}" onclick="switchParentChildTab(${idx})">
                             ${child.first_name} ${child.last_name}
                         </button>
                     `).join('')}
@@ -6654,7 +7260,20 @@
                 <div id="parent-dashboard-child-content" class="child-details"></div>
             `;
 
-            await renderParentDashboardForChild(children[0]);
+            const selectedChild = children[parentDashboardSelectedChildIndex] || children[0];
+            if (selectedChild) setParentSelectedChild(selectedChild);
+            await renderParentDashboardForChild(selectedChild);
+        }
+
+        async function openParentLearnerPicker() {
+            try {
+                const list = Array.isArray(parentDashboardChildren) && parentDashboardChildren.length
+                    ? parentDashboardChildren
+                    : await apiCall(`/users/parent/${currentUser.id}/students`);
+                showParentChildSelection(list || []);
+            } catch (e) {
+                showToast(e.message || 'Could not load linked learners', 'error');
+            }
         }
 
         async function switchParentChildTab(index) {
@@ -6662,6 +7281,7 @@
             const tabs = document.querySelectorAll('#parent-children-tabs .tab-btn');
             tabs.forEach((btn, idx) => btn.classList.toggle('active', idx === index));
             const child = parentDashboardChildren[index];
+            if (child) setParentSelectedChild(child);
             if (child) await renderParentDashboardForChild(child);
         }
 
@@ -6865,7 +7485,10 @@
                 'teacher': 'Teacher',
                 'student': 'Learner',
                 'parent': 'Parent',
-                'finance': 'Finance Administrator'
+                'finance': 'Finance Administrator',
+                'sub_county_office': 'Sub-County Office',
+                'county_office': 'County Office',
+                'national_office': 'National Office'
             };
             return roleNames[role] || role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
         }
@@ -7061,6 +7684,12 @@
                     // Get from URL params or first child
                     const urlParams = new URLSearchParams(window.location.search);
                     learnerId = urlParams.get('learnerId');
+                    if (!learnerId) {
+                        loadParentSelectionFromStorage();
+                        if (parentSelectedLearnerId) {
+                            learnerId = parentSelectedLearnerId;
+                        }
+                    }
                     if (!learnerId) {
                         const children = await apiCall(`/users/parent/${currentUser.id}/students`);
                         if (children.length > 0) {

@@ -18,7 +18,9 @@ router.post('/add-student', authorize('headteacher', 'deputy_headteacher', 'supe
       email,
       guardian_phone,
       guardian_phone_2,
-      grade_level_id
+      grade_level_id,
+      parent_email,
+      parent_name
     } = body;
 
     const sid = (school_id || admission_number || '').toString().trim();
@@ -89,15 +91,55 @@ router.post('/add-student', authorize('headteacher', 'deputy_headteacher', 'supe
       );
       const userId = userResult.rows[0].id;
 
+      // Create/link parent if parent_email provided
+      let parentId = null;
+      let parentCredentials = null;
+      const parentEmail = (parent_email || '').toString().trim();
+      const parentName = (parent_name || '').toString().trim();
+      if (parentEmail) {
+        // If email exists but is not a parent, block
+        const existingByEmail = await client.query('SELECT id, role, username FROM users WHERE email = $1', [parentEmail]);
+        if (existingByEmail.rows.length > 0) {
+          const ex = existingByEmail.rows[0];
+          if (ex.role !== 'parent') {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: 'Parent email is already used by a non-parent account. Use a different email.' });
+          }
+          parentId = ex.id;
+        } else {
+          const parentTempPassword = '123456.ab';
+          const parentPasswordHash = await bcrypt.hash(parentTempPassword, 10);
+          const base = 'parent_' + parentEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+          let parentUsername = base || 'parent';
+          let ps = 0;
+          let puCheck = await client.query('SELECT id FROM users WHERE username = $1', [parentUsername]);
+          while (puCheck.rows.length > 0) {
+            ps++;
+            parentUsername = base + ps;
+            puCheck = await client.query('SELECT id FROM users WHERE username = $1', [parentUsername]);
+          }
+          const pFirst = parentName ? parentName.split(' ')[0] : 'Parent';
+          const pLast = parentName ? parentName.split(' ').slice(1).join(' ') : '';
+          const parentResult = await client.query(
+            `INSERT INTO users (username, email, password_hash, first_name, last_name, role, is_active)
+             VALUES ($1, $2, $3, $4, $5, 'parent', true)
+             RETURNING id`,
+            [parentUsername, parentEmail, parentPasswordHash, pFirst, pLast]
+          );
+          parentId = parentResult.rows[0].id;
+          parentCredentials = { username: parentUsername, temp_password: parentTempPassword };
+        }
+      }
+
       // Create learner_profile with School ID, guardian phones, grade
       const gPhone = guardian_phone ? String(guardian_phone).trim() || null : null;
       const gPhone2 = guardian_phone_2 ? String(guardian_phone_2).trim() || null : null;
       const gradeId = parseInt(grade_level_id, 10);
 
       await client.query(
-        `INSERT INTO learner_profiles (user_id, school_id, admission_number, guardian_phone, guardian_phone_2, grade_level_id)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [userId, schoolOrgId, schoolIdStr, gPhone, gPhone2, gradeId || null]
+        `INSERT INTO learner_profiles (user_id, school_id, admission_number, guardian_phone, guardian_phone_2, grade_level_id, parent_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [userId, schoolOrgId, schoolIdStr, gPhone, gPhone2, gradeId || null, parentId]
       );
 
       await client.query('COMMIT');
@@ -116,7 +158,8 @@ router.post('/add-student', authorize('headteacher', 'deputy_headteacher', 'supe
           username,
           temp_password: tempPassword,
           note: 'Share these credentials for first login. User should change password.'
-        }
+        },
+        ...(parentCredentials ? { parent_credentials: parentCredentials } : {})
       });
     } catch (err) {
       await client.query('ROLLBACK');
@@ -142,6 +185,91 @@ router.get('/grade-levels', authorize('headteacher', 'deputy_headteacher', 'supe
     res.json(result.rows);
   } catch (error) {
     console.error('Get grade levels error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Link or create parent for an existing learner (Headteacher/Admin)
+router.post('/link-parent', authorize('headteacher', 'deputy_headteacher', 'superadmin'), async (req, res) => {
+  try {
+    const { school_id, learner_id, parent_email, parent_name } = req.body || {};
+    const parentEmail = (parent_email || '').toString().trim();
+    const parentName = (parent_name || '').toString().trim();
+    const schoolIdStr = (school_id || '').toString().trim();
+    const learnerId = learner_id ? parseInt(learner_id, 10) : null;
+
+    if ((!schoolIdStr && (!learnerId || Number.isNaN(learnerId))) || !parentEmail) {
+      return res.status(400).json({ message: 'parent_email and (school_id or learner_id) are required' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const learnerResult = await client.query(
+        schoolIdStr
+          ? 'SELECT id, user_id, parent_id FROM learner_profiles WHERE admission_number = $1'
+          : 'SELECT id, user_id, parent_id FROM learner_profiles WHERE id = $1',
+        [schoolIdStr || learnerId]
+      );
+      if (learnerResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'Learner not found' });
+      }
+      const learner = learnerResult.rows[0];
+
+      // Create/link parent
+      let parentId = null;
+      let parentCredentials = null;
+      const existingByEmail = await client.query('SELECT id, role, username FROM users WHERE email = $1', [parentEmail]);
+      if (existingByEmail.rows.length > 0) {
+        const ex = existingByEmail.rows[0];
+        if (ex.role !== 'parent') {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'Parent email is already used by a non-parent account. Use a different email.' });
+        }
+        parentId = ex.id;
+      } else {
+        const parentTempPassword = '123456.ab';
+        const parentPasswordHash = await bcrypt.hash(parentTempPassword, 10);
+        const base = 'parent_' + parentEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+        let parentUsername = base || 'parent';
+        let ps = 0;
+        let puCheck = await client.query('SELECT id FROM users WHERE username = $1', [parentUsername]);
+        while (puCheck.rows.length > 0) {
+          ps++;
+          parentUsername = base + ps;
+          puCheck = await client.query('SELECT id FROM users WHERE username = $1', [parentUsername]);
+        }
+        const pFirst = parentName ? parentName.split(' ')[0] : 'Parent';
+        const pLast = parentName ? parentName.split(' ').slice(1).join(' ') : '';
+        const parentResult = await client.query(
+          `INSERT INTO users (username, email, password_hash, first_name, last_name, role, is_active)
+           VALUES ($1, $2, $3, $4, $5, 'parent', true)
+           RETURNING id`,
+          [parentUsername, parentEmail, parentPasswordHash, pFirst, pLast]
+        );
+        parentId = parentResult.rows[0].id;
+        parentCredentials = { username: parentUsername, temp_password: parentTempPassword };
+      }
+
+      await client.query('UPDATE learner_profiles SET parent_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [parentId, learner.id]);
+
+      await client.query('COMMIT');
+      res.json({
+        message: 'Parent linked successfully',
+        learner_id: learner.id,
+        parent_id: parentId,
+        ...(parentCredentials ? { parent_credentials: parentCredentials } : {})
+      });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Link parent error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
