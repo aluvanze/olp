@@ -128,6 +128,56 @@ router.delete('/:id', authorize('headteacher', 'superadmin'), async (req, res) =
   }
 });
 
+// Get fee setting for a term
+router.get('/:id/fee', authorize('headteacher', 'superadmin', 'deputy_headteacher', 'finance'), async (req, res) => {
+  try {
+    const termId = parseInt(req.params.id, 10);
+    if (Number.isNaN(termId)) return res.status(400).json({ message: 'Invalid term id' });
+
+    const result = await pool.query(
+      `SELECT tfs.id, tfs.term_id, tfs.amount, tfs.currency, tfs.created_at, tfs.updated_at
+       FROM term_fee_settings tfs
+       WHERE tfs.term_id = $1`,
+      [termId]
+    );
+    res.json(result.rows[0] || null);
+  } catch (error) {
+    console.error('Get term fee error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Set/update fee setting for a term
+router.put('/:id/fee', authorize('headteacher', 'superadmin', 'deputy_headteacher'), async (req, res) => {
+  try {
+    const termId = parseInt(req.params.id, 10);
+    const { amount, currency } = req.body || {};
+    if (Number.isNaN(termId)) return res.status(400).json({ message: 'Invalid term id' });
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ message: 'Amount must be a positive number' });
+
+    // Ensure term exists
+    const termCheck = await pool.query('SELECT id FROM terms WHERE id = $1', [termId]);
+    if (termCheck.rows.length === 0) return res.status(404).json({ message: 'Term not found' });
+
+    const result = await pool.query(
+      `INSERT INTO term_fee_settings (term_id, amount, currency, created_by)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (term_id)
+       DO UPDATE SET amount = EXCLUDED.amount,
+                     currency = EXCLUDED.currency,
+                     updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [termId, amt, (currency || 'KES').toUpperCase(), req.user.id]
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Set term fee error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Migrate structure from previous term (learning areas, curriculum, teacher assignments)
 // Does NOT migrate student data (enrollments, grades, attendance)
 router.post('/:id/migrate-structure', authorize('headteacher', 'superadmin'), async (req, res) => {

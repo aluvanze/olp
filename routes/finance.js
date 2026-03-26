@@ -55,7 +55,7 @@ router.get('/transactions', authorize('finance', 'headteacher', 'superadmin', 'd
 // Record a payment
 router.post('/transactions', authorize('finance', 'headteacher', 'superadmin'), async (req, res) => {
   try {
-    let { learner_id, user_id, transaction_type, amount, payment_method, mpesa_confirmation_code, reference_number, transaction_date, notes } = req.body;
+    let { learner_id, user_id, school_id, transaction_type, amount, payment_method, mpesa_confirmation_code, reference_number, transaction_date, notes } = req.body;
 
     // If user_id is provided instead of learner_id, get learner_id from learner_profiles
     if (user_id && !learner_id) {
@@ -70,8 +70,27 @@ router.post('/transactions', authorize('finance', 'headteacher', 'superadmin'), 
       }
     }
 
+    // If school_id/admission number is provided, resolve learner_id
+    if (school_id && !learner_id) {
+      const lr = await pool.query(
+        'SELECT id FROM learner_profiles WHERE admission_number = $1',
+        [String(school_id).trim()]
+      );
+      if (lr.rows.length > 0) {
+        learner_id = lr.rows[0].id;
+      } else {
+        return res.status(400).json({ message: 'Learner not found for this School ID' });
+      }
+    }
+
     if (!learner_id || !transaction_type || !amount) {
       return res.status(400).json({ message: 'Learner ID, transaction type, and amount are required' });
+    }
+
+    // Validate learner exists (avoid FK violation 500s)
+    const learnerCheck = await pool.query('SELECT id FROM learner_profiles WHERE id = $1', [learner_id]);
+    if (learnerCheck.rows.length === 0) {
+      return res.status(400).json({ message: 'Learner not found' });
     }
 
     // Check for duplicate M-Pesa confirmation code if provided
@@ -344,6 +363,71 @@ router.post('/inventory/issuances', authorize('teacher', 'finance', 'headteacher
   }
 });
 
+// Return a book and increment inventory in real-time
+router.put('/inventory/issuances/:id/return', authorize('finance', 'headteacher', 'superadmin', 'deputy_headteacher'), async (req, res) => {
+  try {
+    const issuanceId = parseInt(req.params.id, 10);
+    if (Number.isNaN(issuanceId)) {
+      return res.status(400).json({ message: 'Invalid issuance ID' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const issuanceResult = await client.query(
+        `SELECT id, book_id, status
+         FROM book_issuances
+         WHERE id = $1
+         FOR UPDATE`,
+        [issuanceId]
+      );
+      if (issuanceResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'Issuance not found' });
+      }
+      const issuance = issuanceResult.rows[0];
+      if (issuance.status === 'returned') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'Book already returned' });
+      }
+
+      const updatedIssuance = await client.query(
+        `UPDATE book_issuances
+         SET status = 'returned',
+             return_date = CURRENT_DATE
+         WHERE id = $1
+         RETURNING *`,
+        [issuanceId]
+      );
+
+      const updatedBook = await client.query(
+        `UPDATE books
+         SET available_copies = available_copies + 1,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1
+         RETURNING id, title, available_copies`,
+        [issuance.book_id]
+      );
+
+      await client.query('COMMIT');
+      res.json({
+        message: 'Book returned successfully',
+        issuance: updatedIssuance.rows[0],
+        inventory: updatedBook.rows[0] || null
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Return book error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Get capitation records (if capitation table exists, otherwise return empty)
 router.get('/capitation', authorize('finance', 'headteacher', 'superadmin', 'deputy_headteacher'), async (req, res) => {
   try {
@@ -509,6 +593,102 @@ router.get('/dashboard/stats', authorize('finance', 'headteacher', 'superadmin',
     });
   } catch (error) {
     console.error('Get finance dashboard stats error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Learner balances with grade and term-aware paid amount
+router.get('/learner-balances', authorize('finance', 'headteacher', 'superadmin', 'deputy_headteacher'), async (req, res) => {
+  try {
+    const { term, academic_year, total_fees } = req.query;
+    let totalFees = total_fees ? Number(total_fees) : NaN;
+
+    let termStart = null;
+    let termEnd = null;
+    if (term && academic_year) {
+      const tr = await pool.query(
+        `SELECT start_date, end_date
+         FROM terms
+         WHERE term_number = $1 AND academic_year = $2 AND is_active = true
+         LIMIT 1`,
+        [term, academic_year]
+      );
+      if (tr.rows.length > 0) {
+        termStart = tr.rows[0].start_date;
+        termEnd = tr.rows[0].end_date;
+      }
+    }
+
+    // If total fees not provided, use configured term fee amount (fallback to env default)
+    if (!Number.isFinite(totalFees) || totalFees <= 0) {
+      if (term && academic_year) {
+        const fee = await pool.query(
+          `SELECT tfs.amount
+           FROM term_fee_settings tfs
+           INNER JOIN terms t ON tfs.term_id = t.id
+           WHERE t.term_number = $1 AND t.academic_year = $2 AND t.is_active = true
+           LIMIT 1`,
+          [term, academic_year]
+        );
+        if (fee.rows.length > 0) {
+          totalFees = Number(fee.rows[0].amount);
+        }
+      }
+      if (!Number.isFinite(totalFees) || totalFees <= 0) {
+        totalFees = Number(process.env.DEFAULT_TOTAL_FEES || 100000);
+      }
+    }
+
+    const result = await pool.query(
+      `SELECT lp.id AS learner_id,
+              lp.admission_number AS school_id,
+              u.first_name,
+              u.last_name,
+              u.email,
+              COALESCE(gl.grade_number::text, gl.name, 'Unassigned') AS grade_label,
+              COALESCE(SUM(CASE WHEN ft.transaction_type = 'fee_payment' THEN ft.amount ELSE 0 END), 0) AS total_paid_overall,
+              COALESCE(SUM(CASE
+                WHEN ft.transaction_type = 'fee_payment'
+                  AND ($1::date IS NULL OR ft.transaction_date >= $1::date)
+                  AND ($2::date IS NULL OR ft.transaction_date <= $2::date)
+                THEN ft.amount ELSE 0 END), 0) AS total_paid_term
+       FROM learner_profiles lp
+       INNER JOIN users u ON lp.user_id = u.id
+       LEFT JOIN grade_levels gl ON lp.grade_level_id = gl.id
+       LEFT JOIN financial_transactions ft ON ft.learner_id = lp.id
+       GROUP BY lp.id, lp.admission_number, u.first_name, u.last_name, u.email, gl.grade_number, gl.name
+       ORDER BY u.last_name, u.first_name`,
+      [termStart, termEnd]
+    );
+
+    const rows = result.rows.map(r => {
+      const paidOverall = Number(r.total_paid_overall || 0);
+      const paidTerm = Number(r.total_paid_term || 0);
+      const balance = Math.max(0, totalFees - paidOverall);
+      return {
+        learner_id: r.learner_id,
+        school_id: r.school_id,
+        first_name: r.first_name,
+        last_name: r.last_name,
+        email: r.email,
+        grade: r.grade_label,
+        total_fees: totalFees,
+        total_paid_overall: paidOverall,
+        total_paid_term: paidTerm,
+        balance
+      };
+    });
+
+    res.json({
+      filters: {
+        term: term || null,
+        academic_year: academic_year || null,
+        term_applied: !!(termStart && termEnd)
+      },
+      learners: rows
+    });
+  } catch (error) {
+    console.error('Get learner balances error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

@@ -603,7 +603,22 @@
                 `;
                 sidebarButtons = createSidebarButton('office-dashboard', 'Office Dashboard', true) +
                     createSidebarButton('messages', 'Messages');
-            } else if (role === 'headteacher' || role === 'deputy_headteacher' || role === 'superadmin' || role === 'finance') {
+            } else if (role === 'finance') {
+                navButtons = `
+                    <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
+                    <button onclick="loadView('finance-payments')" class="nav-btn">Payments</button>
+                    <button onclick="loadView('finance-books')" class="nav-btn">Books</button>
+                    <button onclick="loadView('finance-capitation')" class="nav-btn">Capitation</button>
+                    <button onclick="loadView('finance-ledger')" class="nav-btn">Learner Ledger</button>
+                    <button onclick="loadView('messages')" class="nav-btn">Messages</button>
+                `;
+                sidebarButtons = createSidebarButton('dashboard', 'Dashboard', true) +
+                    createSidebarButton('finance-payments', 'Payments') +
+                    createSidebarButton('finance-books', 'Books') +
+                    createSidebarButton('finance-capitation', 'Capitation') +
+                    createSidebarButton('finance-ledger', 'Learner Ledger') +
+                    createSidebarButton('messages', 'Messages');
+            } else if (role === 'headteacher' || role === 'deputy_headteacher' || role === 'superadmin') {
                 navButtons = `
                     <button onclick="loadView('dashboard')" class="nav-btn active">Dashboard</button>
                     ${role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher' ? `<button onclick="loadView('admin-dashboard')" class="nav-btn">System Overview</button>` : ''}
@@ -884,10 +899,364 @@
                     case 'office-dashboard':
                         await loadOfficeDashboard();
                         break;
+                    case 'finance-payments':
+                        await loadFinancePayments();
+                        break;
+                    case 'finance-books':
+                        await loadFinanceBooks();
+                        break;
+                    case 'finance-capitation':
+                        await loadFinanceCapitation();
+                        break;
+                    case 'finance-ledger':
+                        await loadFinanceLedger();
+                        break;
                 }
             } catch (error) {
                 content.innerHTML = `<div class="error">Error loading ${viewName}: ${error.message}</div>`;
                 console.error('Load view error:', error);
+            }
+        }
+
+        function _requireFinanceTerm() {
+            if (currentUser?.role !== 'finance' && !['headteacher', 'deputy_headteacher', 'superadmin'].includes(currentUser?.role)) {
+                throw new Error('Access denied.');
+            }
+            if (!currentTerm || !currentAcademicYear) {
+                showToast('Please select a term first.', 'info');
+                loadView('dashboard');
+                return false;
+            }
+            return true;
+        }
+
+        async function financeGetTermFeeAmount() {
+            try {
+                // Find the term ID from the dashboard terms list API (used elsewhere)
+                const yearNow = new Date().getFullYear();
+                const terms = await apiCall(`/courses/terms?academic_year=${encodeURIComponent(currentAcademicYear || yearNow)}`).catch(() => []);
+                const t = (terms || []).find(x => String(x.term) === String(currentTerm) && String(x.academic_year) === String(currentAcademicYear));
+                if (!t?.id) return null;
+                const fee = await apiCall(`/terms/${t.id}/fee`).catch(() => null);
+                return fee?.amount ? Number(fee.amount) : null;
+            } catch (_) {
+                return null;
+            }
+        }
+
+        async function loadFinancePayments() {
+            const content = document.getElementById('dashboardContent');
+            if (!_requireFinanceTerm()) return;
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('dashboard')" class="btn-back">← Back</button>
+                    <h2>Payments · Term ${currentTerm} ${escapeHtml(currentAcademicYear || '')}</h2>
+                </div>
+                <div class="card" style="margin-bottom:16px;">
+                    <h3>Manual Fee Payment Recording</h3>
+                    <div style="display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:10px;">
+                        <input id="finLearnerId" class="form-control" placeholder="School ID (Admission Number)" />
+                        <input id="finAmount" class="form-control" type="number" min="1" step="0.01" placeholder="Amount" />
+                        <input id="finMpesa" class="form-control" placeholder="M-Pesa Confirmation Code" />
+                        <select id="finMethod" class="form-control">
+                            <option value="">Payment Method</option>
+                            <option value="mpesa">M-Pesa</option>
+                            <option value="cash">Cash</option>
+                            <option value="bank">Bank</option>
+                        </select>
+                        <input id="finRef" class="form-control" placeholder="Reference (optional)" />
+                        <input id="finDate" class="form-control" type="date" />
+                    </div>
+                    <div style="margin-top:10px;">
+                        <textarea id="finNotes" class="form-control" placeholder="Notes (optional)"></textarea>
+                    </div>
+                    <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:end;">
+                        <input id="financeTotalFees" class="form-control" type="number" min="1" step="0.01" placeholder="Total fees per term (auto)" style="max-width:260px;" />
+                        <button class="btn-primary" onclick="financeRecordPayment()">Record Fee Payment</button>
+                        <button class="btn-secondary" onclick="financeLoadLearnerBalances()">Refresh Balances</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Learner Balances</h3>
+                    <div id="financeLearnerBalances"></div>
+                </div>
+            `;
+            const fee = await financeGetTermFeeAmount();
+            document.getElementById('financeTotalFees').value = fee ? String(fee) : '';
+            await financeLoadLearnerBalances();
+        }
+
+        async function loadFinanceBooks() {
+            const content = document.getElementById('dashboardContent');
+            if (!_requireFinanceTerm()) return;
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('dashboard')" class="btn-back">← Back</button>
+                    <h2>Books Inventory · Term ${currentTerm} ${escapeHtml(currentAcademicYear || '')}</h2>
+                </div>
+                <div class="grid-2" style="margin-bottom:16px;">
+                    <div class="card">
+                        <h3>Add / Update Book Stock</h3>
+                        <div style="display:grid;grid-template-columns:1fr 120px;gap:8px;margin-bottom:8px;">
+                            <input id="bookTitle" class="form-control" placeholder="Book title" />
+                            <input id="bookCopies" class="form-control" type="number" min="0" placeholder="Copies" />
+                        </div>
+                        <button class="btn-primary" onclick="financeAddBook()">Save Book</button>
+                    </div>
+                    <div class="card">
+                        <h3>Issued Books (Issue/Return Cycle)</h3>
+                        <div id="financeIssuances"></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Books List</h3>
+                    <div id="financeBooksList"></div>
+                </div>
+            `;
+            await Promise.allSettled([financeLoadBooks(), financeLoadIssuances()]);
+        }
+
+        async function loadFinanceCapitation() {
+            const content = document.getElementById('dashboardContent');
+            if (!_requireFinanceTerm()) return;
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('dashboard')" class="btn-back">← Back</button>
+                    <h2>Capitation · Term ${currentTerm} ${escapeHtml(currentAcademicYear || '')}</h2>
+                </div>
+                <div class="card" style="margin-bottom:16px;">
+                    <h3>Record Capitation Funds</h3>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        <input id="capAmount" class="form-control" type="number" min="1" step="0.01" placeholder="Amount received" />
+                        <input id="capDate" class="form-control" type="date" />
+                    </div>
+                    <textarea id="capNotes" class="form-control" placeholder="Allocation notes" style="margin-top:8px;"></textarea>
+                    <div style="margin-top:10px;">
+                        <button class="btn-primary" onclick="financeRecordCapitation()">Save Capitation</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Capitation Records (This Term)</h3>
+                    <div id="financeCapitationList"></div>
+                </div>
+            `;
+            await financeLoadCapitation();
+        }
+
+        async function loadFinanceLedger() {
+            const content = document.getElementById('dashboardContent');
+            if (!_requireFinanceTerm()) return;
+            content.innerHTML = `
+                <div class="view-header">
+                    <button onclick="loadView('dashboard')" class="btn-back">← Back</button>
+                    <h2>Learner Ledger · Term ${currentTerm} ${escapeHtml(currentAcademicYear || '')}</h2>
+                </div>
+                <div class="card" style="margin-bottom:12px;">
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:end;">
+                        <input id="financeTotalFees" class="form-control" type="number" min="1" step="0.01" placeholder="Total fees per term (auto)" style="max-width:260px;" />
+                        <button class="btn-primary" onclick="financeLoadLearnerBalances()">Refresh</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <div id="financeLearnerBalances"></div>
+                </div>
+            `;
+            const fee = await financeGetTermFeeAmount();
+            document.getElementById('financeTotalFees').value = fee ? String(fee) : '';
+            await financeLoadLearnerBalances();
+        }
+
+        async function financeRecordPayment() {
+            try {
+                // Finance users usually know School ID (admission number), not internal learner_profiles.id
+                const school_id = (document.getElementById('finLearnerId')?.value || '').trim();
+                const amount = Number(document.getElementById('finAmount')?.value || 0);
+                const mpesa_confirmation_code = (document.getElementById('finMpesa')?.value || '').trim();
+                const payment_method = (document.getElementById('finMethod')?.value || '').trim();
+                const reference_number = (document.getElementById('finRef')?.value || '').trim();
+                const transaction_date = (document.getElementById('finDate')?.value || '').trim();
+                const notes = (document.getElementById('finNotes')?.value || '').trim();
+                if (!school_id || !amount) {
+                    showToast('School ID and amount are required.', 'error');
+                    return;
+                }
+                await apiCall('/finance/transactions', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        school_id,
+                        transaction_type: 'fee_payment',
+                        amount,
+                        payment_method: payment_method || null,
+                        mpesa_confirmation_code: mpesa_confirmation_code || null,
+                        reference_number: reference_number || null,
+                        transaction_date: transaction_date || null,
+                        notes: notes || null
+                    })
+                });
+                showToast('Payment recorded.', 'success');
+            } catch (error) {
+                showToast(error.message || 'Failed to record payment.', 'error');
+            }
+        }
+
+        async function financeAddBook() {
+            try {
+                const title = (document.getElementById('bookTitle')?.value || '').trim();
+                const copies = Number(document.getElementById('bookCopies')?.value || 0);
+                if (!title) {
+                    showToast('Book title is required.', 'error');
+                    return;
+                }
+                await apiCall('/finance/inventory/books', {
+                    method: 'POST',
+                    body: JSON.stringify({ title, total_copies: copies, available_copies: copies })
+                });
+                showToast('Book saved.', 'success');
+                await financeLoadBooks();
+            } catch (error) {
+                showToast(error.message || 'Failed to save book.', 'error');
+            }
+        }
+
+        async function financeLoadBooks() {
+            const el = document.getElementById('financeBooksList');
+            if (!el) return;
+            try {
+                const books = await apiCall('/finance/inventory/books');
+                const rows = (books || []).slice(0, 12).map(b => `
+                    <tr><td>${escapeHtml(b.title || '')}</td><td>${Number(b.total_copies || 0)}</td><td>${Number(b.available_copies || 0)}</td></tr>
+                `).join('');
+                el.innerHTML = `<div class="table-container"><table class="data-table"><thead><tr><th>Title</th><th>Total</th><th>Available</th></tr></thead><tbody>${rows || '<tr><td colspan="3">No books</td></tr>'}</tbody></table></div>`;
+            } catch (e) {
+                el.innerHTML = '<p class="muted">Unable to load books.</p>';
+            }
+        }
+
+        async function financeRecordCapitation() {
+            try {
+                const term = Number(currentTerm || 0);
+                const academic_year = String(currentAcademicYear || '').trim();
+                const amount_received = Number(document.getElementById('capAmount')?.value || 0);
+                const received_date = (document.getElementById('capDate')?.value || '').trim();
+                const notes = (document.getElementById('capNotes')?.value || '').trim();
+                if (!term || !academic_year || !amount_received) {
+                    showToast('Term, academic year, and amount are required.', 'error');
+                    return;
+                }
+                await apiCall('/finance/capitation', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        term,
+                        academic_year,
+                        amount_received,
+                        received_date: received_date || null,
+                        notes: notes || null,
+                        allocation_details: notes ? { notes } : null
+                    })
+                });
+                showToast('Capitation recorded.', 'success');
+                await financeLoadCapitation();
+            } catch (error) {
+                showToast(error.message || 'Failed to record capitation.', 'error');
+            }
+        }
+
+        async function financeLoadCapitation() {
+            const el = document.getElementById('financeCapitationList');
+            if (!el) return;
+            try {
+                const f = _financeFiltersFromContext();
+                const qs = new URLSearchParams();
+                if (f.term) qs.set('term', f.term);
+                if (f.academic_year) qs.set('academic_year', f.academic_year);
+                const rowsData = await apiCall(`/finance/capitation${qs.toString() ? `?${qs.toString()}` : ''}`);
+                const rows = (rowsData || []).slice(0, 10).map(c => `
+                    <tr><td>${c.term || '-'}</td><td>${escapeHtml(c.academic_year || '')}</td><td>${Number(c.amount_received || 0).toFixed(2)}</td><td>${c.received_date ? new Date(c.received_date).toLocaleDateString() : '-'}</td></tr>
+                `).join('');
+                el.innerHTML = `<div class="table-container"><table class="data-table"><thead><tr><th>Term</th><th>Year</th><th>Amount</th><th>Date</th></tr></thead><tbody>${rows || '<tr><td colspan="4">No capitation records</td></tr>'}</tbody></table></div>`;
+            } catch (e) {
+                el.innerHTML = '<p class="muted">Unable to load capitation records.</p>';
+            }
+        }
+
+        async function financeLoadIssuances() {
+            const el = document.getElementById('financeIssuances');
+            if (!el) return;
+            try {
+                const f = _financeFiltersFromContext();
+                const qs = new URLSearchParams();
+                if (f.term) qs.set('term', f.term);
+                if (f.academic_year) qs.set('academic_year', f.academic_year);
+                const rowsData = await apiCall(`/finance/inventory/issuances${qs.toString() ? `?${qs.toString()}` : ''}`);
+                const rows = (rowsData || []).slice(0, 20).map(i => `
+                    <tr>
+                        <td>${escapeHtml(i.book_title || '')}</td>
+                        <td>${escapeHtml(`${i.first_name || ''} ${i.last_name || ''}`.trim())}</td>
+                        <td>${i.issue_date ? new Date(i.issue_date).toLocaleDateString() : '-'}</td>
+                        <td>${i.return_date ? new Date(i.return_date).toLocaleDateString() : '-'}</td>
+                        <td>${escapeHtml(i.status || '')}</td>
+                        <td>${i.status === 'issued' ? `<button class="btn-secondary" onclick="financeReturnBook(${i.id})">Return</button>` : '-'}</td>
+                    </tr>
+                `).join('');
+                el.innerHTML = `<div class="table-container"><table class="data-table"><thead><tr><th>Book</th><th>Learner</th><th>Issued</th><th>Returned</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows || '<tr><td colspan="6">No issuances</td></tr>'}</tbody></table></div>`;
+            } catch (e) {
+                el.innerHTML = '<p class="muted">Unable to load issuances.</p>';
+            }
+        }
+
+        async function financeLoadLearnerBalances() {
+            const el = document.getElementById('financeLearnerBalances');
+            if (!el) return;
+            try {
+                const fees = (document.getElementById('financeTotalFees')?.value || '').trim();
+                const f = { term: String(currentTerm), academic_year: String(currentAcademicYear) };
+                const qs = new URLSearchParams();
+                if (f.term) qs.set('term', f.term);
+                if (f.academic_year) qs.set('academic_year', f.academic_year);
+                // Optional override: if finance types a custom fee
+                if (fees) qs.set('total_fees', fees);
+                const data = await apiCall(`/finance/learner-balances${qs.toString() ? `?${qs.toString()}` : ''}`);
+                const rows = (data.learners || []).slice(0, 200).map(l => `
+                    <tr>
+                        <td>${escapeHtml(`${l.first_name || ''} ${l.last_name || ''}`.trim())}</td>
+                        <td>${escapeHtml(l.school_id || '-')}</td>
+                        <td>${escapeHtml(l.grade || '-')}</td>
+                        <td>${Number(l.total_fees || 0).toFixed(2)}</td>
+                        <td>${Number(l.total_paid_term || 0).toFixed(2)}</td>
+                        <td>${Number(l.total_paid_overall || 0).toFixed(2)}</td>
+                        <td><strong>${Number(l.balance || 0).toFixed(2)}</strong></td>
+                    </tr>
+                `).join('');
+                el.innerHTML = `
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Learner</th>
+                                    <th>School ID</th>
+                                    <th>Grade</th>
+                                    <th>Total Fees</th>
+                                    <th>Paid (Selected Term)</th>
+                                    <th>Paid (Overall)</th>
+                                    <th>Balance</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows || '<tr><td colspan="7">No learner finance data</td></tr>'}</tbody>
+                        </table>
+                    </div>
+                `;
+            } catch (e) {
+                el.innerHTML = '<p class="muted">Unable to load learner balances.</p>';
+            }
+        }
+
+        async function financeReturnBook(issuanceId) {
+            try {
+                await apiCall(`/finance/inventory/issuances/${issuanceId}/return`, { method: 'PUT' });
+                showToast('Book return recorded.', 'success');
+                await financeRefreshDashboard();
+            } catch (error) {
+                showToast(error.message || 'Failed to return book.', 'error');
             }
         }
 
@@ -2878,6 +3247,10 @@
         async function selectTerm(term, academicYear) {
             currentTerm = term;
             currentAcademicYear = academicYear;
+            if (currentUser?.role === 'finance') {
+                await loadView('finance-payments');
+                return;
+            }
             await loadTermCourses();
         }
 
@@ -2889,6 +3262,10 @@
             }
 
             const role = currentUser.role;
+            if (role === 'finance') {
+                await loadView('finance-payments');
+                return;
+            }
             let courses;
 
             // Get courses based on role
@@ -4125,6 +4502,11 @@
 
             try {
                 const terms = await apiCall(`/terms?academic_year=${academicYear}`);
+                const termFees = await Promise.all((terms || []).map(t =>
+                    apiCall(`/terms/${t.id}/fee`).then(f => ({ term_id: t.id, fee: f })).catch(() => ({ term_id: t.id, fee: null }))
+                ));
+                const feeMap = {};
+                (termFees || []).forEach(x => { feeMap[x.term_id] = x.fee; });
                 const role = currentUser.role;
                 const backView = (role === 'headteacher' || role === 'superadmin' || role === 'deputy_headteacher') ? 'admin-dashboard' : 'dashboard';
 
@@ -4177,6 +4559,7 @@
                                     <th>Name</th>
                                     <th>Date Range</th>
                                     <th>Academic Year</th>
+                                    <th>Fee (Term)</th>
                                     <th>Status</th>
                                     <th>Actions</th>
                                 </tr>
@@ -4205,6 +4588,12 @@
                                                         </td>
                                                         <td>
                                                             <span class="term-academic-year">${term.academic_year}</span>
+                                                        </td>
+                                                        <td>
+                                                            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                                                <span class="term-academic-year">${feeMap[term.id]?.amount ? `KES ${Number(feeMap[term.id].amount).toLocaleString()}` : 'Not set'}</span>
+                                                                <button class="btn-secondary" onclick="event.stopPropagation(); showSetTermFee(${term.id}, ${term.term_number}, '${term.academic_year}')">Set</button>
+                                                            </div>
                                                         </td>
                                                         <td>
                                             ${term.is_active ? `
@@ -4447,6 +4836,59 @@
                 loadManageTerms();
             } catch (error) {
                 showToast('Error activating term: ' + error.message, 'error');
+            }
+        }
+
+        function showSetTermFee(termId, termNumber, academicYear) {
+            const content = document.getElementById('dashboardContent');
+            content.insertAdjacentHTML('beforeend', `
+                <div class="modal-overlay show" id="term-fee-modal" style="display:flex;">
+                    <div class="modal-content" style="max-width:520px;">
+                        <div class="modal-header">
+                            <h3>Set Term Fee</h3>
+                            <button class="modal-close" onclick="closeTermFeeModal()">×</button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="muted">Term ${termNumber} · ${escapeHtml(academicYear)}</p>
+                            <div class="form-group">
+                                <label>Amount (KES)</label>
+                                <input id="term-fee-amount" class="form-control" type="number" min="1" step="0.01" placeholder="e.g. 100000" />
+                            </div>
+                            <div class="form-actions" style="margin-top:12px;">
+                                <button class="btn-primary" onclick="saveTermFee(${termId})">Save Fee</button>
+                                <button class="btn-secondary" onclick="closeTermFeeModal()">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `);
+            // preload existing value
+            apiCall(`/terms/${termId}/fee`).then(f => {
+                if (f?.amount) document.getElementById('term-fee-amount').value = String(Number(f.amount));
+            }).catch(() => {});
+        }
+
+        function closeTermFeeModal() {
+            const m = document.getElementById('term-fee-modal');
+            if (m && m.parentNode) m.parentNode.removeChild(m);
+        }
+
+        async function saveTermFee(termId) {
+            try {
+                const amount = Number(document.getElementById('term-fee-amount')?.value || 0);
+                if (!amount || amount <= 0) {
+                    showToast('Enter a valid fee amount.', 'error');
+                    return;
+                }
+                await apiCall(`/terms/${termId}/fee`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ amount, currency: 'KES' })
+                });
+                showToast('Term fee saved.', 'success');
+                closeTermFeeModal();
+                loadManageTerms();
+            } catch (e) {
+                showToast(e.message || 'Failed to save term fee.', 'error');
             }
         }
 
