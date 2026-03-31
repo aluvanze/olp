@@ -5152,6 +5152,161 @@ tbody tr:last-child td {
     border: none;
 }
 
+/* ==================== FINANCE MODULE UI SYSTEM ==================== */
+.finance-module h2 {
+    font-size: clamp(1.2rem, 2vw, 1.45rem);
+    font-weight: 700;
+}
+
+.finance-card {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 20px 24px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    border: 1px solid #e5e7eb;
+}
+
+.finance-card h3 {
+    font-size: clamp(1.05rem, 1.6vw, 1.25rem);
+    font-weight: 700;
+    margin-bottom: 14px;
+}
+
+.finance-form-grid {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 4px;
+}
+
+.finance-grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.finance-grid-book {
+    grid-template-columns: 1fr 120px;
+}
+
+.finance-grid-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.finance-input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+.finance-input:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+    background: #ffffff;
+    outline: none;
+}
+
+.finance-select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image:
+        linear-gradient(45deg, transparent 50%, #64748b 50%),
+        linear-gradient(135deg, #64748b 50%, transparent 50%);
+    background-position: calc(100% - 16px) 50%, calc(100% - 10px) 50%;
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+    padding-right: 34px;
+}
+
+.finance-action-row {
+    margin-top: 10px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: end;
+}
+
+/* Reusable finance button system */
+.primary-btn,
+.secondary-btn {
+    width: auto;
+    min-width: 0;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 1.2;
+    transition: all 0.22s ease;
+}
+
+.primary-btn {
+    background: #2563eb;
+    color: #ffffff;
+    border: 1px solid #2563eb;
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.22);
+}
+
+.secondary-btn {
+    background: #f8fafc;
+    color: #334155;
+    border: 1px solid #dbe2ea;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.small-btn {
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .primary-btn:hover,
+    .secondary-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+    }
+}
+
+/* Finance table improvements */
+.finance-card .data-table th,
+.finance-card .data-table td {
+    padding: 12px 14px;
+}
+
+.finance-card .data-table thead th {
+    background: #f1f5f9;
+    color: #334155;
+    font-weight: 600;
+}
+
+.finance-card .data-table tbody tr:nth-child(even) {
+    background: #f8fafc;
+}
+
+.finance-card .data-table tbody tr:hover {
+    background: #eef2ff;
+}
+
+@media (max-width: 768px) {
+    .finance-grid-3,
+    .finance-grid-2,
+    .finance-grid-book {
+        grid-template-columns: 1fr;
+    }
+
+    .finance-action-row .primary-btn,
+    .finance-action-row .secondary-btn {
+        width: 100%;
+    }
+
+    .finance-card {
+        padding: 18px 14px;
+    }
+}
+
 .modal-header {
     display: flex;
     justify-content: space-between;
