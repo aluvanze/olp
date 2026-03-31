@@ -1687,6 +1687,25 @@
             return { grade: '-', points: 0 };
         }
 
+        function getTermUiMeta(term) {
+            const now = new Date();
+            const start = term?.start_date ? new Date(term.start_date) : null;
+            const end = term?.end_date ? new Date(term.end_date) : null;
+
+            // Default fallback when date boundaries are unavailable from API.
+            if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+                return { status: 'Active', statusClass: 'active', progress: 55 };
+            }
+
+            if (now < start) return { status: 'Upcoming', statusClass: 'upcoming', progress: 0 };
+            if (now > end) return { status: 'Closed', statusClass: 'closed', progress: 100 };
+
+            const total = end.getTime() - start.getTime();
+            const elapsed = now.getTime() - start.getTime();
+            const progress = total > 0 ? Math.max(0, Math.min(100, Math.round((elapsed / total) * 100))) : 0;
+            return { status: 'Active', statusClass: 'active', progress };
+        }
+
         async function loadAssessmentManagement() {
             const content = document.getElementById('dashboardContent');
             if (!currentTerm || !currentAcademicYear) {
@@ -3140,17 +3159,25 @@
                                     <h3>No Terms Available</h3>
                                     <p>Contact administrator to set up academic terms.</p>
                                 </div>
-                            ` : terms.map(term => `
+                            ` : terms.map(term => {
+                                const termMeta = getTermUiMeta(term);
+                                return `
                                 <div class="term-card" onclick="selectTerm(${term.term}, '${term.academic_year}')" role="button" tabindex="0" onkeypress="if(event.key==='Enter') selectTerm(${term.term}, '${term.academic_year}')">
                                     <div class="term-card-content">
-                                        <div class="term-card-header"><h3 class="term-name">${term.name}</h3></div>
+                                        <div class="term-card-header">
+                                            <h3 class="term-name">${term.name}</h3>
+                                            <span class="term-card-status-badge ${termMeta.statusClass}">${termMeta.status}</span>
+                                        </div>
                                         <p class="term-date-range">${term.dateRange || 'Date range not set'}</p>
+                                        <div class="term-card-progress">
+                                            <div class="term-card-progress-fill" style="width:${termMeta.progress}%"></div>
+                                        </div>
                                     </div>
                                     <div class="term-card-action">
                                         <button onclick="event.stopPropagation(); selectTerm(${term.term}, '${term.academic_year}')" class="term-select-btn">Select Term</button>
                                     </div>
                                 </div>
-                            `).join('')}
+                            `;}).join('')}
                         </div>
                     </div>
                 `;
@@ -3217,13 +3244,19 @@
                                     <p>${(role === 'headteacher' || role === 'superadmin') ? 'Please create terms first to organize the academic year.' : 'Contact administrator to set up academic terms.'}</p>
                                     ${(role === 'headteacher' || role === 'superadmin') ? '<button onclick="loadView(\'manage-terms\')" class="btn-primary">Manage Terms</button>' : ''}
                             </div>
-                        ` : terms.map(term => `
+                        ` : terms.map(term => {
+                            const termMeta = getTermUiMeta(term);
+                            return `
                                 <div class="term-card" onclick="selectTerm(${term.term}, '${term.academic_year}')" role="button" tabindex="0" onkeypress="if(event.key==='Enter') selectTerm(${term.term}, '${term.academic_year}')">
                                     <div class="term-card-content">
                                         <div class="term-card-header">
                                             <h3 class="term-name">${term.name}</h3>
+                                            <span class="term-card-status-badge ${termMeta.statusClass}">${termMeta.status}</span>
                                         </div>
                                         <p class="term-date-range">${term.dateRange || 'Date range not set'}</p>
+                                        <div class="term-card-progress">
+                                            <div class="term-card-progress-fill" style="width:${termMeta.progress}%"></div>
+                                        </div>
                                         <div class="term-stats">
                                             <div class="term-stat-item">
                                                 <span class="term-stat-value">${term.course_count || 0}</span>
@@ -3235,7 +3268,7 @@
                                         <button onclick="event.stopPropagation(); selectTerm(${term.term}, '${term.academic_year}')" class="term-select-btn">Select Term</button>
                                     </div>
                             </div>
-                        `).join('')}
+                        `;}).join('')}
                         </div>
                     </div>
                 `;

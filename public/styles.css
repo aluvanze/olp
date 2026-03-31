@@ -593,7 +593,9 @@ body::after {
 }
 
 .dashboard-header {
-    background: #ffffff;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: saturate(140%) blur(8px);
+    -webkit-backdrop-filter: saturate(140%) blur(8px);
     border-bottom: 3px solid #2563eb;
     /* Strong institutional blue border */
     box-shadow:
@@ -614,7 +616,7 @@ body::after {
     justify-content: space-between;
     align-items: center;
     height: 100%;
-    padding: 0 var(--spacing-lg);
+    padding: 0 clamp(12px, 2vw, 20px);
     max-width: 100%;
 }
 
@@ -658,6 +660,13 @@ body::after {
     gap: var(--spacing-xs);
     height: 100%;
     flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+}
+
+.main-nav::-webkit-scrollbar {
+    display: none;
 }
 
 .main-nav .nav-btn {
@@ -698,9 +707,10 @@ body::after {
 
 .main-nav .nav-btn.active {
     color: var(--ms-blue);
-    background: var(--bg-tertiary);
+    background: linear-gradient(180deg, #f0f7ff 0%, #eaf3ff 100%);
     border-color: var(--ms-blue);
     font-weight: var(--font-weight-bold);
+    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.14);
 }
 
 .main-nav .nav-btn.active::after {
@@ -1074,14 +1084,55 @@ body::after {
     z-index: 3;
 }
 
+/* Manage Sub-strands top action buttons: compact sizing */
+.substrands-header-actions > .btn-primary,
+.substrands-header-actions > .btn-secondary {
+    width: auto !important;
+    min-width: 0;
+    height: 40px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.15;
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+}
+
+@media (max-width: 768px) {
+    .substrands-header-actions {
+        gap: 8px !important;
+    }
+
+    .substrands-header-actions > .btn-primary,
+    .substrands-header-actions > .btn-secondary {
+        height: 38px;
+        padding: 7px 10px;
+        font-size: 12.5px;
+        border-radius: 10px;
+    }
+}
+
 .view-header h2 {
     color: var(--text-primary);
-    font-size: var(--font-size-2xl);
+    font-size: clamp(1.45rem, 2.2vw, var(--font-size-2xl));
     font-weight: var(--font-weight-semibold);
     letter-spacing: -0.25px;
     flex: 1;
     min-width: 0;
     margin: 0;
+}
+
+.view-header p {
+    margin: 8px 0 0 0;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    max-width: 72ch;
+}
+
+.form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
 }
 
 /* Users page header (User Management) */
@@ -1467,6 +1518,7 @@ tbody tr:last-child td {
     color: var(--text-secondary);
     margin: 0;
     line-height: 1.5;
+    max-width: 70ch;
 }
 
 .view-subtitle {
@@ -1968,7 +2020,7 @@ tbody tr:last-child td {
 /* Professional Grid Layout - Structured and Classy */
 .terms-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 28px;
     /* Generous institutional spacing */
     margin-top: var(--spacing-2xl);
@@ -1980,7 +2032,7 @@ tbody tr:last-child td {
     background: #ffffff;
     padding: 32px 36px;
     /* Generous institutional padding */
-    border-radius: 8px;
+    border-radius: 14px;
     box-shadow:
         0 4px 12px rgba(0, 0, 0, 0.08),
         0 2px 4px rgba(0, 0, 0, 0.04);
@@ -1996,6 +2048,14 @@ tbody tr:last-child td {
     flex-direction: column;
     padding: 0;
     text-align: left;
+}
+
+.term-card-content {
+    padding: 22px 22px 14px 22px;
+}
+
+.term-card-action {
+    padding: 0 22px 18px 22px;
 }
 
 .term-card::before {
@@ -2038,6 +2098,10 @@ tbody tr:last-child td {
 
 .term-card-header {
     margin-bottom: var(--spacing-md);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
 }
 
 .term-name {
@@ -2047,6 +2111,9 @@ tbody tr:last-child td {
     margin: 0 0 var(--spacing-xs) 0;
     letter-spacing: -0.25px;
     line-height: 1.3;
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .term-stats {
@@ -2083,6 +2150,50 @@ tbody tr:last-child td {
     line-height: 1.5;
 }
 
+.term-card-status-badge {
+    flex-shrink: 0;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    border: 1px solid transparent;
+}
+
+.term-card-status-badge.active {
+    color: #166534;
+    background: #dcfce7;
+    border-color: #86efac;
+}
+
+.term-card-status-badge.upcoming {
+    color: #1d4ed8;
+    background: #dbeafe;
+    border-color: #93c5fd;
+}
+
+.term-card-status-badge.closed {
+    color: #7c2d12;
+    background: #ffedd5;
+    border-color: #fdba74;
+}
+
+.term-card-progress {
+    width: 100%;
+    height: 8px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    overflow: hidden;
+    margin: 8px 0 12px;
+}
+
+.term-card-progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%);
+    transition: width 0.3s ease;
+}
+
 /* Premium Select Term Button - High Contrast, Professional */
 .term-select-btn {
     width: 100%;
@@ -2092,10 +2203,10 @@ tbody tr:last-child td {
     background: #2563EB;
     color: #FFFFFF;
     border: none;
-    border-radius: 8px;
+    border-radius: 12px;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
     letter-spacing: 0.25px;
 }
 
@@ -2113,6 +2224,28 @@ tbody tr:last-child td {
 .term-select-btn:focus {
     outline: 3px solid rgba(37, 99, 235, 0.3);
     outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .main-nav .nav-btn:hover,
+    .btn-primary:hover,
+    .btn-secondary:hover,
+    .term-select-btn:hover,
+    .term-card:hover {
+        transition: all 0.22s ease;
+    }
+
+    .btn-primary:hover,
+    .btn-secondary:hover,
+    .term-select-btn:hover {
+        transform: translateY(-1px) scale(1.01);
+    }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+    .terms-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 
@@ -2539,6 +2672,11 @@ tbody tr:last-child td {
 }
 
 /* ==================== SCHOOL MANAGEMENT (Scoped) ==================== */
+.school-management-view .form-container {
+    max-width: none !important;
+    width: 100% !important;
+}
+
 .school-management-view .premium-input {
     height: 40px;
     padding: 10px 12px;
@@ -3473,6 +3611,12 @@ tbody tr:last-child td {
         height: 40px;
     }
 
+    .form-actions .btn-primary,
+    .form-actions .btn-secondary,
+    .form-actions .btn-danger {
+        width: 100%;
+    }
+
     .dashboard-content {
         padding: var(--spacing-md);
         overflow-x: hidden;
@@ -4320,7 +4464,7 @@ tbody tr:last-child td {
 .courses-by-category,
 .course-category,
 .category-courses {
-    /* Inherit base styles */
+    color: inherit; /* Explicit no-op to avoid empty ruleset warnings */
 }
 
 /* Ensure consistent card styling - School/Institutional Theme */
